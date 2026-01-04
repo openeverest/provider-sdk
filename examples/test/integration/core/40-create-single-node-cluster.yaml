@@ -1,0 +1,31 @@
+apiVersion: kuttl.dev/v1
+kind: TestStep
+timeout: 10
+---
+apiVersion: everest.percona.com/v2alpha1
+kind: DataStore
+metadata:
+  name: test-psmdb-cluster
+spec:
+  provider: psmdb
+  components:
+    engine:
+      type: mongod
+      replicas: 1
+      resources:
+        cpu: "1"
+        memory: 4G
+      storage:
+        size: 25Gi
+  # engine:
+  #   replicas: 1
+  #   resources:
+  #     cpu: "1"
+  #     memory: 4G
+  #   storage:
+  #     size: 25Gi
+  #   type: psmdb
+  # proxy:
+  #   expose:
+  #     type: internal
+
