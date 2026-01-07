@@ -256,10 +256,10 @@ func OptionalComponent() TopologyComponentMeta {
 //
 // EXAMPLE USAGE:
 //
-//	func SyncDatabase(c *Cluster) error {
+//	func SyncDatabase(c *Context) error {
 //	    metadata := MyProviderMetadata()
 //
-//	    // Get the engine component from the cluster spec
+//	    // Get the engine component from the datastore spec
 //	    engine := c.DB().Spec.Components["engine"]
 //
 //	    // Look up the default image for the component's type
@@ -375,4 +375,3 @@ func TopologiesFromSchemaProvider(topologies map[string]TopologyDefinition) map[
 	}
 	return result
 }
-

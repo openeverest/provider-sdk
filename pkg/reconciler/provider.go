@@ -38,10 +38,10 @@ type providerAdapter interface {
 	Name() string
 	Types() func(*runtime.Scheme) error
 	OwnedTypes() []client.Object
-	Validate(cluster *controller.Cluster) error
-	Sync(cluster *controller.Cluster) error
-	Status(cluster *controller.Cluster) (controller.Status, error)
-	Cleanup(cluster *controller.Cluster) error
+	Validate(c *controller.Context) error
+	Sync(c *controller.Context) error
+	Status(c *controller.Context) (controller.Status, error)
+	Cleanup(c *controller.Context) error
 }
 
 // SchemaProvider is re-exported from controller package for convenience.
@@ -180,15 +180,15 @@ func (r *ProviderReconciler) setupServer(p providerAdapter) error {
 
 	// Create validator function that wraps the provider's Validate method
 	validator := func(ctx context.Context, c client.Client, dc *v2alpha1.DataStore) error {
-		// Create cluster handle with metadata if available
-		var cluster *controller.Cluster
+		// Create context handle with metadata if available
+		var dsCtx *controller.Context
 		if mp, ok := p.(controller.MetadataProvider); ok {
 			metadata := mp.GetMetadata()
-			cluster = controller.NewClusterWithMetadata(ctx, c, dc, metadata)
+			dsCtx = controller.NewContextWithMetadata(ctx, c, dc, metadata)
 		} else {
-			cluster = controller.NewCluster(ctx, c, dc)
+			dsCtx = controller.NewContext(ctx, c, dc)
 		}
-		return p.Validate(cluster)
+		return p.Validate(dsCtx)
 	}
 
 	r.server = server.NewServer(*r.serverConfig, registry, validator)
@@ -234,11 +234,11 @@ func (r *ProviderReconciler) StartWithSignalHandler() error {
 func (r *ProviderReconciler) setup() error {
 	// Filter to only handle DataStores for this provider
 	filter := predicate.NewPredicateFuncs(func(object client.Object) bool {
-		db, ok := object.(*v2alpha1.DataStore)
+		ds, ok := object.(*v2alpha1.DataStore)
 		if !ok {
 			return false
 		}
-		return db.Spec.Provider == r.provider.Name()
+		return ds.Spec.Provider == r.provider.Name()
 	})
 
 	b := ctrl.NewControllerManagedBy(r.manager).
@@ -258,40 +258,40 @@ func (r *ProviderReconciler) Reconcile(ctx context.Context, req reconcile.Reques
 	logger := log.FromContext(ctx).WithValues("provider", r.provider.Name())
 
 	// Fetch the DataStore
-	db := &v2alpha1.DataStore{}
-	if err := r.Client.Get(ctx, req.NamespacedName, db); err != nil {
+	ds := &v2alpha1.DataStore{}
+	if err := r.Client.Get(ctx, req.NamespacedName, ds); err != nil {
 		return reconcile.Result{}, client.IgnoreNotFound(err)
 	}
 
-	// Create the Cluster handle with metadata if available
-	var cluster *controller.Cluster
+	// Create the Context handle with metadata if available
+	var dsCtx *controller.Context
 	if mp, ok := r.provider.(controller.MetadataProvider); ok {
 		metadata := mp.GetMetadata()
-		cluster = controller.NewClusterWithMetadata(ctx, r.Client, db, metadata)
+		dsCtx = controller.NewContextWithMetadata(ctx, r.Client, ds, metadata)
 	} else {
-		cluster = controller.NewCluster(ctx, r.Client, db)
+		dsCtx = controller.NewContext(ctx, r.Client, ds)
 	}
 
 	// Handle deletion
-	if !db.GetDeletionTimestamp().IsZero() {
-		return r.handleDeletion(ctx, cluster, db, logger)
+	if !ds.GetDeletionTimestamp().IsZero() {
+		return r.handleDeletion(ctx, dsCtx, ds, logger)
 	}
 
 	// Ensure finalizer is present
-	if !controllerutil.ContainsFinalizer(db, finalizerName) {
-		controllerutil.AddFinalizer(db, finalizerName)
-		if err := r.Client.Update(ctx, db); err != nil {
+	if !controllerutil.ContainsFinalizer(ds, finalizerName) {
+		controllerutil.AddFinalizer(ds, finalizerName)
+		if err := r.Client.Update(ctx, ds); err != nil {
 			return reconcile.Result{}, err
 		}
 		return reconcile.Result{Requeue: true}, nil
 	}
 
 	// Run validation
-	if err := r.provider.Validate(cluster); err != nil {
+	if err := r.provider.Validate(dsCtx); err != nil {
 		logger.Error(err, "Validation failed")
 		// Update status to failed
-		db.Status.Phase = v2alpha1.DataStorePhaseFailed
-		if updateErr := r.Client.Status().Update(ctx, db); updateErr != nil {
+		ds.Status.Phase = v2alpha1.DataStorePhaseFailed
+		if updateErr := r.Client.Status().Update(ctx, ds); updateErr != nil {
 			logger.Error(updateErr, "Failed to update status after validation error")
 		}
 		return reconcile.Result{}, err
@@ -299,7 +299,7 @@ func (r *ProviderReconciler) Reconcile(ctx context.Context, req reconcile.Reques
 
 	// Run sync
 	logger.Info("Running sync")
-	if err := r.provider.Sync(cluster); err != nil {
+	if err := r.provider.Sync(dsCtx); err != nil {
 		if controller.IsWaitError(err) {
 			logger.Info("Sync waiting", "reason", err.Error())
 			return reconcile.Result{RequeueAfter: controller.GetWaitDuration(err)}, nil
@@ -310,44 +310,44 @@ func (r *ProviderReconciler) Reconcile(ctx context.Context, req reconcile.Reques
 
 	// Compute and update status
 	logger.Info("Computing status")
-	status, err := r.provider.Status(cluster)
+	status, err := r.provider.Status(dsCtx)
 	if err != nil {
 		logger.Error(err, "Status computation failed")
 		return reconcile.Result{}, err
 	}
 
-	db.Status = status.ToV2Alpha1()
-	if err := r.Client.Status().Update(ctx, db); err != nil {
+	ds.Status = status.ToV2Alpha1()
+	if err := r.Client.Status().Update(ctx, ds); err != nil {
 		logger.Error(err, "Failed to update status")
 		return reconcile.Result{}, err
 	}
 
-	logger.Info("Reconciliation complete", "phase", db.Status.Phase)
+	logger.Info("Reconciliation complete", "phase", ds.Status.Phase)
 	return reconcile.Result{}, nil
 }
 
 func (r *ProviderReconciler) handleDeletion(
 	ctx context.Context,
-	cluster *controller.Cluster,
-	db *v2alpha1.DataStore,
+	dsCtx *controller.Context,
+	ds *v2alpha1.DataStore,
 	logger interface{ Info(string, ...interface{}) },
 ) (reconcile.Result, error) {
-	if !controllerutil.ContainsFinalizer(db, finalizerName) {
+	if !controllerutil.ContainsFinalizer(ds, finalizerName) {
 		return reconcile.Result{}, nil
 	}
 
 	logger.Info("Running cleanup")
 
 	// Update status to deleting
-	if db.Status.Phase != v2alpha1.DataStorePhaseDeleting {
-		db.Status.Phase = v2alpha1.DataStorePhaseDeleting
-		if err := r.Client.Status().Update(ctx, db); err != nil {
+	if ds.Status.Phase != v2alpha1.DataStorePhaseDeleting {
+		ds.Status.Phase = v2alpha1.DataStorePhaseDeleting
+		if err := r.Client.Status().Update(ctx, ds); err != nil {
 			return reconcile.Result{}, err
 		}
 	}
 
 	// Run cleanup
-	if err := r.provider.Cleanup(cluster); err != nil {
+	if err := r.provider.Cleanup(dsCtx); err != nil {
 		if controller.IsWaitError(err) {
 			logger.Info("Cleanup waiting", "reason", err.Error())
 			return reconcile.Result{RequeueAfter: controller.GetWaitDuration(err)}, nil
@@ -356,8 +356,8 @@ func (r *ProviderReconciler) handleDeletion(
 	}
 
 	// Remove finalizer
-	controllerutil.RemoveFinalizer(db, finalizerName)
-	if err := r.Client.Update(ctx, db); err != nil {
+	controllerutil.RemoveFinalizer(ds, finalizerName)
+	if err := r.Client.Update(ctx, ds); err != nil {
 		return reconcile.Result{}, err
 	}
 

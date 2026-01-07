@@ -24,16 +24,16 @@ type ProviderInterface interface {
 	OwnedTypes() []client.Object
 
 	// Validate checks if the DataStore spec is valid.
-	Validate(cluster *Cluster) error
+	Validate(c *Context) error
 
 	// Sync ensures all required resources exist and are configured.
-	Sync(cluster *Cluster) error
+	Sync(c *Context) error
 
-	// Status computes the current status of the database cluster.
-	Status(cluster *Cluster) (Status, error)
+	// Status computes the current status of the database.
+	Status(c *Context) (Status, error)
 
 	// Cleanup handles deletion (called when deletion timestamp is set).
-	Cleanup(cluster *Cluster) error
+	Cleanup(c *Context) error
 }
 
 // MetadataProvider is an optional interface for exposing provider metadata.

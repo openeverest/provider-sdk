@@ -61,7 +61,7 @@ provider-sdk/
 │   └── PROVIDER_CR_GENERATION.md  # How to generate Provider manifests
 ├── pkg/
 │   ├── apis/v2alpha1/           # CRD types (DataStore, Provider)
-│   ├── controller/              # SDK core (Cluster handle, Status, etc.)
+│   ├── controller/              # SDK core (Context handle, Status, etc.)
 │   ├── reconciler/              # Reconciler implementations
 │   └── server/                  # HTTP server for schemas
 ├── examples/
@@ -85,7 +85,7 @@ provider-sdk/
 
 1. **Start with [examples/README.md](examples/README.md)** for a hands-on walkthrough
 2. **Examine the SDK code** in `pkg/controller/` - especially:
-   - [common.go](pkg/controller/common.go) - The `Cluster` handle abstraction
+   - [common.go](pkg/controller/common.go) - The `Context` handle abstraction
    - [interface.go](pkg/controller/interface.go) - Provider interface types
 3. **Run the examples** and create test DataStore resources
 
@@ -96,7 +96,7 @@ When reviewing, please consider:
 1. **Usability**: Is the SDK easy to understand and use?
 2. **API Design**: Is the interface design intuitive and idiomatic?
 3. **Missing Features**: What's missing that would be needed for production?
-4. **Naming**: Are the names (Cluster, Status, etc.) clear and appropriate?
+4. **Naming**: Are the names (Context, Status, etc.) clear and appropriate?
 
 ## 📝 Providing Feedback
 

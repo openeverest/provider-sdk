@@ -57,7 +57,7 @@ Without a proper SDK, provider authors face several challenges:
 
 The SDK bridges this gap by providing:
 
-1. **A simplified `Cluster` handle** - One object that provides everything a provider needs
+1. **A simplified `Context` handle** - One object that provides everything a provider needs
 2. **Automatic Kubernetes plumbing** - Finalizers, owner references, requeue logic handled automatically
 3. **Semantic status helpers** - `Creating()`, `Running()`, `Failed()` instead of raw status structs
 4. **Error-based flow control** - Use Go's idiomatic error handling, not custom result types
@@ -102,12 +102,12 @@ type PSMDBProvider struct {
     sdk.BaseProvider
 }
 
-func (p *PSMDBProvider) Validate(c *sdk.Cluster) error {
+func (p *PSMDBProvider) Validate(c *sdk.Context) error {
     // Just validation logic, nothing else
     return nil
 }
 
-func (p *PSMDBProvider) Sync(c *sdk.Cluster) error {
+func (p *PSMDBProvider) Sync(c *sdk.Context) error {
     psmdb := &psmdbv1.PerconaServerMongoDB{
         ObjectMeta: c.ObjectMeta(c.Name()),
         Spec:       buildSpec(c),
@@ -115,7 +115,7 @@ func (p *PSMDBProvider) Sync(c *sdk.Cluster) error {
     return c.Apply(psmdb)  // Owner ref set automatically
 }
 
-func (p *PSMDBProvider) Status(c *sdk.Cluster) (sdk.Status, error) {
+func (p *PSMDBProvider) Status(c *sdk.Context) (sdk.Status, error) {
     psmdb := &psmdbv1.PerconaServerMongoDB{}
     if err := c.Get(psmdb, c.Name()); err != nil {
         return sdk.Creating("Initializing"), nil
@@ -126,7 +126,7 @@ func (p *PSMDBProvider) Status(c *sdk.Cluster) (sdk.Status, error) {
     return sdk.Running(), nil
 }
 
-func (p *PSMDBProvider) Cleanup(c *sdk.Cluster) error {
+func (p *PSMDBProvider) Cleanup(c *sdk.Context) error {
     exists, _ := c.Exists(&psmdbv1.PerconaServerMongoDB{}, c.Name())
     if exists {
         return sdk.WaitFor("PSMDB deletion")
@@ -160,7 +160,7 @@ reconciler, _ := reconciler.New(provider)
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                               SDK Layer                                     │
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐     │
-│  │   Cluster    │  │    Status    │  │   WaitFor    │  │  ObjectMeta  │     │
+│  │   Context    │  │    Status    │  │   WaitFor    │  │  ObjectMeta  │     │
 │  │   Handle     │  │   Helpers    │  │   Helpers    │  │   Helpers    │     │
 │  └──────────────┘  └──────────────┘  └──────────────┘  └──────────────┘     │
 └─────────────────────────────────────────────────────────────────────────────┘
@@ -185,19 +185,19 @@ reconciler, _ := reconciler.New(provider)
 
 ## Key Concepts
 
-### The Cluster Handle
+### The Context Handle
 
-The `Cluster` struct is the main interface between your provider code and the SDK. It wraps:
+The `Context` struct is the main interface between your provider code and the SDK. It wraps:
 - The Kubernetes client
 - The current DataStore being reconciled
 - Context for API operations
 - Provider metadata (if configured)
 
 ```go
-func MySync(c *sdk.Cluster) error {
+func MySync(c *sdk.Context) error {
     // Identity
-    c.Name()        // Cluster name
-    c.Namespace()   // Cluster namespace
+    c.Name()        // DataStore name
+    c.Namespace()   // DataStore namespace
     
     // Spec access
     c.Spec()        // Full spec
@@ -237,7 +237,7 @@ return sdk.Failed(fmt.Errorf("replication failed"))
 Use errors for flow control - it's idiomatic Go:
 
 ```go
-func MySync(c *sdk.Cluster) error {
+func MySync(c *sdk.Context) error {
     // Success - continue to next step
     return nil
     

@@ -57,9 +57,9 @@ type DataStoreSpec struct {
 }
 
 // GetComponentsOfType returns all components that match the given type.
-func (db *DataStore) GetComponentsOfType(t string) []ComponentSpec {
+func (ds *DataStore) GetComponentsOfType(t string) []ComponentSpec {
 	var result []ComponentSpec
-	for _, c := range db.Spec.Components {
+	for _, c := range ds.Spec.Components {
 		if c.Type == t {
 			result = append(result, c)
 		}
@@ -68,20 +68,20 @@ func (db *DataStore) GetComponentsOfType(t string) []ComponentSpec {
 }
 
 // GetTopologyType returns the topology type, or empty string if not specified.
-func (db *DataStore) GetTopologyType() string {
-	if db.Spec.Topology == nil {
+func (ds *DataStore) GetTopologyType() string {
+	if ds.Spec.Topology == nil {
 		return ""
 	}
-	return db.Spec.Topology.Type
+	return ds.Spec.Topology.Type
 }
 
 // GetTopologyConfig returns the topology configuration as runtime.RawExtension.
 // Returns nil if no topology or topology config is specified.
-func (db *DataStore) GetTopologyConfig() *runtime.RawExtension {
-	if db.Spec.Topology == nil {
+func (ds *DataStore) GetTopologyConfig() *runtime.RawExtension {
+	if ds.Spec.Topology == nil {
 		return nil
 	}
-	return db.Spec.Topology.Config
+	return ds.Spec.Topology.Config
 }
 
 type DataStorePhase string

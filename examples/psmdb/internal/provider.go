@@ -94,7 +94,7 @@ func defaultSpec() psmdbv1.PerconaServerMongoDBSpec {
 }
 
 // ValidatePSMDB validates the DataStore spec for PSMDB.
-func ValidatePSMDB(c *sdk.Cluster) error {
+func ValidatePSMDB(c *sdk.Context) error {
 	fmt.Println("Validating PSMDB cluster:", c.Name())
 	// TODO: Add actual validation logic
 	// Example: Check for required components, validate storage sizes, etc.
@@ -155,7 +155,7 @@ func rsName(i int) string {
 	return fmt.Sprintf("rs%v", i)
 }
 
-func configureReplsets(c *sdk.Cluster) []*psmdbv1.ReplsetSpec {
+func configureReplsets(c *sdk.Context) []*psmdbv1.ReplsetSpec {
 	var replsets []*psmdbv1.ReplsetSpec
 
 	ds := c.DB()
@@ -183,7 +183,7 @@ func configureReplsets(c *sdk.Cluster) []*psmdbv1.ReplsetSpec {
 	return replsets
 }
 
-func configureConfigServerReplset(c *sdk.Cluster) *psmdbv1.ReplsetSpec {
+func configureConfigServerReplset(c *sdk.Context) *psmdbv1.ReplsetSpec {
 	var replset *psmdbv1.ReplsetSpec
 
 	ds := c.DB()
@@ -200,7 +200,7 @@ func configureConfigServerReplset(c *sdk.Cluster) *psmdbv1.ReplsetSpec {
 	return configureReplset("configsvr", cfgSrv.Replicas, cfgSrv.Resources, cfgSrv.Storage, false)
 }
 
-func configureMongos(c *sdk.Cluster) *psmdbv1.MongosSpec {
+func configureMongos(c *sdk.Context) *psmdbv1.MongosSpec {
 	ds := c.DB()
 	spec := ds.Spec
 	proxy := spec.Components[ComponentProxy]
@@ -235,7 +235,7 @@ func configureMongos(c *sdk.Cluster) *psmdbv1.MongosSpec {
 	return mongosSpec
 }
 
-func configureBackup(c *sdk.Cluster) psmdbv1.BackupSpec {
+func configureBackup(c *sdk.Context) psmdbv1.BackupSpec {
 	// TODO: Implement proper backup configuration
 	var backupImage string
 	if metadata := c.Metadata(); metadata != nil {
@@ -266,7 +266,7 @@ func configureBackup(c *sdk.Cluster) psmdbv1.BackupSpec {
 }
 
 // SyncPSMDB ensures all PSMDB resources exist and are configured correctly.
-func SyncPSMDB(c *sdk.Cluster) error {
+func SyncPSMDB(c *sdk.Context) error {
 	fmt.Println("Syncing PSMDB cluster:", c.Name())
 	psmdb := &psmdbv1.PerconaServerMongoDB{
 		ObjectMeta: c.ObjectMeta(c.Name()),
@@ -286,7 +286,7 @@ func SyncPSMDB(c *sdk.Cluster) error {
 		psmdb.Spec.Image = metadata.GetDefaultImage("mongod")
 	} else {
 		// Fallback: metadata not available, use PSMDBMetadata() directly
-		// This can happen in tests or when using NewCluster instead of NewClusterWithMetadata
+		// This can happen in tests or when using NewContext instead of NewContextWithMetadata
 		psmdb.Spec.Image = PSMDBMetadata().GetDefaultImage(engine.Type)
 	}
 	psmdb.Spec.ImagePullPolicy = corev1.PullIfNotPresent
@@ -314,7 +314,7 @@ func SyncPSMDB(c *sdk.Cluster) error {
 }
 
 // StatusPSMDB computes the current status of the PSMDB cluster.
-func StatusPSMDB(c *sdk.Cluster) (sdk.Status, error) {
+func StatusPSMDB(c *sdk.Context) (sdk.Status, error) {
 	// TODO: We probably shouldn't be querying the PSMDB object directly here;
 	// It can lead to a race condition where we are setting the status based on
 	// new data whereas the sync used older data.
@@ -335,7 +335,7 @@ func StatusPSMDB(c *sdk.Cluster) (sdk.Status, error) {
 }
 
 // CleanupPSMDB handles deletion of the PSMDB cluster.
-func CleanupPSMDB(c *sdk.Cluster) error {
+func CleanupPSMDB(c *sdk.Context) error {
 	fmt.Println("Cleaning up PSMDB cluster:", c.Name())
 	// TODO: Implemenent handling of finalizers
 	psmdb := &psmdbv1.PerconaServerMongoDB{
@@ -457,19 +457,19 @@ func NewPSMDBProviderInterface() *PSMDBProvider {
 
 // Interface implementation - delegates to shared functions in psmdb_impl.go
 
-func (p *PSMDBProvider) Validate(c *sdk.Cluster) error {
+func (p *PSMDBProvider) Validate(c *sdk.Context) error {
 	return ValidatePSMDB(c)
 }
 
-func (p *PSMDBProvider) Sync(c *sdk.Cluster) error {
+func (p *PSMDBProvider) Sync(c *sdk.Context) error {
 	return SyncPSMDB(c)
 }
 
-func (p *PSMDBProvider) Status(c *sdk.Cluster) (sdk.Status, error) {
+func (p *PSMDBProvider) Status(c *sdk.Context) (sdk.Status, error) {
 	return StatusPSMDB(c)
 }
 
-func (p *PSMDBProvider) Cleanup(c *sdk.Cluster) error {
+func (p *PSMDBProvider) Cleanup(c *sdk.Context) error {
 	return CleanupPSMDB(c)
 }
 

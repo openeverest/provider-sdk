@@ -13,76 +13,76 @@ import (
 )
 
 // =============================================================================
-// CORE ABSTRACTION: The Cluster handle
+// CORE ABSTRACTION: The Context handle
 // =============================================================================
 
-// Cluster is the main handle for working with a DataStore.
+// Context is the main handle for working with a DataStore.
 // It provides a simplified interface that hides Kubernetes complexity.
-type Cluster struct {
+type Context struct {
 	ctx      context.Context
 	client   client.Client
-	db       *v2alpha1.DataStore
+	ds       *v2alpha1.DataStore
 	metadata *ProviderMetadata
 }
 
-// NewCluster creates a new Cluster handle (used internally by the reconciler).
-func NewCluster(ctx context.Context, c client.Client, db *v2alpha1.DataStore) *Cluster {
-	return &Cluster{ctx: ctx, client: c, db: db}
+// NewContext creates a new Context handle (used internally by the reconciler).
+func NewContext(ctx context.Context, c client.Client, ds *v2alpha1.DataStore) *Context {
+	return &Context{ctx: ctx, client: c, ds: ds}
 }
 
-// NewClusterWithMetadata creates a new Cluster handle with provider metadata.
-// This is preferred over NewCluster as it makes metadata available to provider implementations.
-func NewClusterWithMetadata(ctx context.Context, c client.Client, db *v2alpha1.DataStore, metadata *ProviderMetadata) *Cluster {
-	return &Cluster{ctx: ctx, client: c, db: db, metadata: metadata}
+// NewContextWithMetadata creates a new Context handle with provider metadata.
+// This is preferred over NewContext as it makes metadata available to provider implementations.
+func NewContextWithMetadata(ctx context.Context, c client.Client, ds *v2alpha1.DataStore, metadata *ProviderMetadata) *Context {
+	return &Context{ctx: ctx, client: c, ds: ds, metadata: metadata}
 }
 
-// Spec returns the cluster specification.
-func (c *Cluster) Spec() *v2alpha1.DataStoreSpec {
-	return &c.db.Spec
+// Spec returns the datastore specification.
+func (c *Context) Spec() *v2alpha1.DataStoreSpec {
+	return &c.ds.Spec
 }
 
-// Name returns the cluster name.
-func (c *Cluster) Name() string {
-	return c.db.Name
+// Name returns the datastore name.
+func (c *Context) Name() string {
+	return c.ds.Name
 }
 
-// Namespace returns the cluster namespace.
-func (c *Cluster) Namespace() string {
-	return c.db.Namespace
+// Namespace returns the datastore namespace.
+func (c *Context) Namespace() string {
+	return c.ds.Namespace
 }
 
-// Labels returns the cluster labels.
-func (c *Cluster) Labels() map[string]string {
-	return c.db.Labels
+// Labels returns the datastore labels.
+func (c *Context) Labels() map[string]string {
+	return c.ds.Labels
 }
 
-// Annotations returns the cluster annotations.
-func (c *Cluster) Annotations() map[string]string {
-	return c.db.Annotations
+// Annotations returns the datastore annotations.
+func (c *Context) Annotations() map[string]string {
+	return c.ds.Annotations
 }
 
 // ComponentsOfType returns all components of a given type.
-func (c *Cluster) ComponentsOfType(componentType string) []v2alpha1.ComponentSpec {
-	return c.db.GetComponentsOfType(componentType)
+func (c *Context) ComponentsOfType(componentType string) []v2alpha1.ComponentSpec {
+	return c.ds.GetComponentsOfType(componentType)
 }
 
 // DB returns the underlying DataStore for direct access.
-func (c *Cluster) DB() *v2alpha1.DataStore {
-	return c.db
+func (c *Context) DB() *v2alpha1.DataStore {
+	return c.ds
 }
 
 // Metadata returns the provider metadata, if available.
-// Returns nil if metadata was not provided when creating the Cluster handle.
+// Returns nil if metadata was not provided when creating the Context handle.
 // The metadata is automatically populated by the reconciler if the provider
 // implements the MetadataProvider interface.
-func (c *Cluster) Metadata() *ProviderMetadata {
+func (c *Context) Metadata() *ProviderMetadata {
 	return c.metadata
 }
 
 // Raw returns the underlying DataStore (escape hatch for advanced use).
 // Deprecated: Use DB() instead.
-func (c *Cluster) Raw() *v2alpha1.DataStore {
-	return c.db
+func (c *Context) Raw() *v2alpha1.DataStore {
+	return c.ds
 }
 
 // =============================================================================
@@ -91,9 +91,9 @@ func (c *Cluster) Raw() *v2alpha1.DataStore {
 
 // Apply creates or updates a resource, setting ownership automatically.
 // This is the primary way to manage resources - just describe what you want.
-func (c *Cluster) Apply(obj client.Object) error {
+func (c *Context) Apply(obj client.Object) error {
 	// Set the owner reference automatically
-	if err := controllerutil.SetControllerReference(c.db, obj, c.client.Scheme()); err != nil {
+	if err := controllerutil.SetControllerReference(c.ds, obj, c.client.Scheme()); err != nil {
 		return fmt.Errorf("failed to set owner: %w", err)
 	}
 
@@ -112,16 +112,16 @@ func (c *Cluster) Apply(obj client.Object) error {
 	return c.client.Update(c.ctx, obj)
 }
 
-// Get retrieves a resource by name (in the cluster's namespace).
-func (c *Cluster) Get(obj client.Object, name string) error {
+// Get retrieves a resource by name (in the datastore's namespace).
+func (c *Context) Get(obj client.Object, name string) error {
 	return c.client.Get(c.ctx, client.ObjectKey{
-		Namespace: c.db.Namespace,
+		Namespace: c.ds.Namespace,
 		Name:      name,
 	}, obj)
 }
 
 // Exists checks if a resource exists.
-func (c *Cluster) Exists(obj client.Object, name string) (bool, error) {
+func (c *Context) Exists(obj client.Object, name string) (bool, error) {
 	err := c.Get(obj, name)
 	if err != nil {
 		if client.IgnoreNotFound(err) != nil {
@@ -133,14 +133,14 @@ func (c *Cluster) Exists(obj client.Object, name string) (bool, error) {
 }
 
 // Delete removes a resource.
-func (c *Cluster) Delete(obj client.Object) error {
+func (c *Context) Delete(obj client.Object) error {
 	err := c.client.Delete(c.ctx, obj)
 	return client.IgnoreNotFound(err)
 }
 
 // List retrieves resources matching optional filters.
-func (c *Cluster) List(list client.ObjectList, opts ...client.ListOption) error {
-	allOpts := append([]client.ListOption{client.InNamespace(c.db.Namespace)}, opts...)
+func (c *Context) List(list client.ObjectList, opts ...client.ListOption) error {
+	allOpts := append([]client.ListOption{client.InNamespace(c.ds.Namespace)}, opts...)
 	return c.client.List(c.ctx, list, allOpts...)
 }
 
@@ -149,7 +149,7 @@ func (c *Cluster) List(list client.ObjectList, opts ...client.ListOption) error 
 // =============================================================================
 
 // ObjectMeta returns a pre-configured ObjectMeta for creating resources.
-func (c *Cluster) ObjectMeta(name string) metav1.ObjectMeta {
+func (c *Context) ObjectMeta(name string) metav1.ObjectMeta {
 	return metav1.ObjectMeta{
 		Name:      name,
 		Namespace: c.Namespace(),
@@ -170,8 +170,8 @@ func (c *Cluster) ObjectMeta(name string) metav1.ObjectMeta {
 //	if err := c.DecodeTopologyConfig(&config); err != nil {
 //	    // handle error or use defaults
 //	}
-func (c *Cluster) DecodeTopologyConfig(target interface{}) error {
-	topologyConfig := c.db.GetTopologyConfig()
+func (c *Context) DecodeTopologyConfig(target interface{}) error {
+	topologyConfig := c.ds.GetTopologyConfig()
 	if topologyConfig == nil || topologyConfig.Raw == nil {
 		return fmt.Errorf("topology config not set")
 	}
@@ -188,8 +188,8 @@ func (c *Cluster) DecodeTopologyConfig(target interface{}) error {
 //	if err := c.DecodeGlobalConfig(&config); err != nil {
 //	    // handle error or use defaults
 //	}
-func (c *Cluster) DecodeGlobalConfig(target interface{}) error {
-	globalConfig := c.db.Spec.Global
+func (c *Context) DecodeGlobalConfig(target interface{}) error {
+	globalConfig := c.ds.Spec.Global
 	if globalConfig == nil || globalConfig.Raw == nil {
 		return fmt.Errorf("global config not set")
 	}
@@ -202,12 +202,12 @@ func (c *Cluster) DecodeGlobalConfig(target interface{}) error {
 //
 // Example:
 //
-//	engine := c.db.Spec.Components["engine"]
+//	engine := c.ds.Spec.Components["engine"]
 //	var customSpec psmdbspec.MongodCustomSpec
 //	if err := c.DecodeComponentCustomSpec(engine, &customSpec); err != nil {
 //	    // handle error or use defaults
 //	}
-func (c *Cluster) DecodeComponentCustomSpec(component v2alpha1.ComponentSpec, target interface{}) error {
+func (c *Context) DecodeComponentCustomSpec(component v2alpha1.ComponentSpec, target interface{}) error {
 	if component.CustomSpec == nil || component.CustomSpec.Raw == nil {
 		return fmt.Errorf("component custom spec not set")
 	}
@@ -225,19 +225,19 @@ func (c *Cluster) DecodeComponentCustomSpec(component v2alpha1.ComponentSpec, ta
 //	} else {
 //	    numShards = 2 // default
 //	}
-func (c *Cluster) TryDecodeTopologyConfig(target interface{}) bool {
+func (c *Context) TryDecodeTopologyConfig(target interface{}) bool {
 	err := c.DecodeTopologyConfig(target)
 	return err == nil
 }
 
 // TryDecodeGlobalConfig attempts to decode global config, returning false if not set.
-func (c *Cluster) TryDecodeGlobalConfig(target interface{}) bool {
+func (c *Context) TryDecodeGlobalConfig(target interface{}) bool {
 	err := c.DecodeGlobalConfig(target)
 	return err == nil
 }
 
 // TryDecodeComponentCustomSpec attempts to decode component custom spec, returning false if not set.
-func (c *Cluster) TryDecodeComponentCustomSpec(component v2alpha1.ComponentSpec, target interface{}) bool {
+func (c *Context) TryDecodeComponentCustomSpec(component v2alpha1.ComponentSpec, target interface{}) bool {
 	err := c.DecodeComponentCustomSpec(component, target)
 	return err == nil
 }
@@ -338,4 +338,3 @@ func WaitFor(reason string) error {
 func WaitForDuration(reason string, d time.Duration) error {
 	return &WaitError{Reason: reason, Duration: d}
 }
-

@@ -4,14 +4,14 @@ This document describes helper functions for working with provider metadata to l
 
 ## Overview
 
-When implementing a provider, you often need to look up default images or versions for components. The SDK provides convenient helper functions through the `Cluster` handle.
+When implementing a provider, you often need to look up default images or versions for components. The SDK provides convenient helper functions through the `Context` handle.
 
 **Key point:** When you register metadata with your provider (via `BaseProvider.Metadata` or `WithMetadata()`), it becomes available through `c.Metadata()` in your provider functions.
 
 ## Quick Reference
 
 ```go
-func SyncPSMDB(c *sdk.Cluster) error {
+func SyncPSMDB(c *sdk.Context) error {
     metadata := c.Metadata()
     
     // Get default image for a component type
@@ -37,7 +37,7 @@ func SyncPSMDB(c *sdk.Cluster) error {
 The most common use case is allowing users to override images while providing sensible defaults:
 
 ```go
-func SyncPSMDB(c *sdk.Cluster) error {
+func SyncPSMDB(c *sdk.Context) error {
     engine := c.DB().Spec.Components["engine"]
     
     var image string
