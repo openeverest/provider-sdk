@@ -62,28 +62,20 @@ func SyncPSMDB(c *sdk.Cluster) error {
 
 ## Registering Metadata
 
-### Interface-Based Approach
+When creating your provider, register metadata using the `BaseProvider` struct:
 
 ```go
 func NewPSMDBProvider() *PSMDBProvider {
     return &PSMDBProvider{
         BaseProvider: sdk.BaseProvider{
             ProviderName: "psmdb",
-            Metadata:     PSMDBMetadata(),  // Register here
+            Metadata:     PSMDBMetadata(),  // Register metadata here
         },
     }
 }
 ```
 
-### Builder-Based Approach
-
-```go
-func NewPSMDBProvider() *sdk.Provider {
-    return sdk.Build("psmdb").
-        WithMetadata(PSMDBMetadata()).  // Register here
-        Done()
-}
-```
+The reconciler automatically detects that your provider implements `MetadataProvider` and makes the metadata available through `c.Metadata()` in all your sync, validate, status, and cleanup functions.
 
 ## Metadata Structure
 
@@ -122,60 +114,5 @@ func PSMDBMetadata() *sdk.ProviderMetadata {
 
 - [SDK Overview](SDK_OVERVIEW.md) - Architecture and concepts
 - [Provider CR Generation](PROVIDER_CR_GENERATION.md) - How metadata is used for Provider CRs
-
-**Interface-based approach:**
-```go
-func NewPSMDBProvider() *PSMDBProvider {
-    return &PSMDBProvider{
-        BaseProvider: sdk.BaseProvider{
-            ProviderName: "psmdb",
-            Metadata:     PSMDBMetadata(),  // Register metadata here
-        },
-    }
-}
-```
-
-**Builder-based approach:**
-```go
-func NewPSMDBProvider() *sdk.Provider {
-    return sdk.Build("psmdb").
-        WithMetadata(PSMDBMetadata()).  // Register metadata here
-        // ... other configuration
-        Done()
-}
-```
-
-The reconciler automatically detects that your provider implements `MetadataProvider` and makes the metadata available through `c.Metadata()` in all your sync, validate, status, and cleanup functions.
-
-## Metadata Structure
-
-For reference, here's how metadata is typically structured:
-
-```go
-func PSMDBMetadata() *sdk.ProviderMetadata {
-    return &sdk.ProviderMetadata{
-        // Component types define available versions
-        ComponentTypes: map[string]sdk.ComponentTypeMeta{
-            "mongod": {
-                Versions: []sdk.ComponentVersionMeta{
-                    {Version: "6.0.19-16", Image: "percona/percona-server-mongodb:6.0.19-16"},
-                    {Version: "8.0.8-3", Image: "percona/percona-server-mongodb:8.0.8-3", Default: true},
-                },
-            },
-        },
-        
-        // Components reference component types
-        Components: map[string]sdk.ComponentMeta{
-            "engine": {Type: "mongod"},  // engine uses mongod type
-        },
-    }
-}
-```
-
-## See Also
-
-- [Provider CR Generation](PROVIDER_CR_GENERATION.md) - How to generate provider manifests
-- [Schema Generation](SCHEMA_GENERATION_OPTIONS.md) - OpenAPI schema generation for custom specs
-- [Interface vs Builder](interface-vs-builder.md) - Choosing the right SDK approach
 
 

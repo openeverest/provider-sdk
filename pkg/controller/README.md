@@ -7,8 +7,7 @@ This package contains the core SDK abstractions for building Everest providers.
 | File | Purpose |
 |------|---------|
 | `common.go` | The `Cluster` handle and resource operations |
-| `interface.go` | Interface-based provider types (`ProviderIface`, `BaseProvider`) |
-| `builder.go` | Builder-based provider types (`ProviderBuilder`, `Provider`) |
+| `interface.go` | Provider interface types (`ProviderInterface`, `BaseProvider`) |
 | `metadata.go` | Provider metadata types and conversions |
 | `generate.go` | CLI manifest generation utilities |
 
@@ -36,28 +35,12 @@ c.Delete(obj)      // Delete resource
 c.Metadata()       // Provider metadata
 ```
 
-### Status Helpers (`common.go`)
+## Provider Interface
+
+Implement the `ProviderInterface` to create a provider:
 
 ```go
-Creating("message")           // Creating phase
-Running()                     // Running phase
-RunningWithConnection(url, secret)
-Failed(err)                   // Failed phase
-```
-
-### Flow Control (`common.go`)
-
-```go
-WaitFor("reason")             // Requeue reconciliation
-WaitForDuration(duration, "reason")
-```
-
-## Provider Approaches
-
-### Interface-Based (`interface.go`)
-
-```go
-type ProviderIface interface {
+type ProviderInterface interface {
     Name() string
     Types() func(*runtime.Scheme) error
     OwnedTypes() []client.Object
@@ -68,22 +51,32 @@ type ProviderIface interface {
 }
 ```
 
-### Builder-Based (`builder.go`)
+Use `BaseProvider` to inherit default implementations:
 
 ```go
-sdk.Build("name").
-    WithTypes(fn).
-    Owns(obj).
-    Validate(fn).
-    Sync("step", fn).
-    Status(fn).
-    Cleanup("step", fn).
-    Done()
+type MyProvider struct {
+    sdk.BaseProvider
+}
+
+func NewMyProvider() *MyProvider {
+    return &MyProvider{
+        BaseProvider: sdk.BaseProvider{
+            ProviderName: "mydb",
+            SchemeFuncs:  []func(*runtime.Scheme) error{mydbv1.AddToScheme},
+            Owned:        []client.Object{&mydbv1.MyDB{}},
+        },
+    }
+}
+
+// Implement required methods
+func (p *MyProvider) Validate(c *sdk.Cluster) error { ... }
+func (p *MyProvider) Sync(c *sdk.Cluster) error { ... }
+func (p *MyProvider) Status(c *sdk.Cluster) (sdk.Status, error) { ... }
+func (p *MyProvider) Cleanup(c *sdk.Cluster) error { ... }
 ```
 
 ## See Also
 
 - [SDK Overview](../../docs/SDK_OVERVIEW.md)
-- [Interface vs Builder Decision](../../docs/decisions/INTERFACE_VS_BUILDER.md)
 - [Examples](../../examples/README.md)
 

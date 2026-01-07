@@ -24,7 +24,7 @@ limitations under the License.
 // The generated code will be placed in examples/psmdbspec/generated/zz_generated.openapi.go
 //
 // +k8s:openapi-gen=true
-package psmdbspec
+package types
 
 // =============================================================================
 // MONGOD COMPONENT SPEC

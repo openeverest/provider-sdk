@@ -1,20 +1,19 @@
 package controller
 
-// Interface-Based Provider SDK
+// Provider SDK
 //
-// Implement the ProviderIface interface to create a provider.
+// Implement the Provider interface to create a provider.
 // Embed BaseProvider for default implementations.
 //
-// See examples/psmdb_interface.go for a complete example.
-// See docs/decisions/INTERFACE_VS_BUILDER.md for comparison with builder approach.
+// See examples/psmdb for a complete example.
 
 import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-// ProviderIface defines the interface for a database provider.
-type ProviderIface interface {
+// ProviderInterface defines the interface for a database provider.
+type ProviderInterface interface {
 	// Name returns the unique identifier for this provider (e.g., "psmdb", "postgresql").
 	Name() string
 
@@ -164,4 +163,3 @@ type SchemaProvider interface {
 	// Returns nil if no global schema is needed.
 	GlobalSchema() interface{}
 }
-

@@ -9,20 +9,11 @@ This repository contains a **proof-of-concept** implementation of the Provider S
 2. **Validate design decisions** - Test the proposed architecture with a real implementation
 3. **Gather team feedback** - Enable the team to review and help improve the SDK
 
-### Key Decisions Pending Review
-
-Before moving forward, we need team input on one important design decision:
-
-| Decision | Options | Documentation |
-|----------|---------|---------------|
-| **Provider API Style** | Interface-based vs Builder-based | [📖 Read Comparison](docs/decisions/INTERFACE_VS_BUILDER.md) |
-
 ## 📚 Documentation Guide
 
 | Document | Audience | Description |
 |----------|----------|-------------|
 | [SDK Overview](docs/SDK_OVERVIEW.md) | All reviewers | Understand the problem and SDK architecture |
-| [Interface vs Builder](docs/decisions/INTERFACE_VS_BUILDER.md) | Decision makers | Compare the two API styles |
 | [Provider CR Generation](docs/PROVIDER_CR_GENERATION.md) | Developers | How to generate the Provider CR manifest |
 | [Examples Guide](examples/README.md) | Developers | Walk through the PSMDB reference implementation |
 | [Metadata Helpers](docs/METADATA_HELPERS.md) | Developers | Working with provider metadata |
@@ -48,14 +39,9 @@ kubectl apply -f config/crd/bases/
 # Install PSMDB operator (in production: packaged in provider Helm chart)
 kubectl apply --server-side -f https://raw.githubusercontent.com/percona/percona-server-mongodb-operator/v1.21.1/deploy/bundle.yaml
 
-# Run the provider (choose one approach)
-cd examples
-
-# Option A: Interface-based approach
-go run psmdb_interface.go psmdb_impl.go
-
-# Option B: Builder-based approach
-go run psmdb_builder.go psmdb_impl.go
+# Run the provider
+cd examples/psmdb
+go run cmd/provider/main.go
 ```
 
 ### Create a Test DataStore
@@ -72,19 +58,18 @@ provider-sdk/
 ├── docs/
 │   ├── SDK_OVERVIEW.md          # SDK architecture and concepts
 │   ├── METADATA_HELPERS.md      # Working with metadata
-│   ├── PROVIDER_CR_GENERATION.md  # How to generate Provider manifests
-│   └── decisions/
-│       └── INTERFACE_VS_BUILDER.md   # API style decision
+│   └── PROVIDER_CR_GENERATION.md  # How to generate Provider manifests
 ├── pkg/
 │   ├── apis/v2alpha1/           # CRD types (DataStore, Provider)
 │   ├── controller/              # SDK core (Cluster handle, Status, etc.)
 │   ├── reconciler/              # Reconciler implementations
 │   └── server/                  # HTTP server for schemas
 ├── examples/
-│   ├── psmdb_impl.go            # Shared PSMDB business logic
-│   ├── psmdb_interface.go       # Interface-based approach
-│   ├── psmdb_builder.go         # Builder-based approach
-│   └── README.md                # Examples walkthrough
+│   └── psmdb/                   # PSMDB provider example
+│       ├── cmd/
+│       │   └── provider/        # Provider entrypoint
+│       ├── internal/            # PSMDB business logic
+│       └── psmdbspec/           # PSMDB types and schemas
 └── config/crd/bases/            # CRD manifests
 ```
 
@@ -101,8 +86,7 @@ provider-sdk/
 1. **Start with [examples/README.md](examples/README.md)** for a hands-on walkthrough
 2. **Examine the SDK code** in `pkg/controller/` - especially:
    - [common.go](pkg/controller/common.go) - The `Cluster` handle abstraction
-   - [interface.go](pkg/controller/interface.go) - Interface-based approach
-   - [builder.go](pkg/controller/builder.go) - Builder-based approach
+   - [interface.go](pkg/controller/interface.go) - Provider interface types
 3. **Run the examples** and create test DataStore resources
 
 ### Questions to Consider
@@ -110,7 +94,7 @@ provider-sdk/
 When reviewing, please consider:
 
 1. **Usability**: Is the SDK easy to understand and use?
-2. **API Design**: Which approach (interface vs builder) feels more natural?
+2. **API Design**: Is the interface design intuitive and idiomatic?
 3. **Missing Features**: What's missing that would be needed for production?
 4. **Naming**: Are the names (Cluster, Status, etc.) clear and appropriate?
 

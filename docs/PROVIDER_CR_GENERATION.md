@@ -15,7 +15,7 @@ The Provider CR is generated from metadata you define in Go code and included in
 ## Generation Flow
 
 ```
-┌─────────────────┐    go run    ┌─────────────────┐    git commit    ┌─────────────────┐
+┌─────────────────┐    go run     ┌─────────────────┐    git commit    ┌─────────────────┐
 │   Go Metadata   │ ───────────►  │  provider.yaml  │ ──────────────►  │   Helm Chart    │
 │   (source)      │  generate-    │   (manifest)    │                  │   (deployed)    │
 │                 │  manifest     │                 │                  │                 │

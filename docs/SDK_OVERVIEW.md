@@ -98,43 +98,51 @@ func (r *Reconciler) Reconcile(ctx context.Context, req reconcile.Request) (reco
 ### After (With SDK) - ~50 lines
 
 ```go
-sdk.Build("psmdb").
-    WithTypes(psmdbv1.SchemeBuilder.AddToScheme).
-    Owns(&psmdbv1.PerconaServerMongoDB{}).
-    
-    Validate(func(c *sdk.Cluster) error {
-        // Just validation logic, nothing else
-        return nil
-    }).
-    
-    Sync("Create PSMDB", func(c *sdk.Cluster) error {
-        psmdb := &psmdbv1.PerconaServerMongoDB{
-            ObjectMeta: c.ObjectMeta(c.Name()),
-            Spec:       buildSpec(c),
-        }
-        return c.Apply(psmdb)  // Owner ref set automatically
-    }).
-    
-    Status(func(c *sdk.Cluster) (sdk.Status, error) {
-        psmdb := &psmdbv1.PerconaServerMongoDB{}
-        if err := c.Get(psmdb, c.Name()); err != nil {
-            return sdk.Creating("Initializing"), nil
-        }
-        if psmdb.Status.State != "ready" {
-            return sdk.Creating("Starting"), nil
-        }
-        return sdk.Running(), nil
-    }).
-    
-    Cleanup("Wait for deletion", func(c *sdk.Cluster) error {
-        exists, _ := c.Exists(&psmdbv1.PerconaServerMongoDB{}, c.Name())
-        if exists {
-            return sdk.WaitFor("PSMDB deletion")
-        }
-        return nil
-    }).
-    
-    Done()
+type PSMDBProvider struct {
+    sdk.BaseProvider
+}
+
+func (p *PSMDBProvider) Validate(c *sdk.Cluster) error {
+    // Just validation logic, nothing else
+    return nil
+}
+
+func (p *PSMDBProvider) Sync(c *sdk.Cluster) error {
+    psmdb := &psmdbv1.PerconaServerMongoDB{
+        ObjectMeta: c.ObjectMeta(c.Name()),
+        Spec:       buildSpec(c),
+    }
+    return c.Apply(psmdb)  // Owner ref set automatically
+}
+
+func (p *PSMDBProvider) Status(c *sdk.Cluster) (sdk.Status, error) {
+    psmdb := &psmdbv1.PerconaServerMongoDB{}
+    if err := c.Get(psmdb, c.Name()); err != nil {
+        return sdk.Creating("Initializing"), nil
+    }
+    if psmdb.Status.State != "ready" {
+        return sdk.Creating("Starting"), nil
+    }
+    return sdk.Running(), nil
+}
+
+func (p *PSMDBProvider) Cleanup(c *sdk.Cluster) error {
+    exists, _ := c.Exists(&psmdbv1.PerconaServerMongoDB{}, c.Name())
+    if exists {
+        return sdk.WaitFor("PSMDB deletion")
+    }
+    return nil
+}
+
+// Create reconciler
+provider := &PSMDBProvider{
+    BaseProvider: sdk.BaseProvider{
+        ProviderName: "psmdb",
+        SchemeFuncs:  []func(*runtime.Scheme) error{psmdbv1.AddToScheme},
+        Owned:        []client.Object{&psmdbv1.PerconaServerMongoDB{}},
+    },
+}
+reconciler, _ := reconciler.New(provider)
 ```
 
 ## SDK Architecture
@@ -281,7 +289,6 @@ When a DataStore is created, modified, or deleted, the reconciler follows this f
 
 ## Next Steps
 
-- **[Interface vs Builder Decision](decisions/INTERFACE_VS_BUILDER.md)** - Choose your API style
 - **[Provider CR Generation Guide](PROVIDER_CR_GENERATION.md)** - How to generate Provider manifests
 - **[Examples Guide](../examples/README.md)** - See a working implementation
 

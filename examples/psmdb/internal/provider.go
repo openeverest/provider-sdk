@@ -1,9 +1,8 @@
-package main
+package provider
 
 // PSMDB Provider Implementation
 //
-// This file contains the shared business logic for the PSMDB provider.
-// It is used by both psmdb_interface.go and psmdb_builder.go.
+// This file contains the business logic for the PSMDB provider.
 //
 // Key functions:
 //   - ValidatePSMDB: Validate DataStore spec
@@ -19,9 +18,11 @@ import (
 	sdk "github.com/openeverest/provider-sdk/pkg/controller"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	psmdbspec "github.com/openeverest/provider-sdk/examples/psmdbspec"
+	types "github.com/openeverest/provider-sdk/examples/psmdb/types"
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 )
 
@@ -169,7 +170,7 @@ func configureReplsets(c *sdk.Cluster) []*psmdbv1.ReplsetSpec {
 	}
 
 	numShards := 2 // default
-	var shardedConfig psmdbspec.ShardedTopologyConfig
+	var shardedConfig types.ShardedTopologyConfig
 	if c.TryDecodeTopologyConfig(&shardedConfig) && shardedConfig.NumShards > 0 {
 		numShards = int(shardedConfig.NumShards)
 	}
@@ -234,6 +235,36 @@ func configureMongos(c *sdk.Cluster) *psmdbv1.MongosSpec {
 	return mongosSpec
 }
 
+func configureBackup(c *sdk.Cluster) psmdbv1.BackupSpec {
+	// TODO: Implement proper backup configuration
+	var backupImage string
+	if metadata := c.Metadata(); metadata != nil {
+		backupImage = metadata.GetDefaultImage("backup")
+	} else {
+		backupImage = PSMDBMetadata().GetDefaultImage("backup")
+	}
+
+	return psmdbv1.BackupSpec{
+		Enabled: true,
+		Image:   backupImage,
+		PITR: psmdbv1.PITRSpec{
+			Enabled: false,
+		},
+		Configuration: psmdbv1.BackupConfig{
+			BackupOptions: &psmdbv1.BackupOptions{
+				Timeouts: &psmdbv1.BackupTimeouts{Starting: pointer.ToUint32(defaultBackupStartingTimeout)},
+			},
+		},
+
+		Resources: corev1.ResourceRequirements{
+			Limits: corev1.ResourceList{
+				corev1.ResourceMemory: resource.MustParse("1G"),
+				corev1.ResourceCPU:    resource.MustParse("300m"),
+			},
+		},
+	}
+}
+
 // SyncPSMDB ensures all PSMDB resources exist and are configured correctly.
 func SyncPSMDB(c *sdk.Cluster) error {
 	fmt.Println("Syncing PSMDB cluster:", c.Name())
@@ -267,32 +298,7 @@ func SyncPSMDB(c *sdk.Cluster) error {
 		psmdb.Spec.Sharding.Mongos = configureMongos(c)
 	}
 
-	// TODO: Implement proper backup configuration
-	var backupImage string
-	if metadata := c.Metadata(); metadata != nil {
-		backupImage = metadata.GetDefaultImage("backup")
-	} else {
-		backupImage = PSMDBMetadata().GetDefaultImage("backup")
-	}
-	psmdb.Spec.Backup = psmdbv1.BackupSpec{
-		Enabled: true,
-		Image:   backupImage,
-		PITR: psmdbv1.PITRSpec{
-			Enabled: false,
-		},
-		Configuration: psmdbv1.BackupConfig{
-			BackupOptions: &psmdbv1.BackupOptions{
-				Timeouts: &psmdbv1.BackupTimeouts{Starting: pointer.ToUint32(defaultBackupStartingTimeout)},
-			},
-		},
-
-		Resources: corev1.ResourceRequirements{
-			Limits: corev1.ResourceList{
-				corev1.ResourceMemory: resource.MustParse("1G"),
-				corev1.ResourceCPU:    resource.MustParse("300m"),
-			},
-		},
-	}
+	psmdb.Spec.Backup = configureBackup(c)
 
 	psmdb.Spec.Secrets = &psmdbv1.SecretsSpec{
 		Users:         "everest-secrets-" + c.Name(),
@@ -350,16 +356,16 @@ func CleanupPSMDB(c *sdk.Cluster) error {
 // This is shared by all provider implementations to maintain a single source of truth.
 func PSMDBTopologyDefinitions() map[string]sdk.TopologyDefinition {
 	return map[string]sdk.TopologyDefinition{
-		string(psmdbspec.TopologyTypeReplicaSet): {
-			Schema: &psmdbspec.ReplicaSetTopologyConfig{},
+		string(types.TopologyTypeReplicaSet): {
+			Schema: &types.ReplicaSetTopologyConfig{},
 			Components: map[string]sdk.TopologyComponentDefinition{
 				ComponentEngine:      {Optional: false, Defaults: map[string]interface{}{"replicas": 3}},
 				ComponentBackupAgent: {Optional: true},
 				ComponentMonitoring:  {Optional: true},
 			},
 		},
-		string(psmdbspec.TopologyTypeSharded): {
-			Schema: &psmdbspec.ShardedTopologyConfig{},
+		string(types.TopologyTypeSharded): {
+			Schema: &types.ShardedTopologyConfig{},
 			Components: map[string]sdk.TopologyComponentDefinition{
 				ComponentEngine:       {Optional: false, Defaults: map[string]interface{}{"replicas": 3}},
 				ComponentProxy:        {Optional: false},
@@ -426,4 +432,68 @@ func PSMDBMetadata() *sdk.ProviderMetadata {
 	metadata.Topologies = sdk.TopologiesFromSchemaProvider(PSMDBTopologyDefinitions())
 
 	return metadata
+}
+
+// PSMDBProvider implements the sdk.ProviderInterface interface.
+type PSMDBProvider struct {
+	sdk.BaseProvider
+}
+
+// NewPSMDBProviderInterface creates a new PSMDB provider.
+func NewPSMDBProviderInterface() *PSMDBProvider {
+	return &PSMDBProvider{
+		BaseProvider: sdk.BaseProvider{
+			ProviderName: "psmdb",
+			SchemeFuncs: []func(*runtime.Scheme) error{
+				psmdbv1.SchemeBuilder.AddToScheme,
+			},
+			Owned: []client.Object{
+				&psmdbv1.PerconaServerMongoDB{},
+			},
+			Metadata: PSMDBMetadata(),
+		},
+	}
+}
+
+// Interface implementation - delegates to shared functions in psmdb_impl.go
+
+func (p *PSMDBProvider) Validate(c *sdk.Cluster) error {
+	return ValidatePSMDB(c)
+}
+
+func (p *PSMDBProvider) Sync(c *sdk.Cluster) error {
+	return SyncPSMDB(c)
+}
+
+func (p *PSMDBProvider) Status(c *sdk.Cluster) (sdk.Status, error) {
+	return StatusPSMDB(c)
+}
+
+func (p *PSMDBProvider) Cleanup(c *sdk.Cluster) error {
+	return CleanupPSMDB(c)
+}
+
+// Compile-time interface checks
+var _ sdk.ProviderInterface = (*PSMDBProvider)(nil)
+var _ sdk.MetadataProvider = (*PSMDBProvider)(nil)
+var _ sdk.SchemaProvider = (*PSMDBProvider)(nil)
+
+// SchemaProvider implementation for OpenAPI schema generation
+
+func (p *PSMDBProvider) ComponentSchemas() map[string]interface{} {
+	return map[string]interface{}{
+		ComponentEngine:       &types.MongodCustomSpec{},
+		ComponentConfigServer: &types.MongodCustomSpec{},
+		ComponentProxy:        &types.MongosCustomSpec{},
+		ComponentBackupAgent:  &types.BackupCustomSpec{},
+		ComponentMonitoring:   &types.PMMCustomSpec{},
+	}
+}
+
+func (p *PSMDBProvider) Topologies() map[string]sdk.TopologyDefinition {
+	return PSMDBTopologyDefinitions()
+}
+
+func (p *PSMDBProvider) GlobalSchema() interface{} {
+	return &types.GlobalConfig{}
 }

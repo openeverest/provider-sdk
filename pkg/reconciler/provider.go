@@ -25,8 +25,6 @@ const finalizerName = "everest.percona.com/provider-finalizer"
 // =============================================================================
 
 // ProviderReconciler reconciles DataStore resources using a Provider.
-// It works with both interface-based providers (ProviderIface) and
-// builder-based providers (*Provider).
 type ProviderReconciler struct {
 	provider     providerAdapter
 	manager      ctrl.Manager
@@ -54,13 +52,8 @@ type SchemaProvider = controller.SchemaProvider
 // See server.ServerConfig for documentation.
 type ServerConfig = server.ServerConfig
 
-// NewFromInterface creates a reconciler from an interface-based provider.
-func NewFromInterface(p controller.ProviderIface, opts ...ReconcilerOption) (*ProviderReconciler, error) {
-	return newReconciler(p, opts...)
-}
-
-// NewFromBuilder creates a reconciler from a builder-based provider.
-func NewFromBuilder(p *controller.Provider, opts ...ReconcilerOption) (*ProviderReconciler, error) {
+// New creates a reconciler from a provider.
+func New(p controller.ProviderInterface, opts ...ReconcilerOption) (*ProviderReconciler, error) {
 	return newReconciler(p, opts...)
 }
 
@@ -371,4 +364,3 @@ func (r *ProviderReconciler) handleDeletion(
 	logger.Info("Cleanup complete")
 	return reconcile.Result{}, nil
 }
-

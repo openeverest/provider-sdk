@@ -1,21 +1,23 @@
 # PSMDB Provider Example
 
-This directory contains a working implementation of a Percona Server MongoDB (PSMDB) provider using the SDK. It demonstrates both the interface-based and builder-based approaches.
+This directory contains a working implementation of a Percona Server MongoDB (PSMDB) provider using the SDK.
 
 ## 📁 File Structure
 
 ```
-examples/
-├── psmdb_impl.go         # Shared business logic (ValidatePSMDB, SyncPSMDB, etc.)
-├── psmdb_interface.go    # Interface-based provider implementation
-├── psmdb_builder.go      # Builder-based provider implementation
+examples/psmdb/
+├── cmd/
+│   ├── provider/         # Provider entrypoint
+│   │   └── main.go
+│   └── generate-manifest/
+│       └── main.go       # CLI tool to generate Provider CR manifest
+├── internal/             # PSMDB business logic
+│   └── provider.go       # ValidatePSMDB, SyncPSMDB, etc.
 ├── psmdbspec/            # Custom spec types for PSMDB components
 │   └── types.go
+├── test/                 # Integration tests
 ├── datastore-simple.yaml # Simple test DataStore manifest
-├── datastore-example.yaml# Full DataStore manifest with all options
-└── cmd/
-    └── generate-manifest/
-        └── main.go       # CLI tool to generate Provider CR manifest
+└── datastore-example.yaml# Full DataStore manifest with all options
 ```
 
 ## 🚀 Quick Start
@@ -57,14 +59,9 @@ See [Provider CR Generation Guide](../docs/PROVIDER_CR_GENERATION.md) for detail
 
 ### Run the Provider
 
-Choose one approach to run:
-
 ```bash
-# Interface-based approach
-go run psmdb_interface.go psmdb_impl.go
-
-# OR Builder-based approach  
-go run psmdb_builder.go psmdb_impl.go
+# From the examples/psmdb directory
+go run cmd/provider/main.go
 ```
 
 ### Create a Test DataStore
@@ -82,9 +79,9 @@ kubectl get datastore
 
 ## 📖 Understanding the Code
 
-### Shared Business Logic (`psmdb_impl.go`)
+### Business Logic (`internal/provider.go`)
 
-All provider logic is in `psmdb_impl.go`. Both approaches use these exact same functions:
+All provider logic is in `internal/provider.go`:
 
 ```go
 // Validate the DataStore spec
@@ -100,11 +97,9 @@ func StatusPSMDB(c *sdk.Cluster) (sdk.Status, error) { ... }
 func CleanupPSMDB(c *sdk.Cluster) error { ... }
 ```
 
-This demonstrates that the SDK approach (interface vs builder) doesn't affect your business logic - only how you wire it up.
+### Provider Implementation
 
-### Interface-Based Approach (`psmdb_interface.go`)
-
-The interface approach uses a struct with methods:
+The provider implements the SDK interface:
 
 ```go
 type PSMDBProvider struct {
@@ -115,7 +110,7 @@ func NewPSMDBProviderInterface() *PSMDBProvider {
     return &PSMDBProvider{
         BaseProvider: sdk.BaseProvider{
             ProviderName: "psmdb",
-            SchemeFuncs:  []func(*runtime.Scheme) error{psmdbv1.SchemeBuilder.AddToScheme},
+            SchemeFuncs:  []func(*runtime.Scheme) error{psmdbv1.AddToScheme},
             Owned:        []client.Object{&psmdbv1.PerconaServerMongoDB{}},
             Metadata:     PSMDBMetadata(),
         },
@@ -132,30 +127,7 @@ func (p *PSMDBProvider) Cleanup(c *sdk.Cluster) error { return CleanupPSMDB(c) }
 **Key points:**
 - Embed `sdk.BaseProvider` for defaults
 - Implement `Validate`, `Sync`, `Status`, `Cleanup`
-- Use `reconciler.NewFromInterface()` to create the reconciler
-
-### Builder-Based Approach (`psmdb_builder.go`)
-
-The builder approach uses a fluent API:
-
-```go
-func NewPSMDBProviderBuilder() *sdk.Provider {
-    return sdk.Build("psmdb").
-        WithTypes(psmdbv1.SchemeBuilder.AddToScheme).
-        Owns(&psmdbv1.PerconaServerMongoDB{}).
-        WithMetadata(PSMDBMetadata()).
-        Validate(ValidatePSMDB).
-        Sync("Sync PSMDB", SyncPSMDB).
-        Status(StatusPSMDB).
-        Cleanup("Cleanup PSMDB", CleanupPSMDB).
-        Done()
-}
-```
-
-**Key points:**
-- Chain method calls to configure the provider
-- Each sync/cleanup step has a name (for logging)
-- Use `reconciler.NewFromBuilder()` to create the reconciler
+- Use `reconciler.New()` to create the reconciler
 
 ## 🔧 Key SDK Concepts Demonstrated
 
@@ -274,10 +246,7 @@ The `test/integration/` directory contains kuttl tests that verify the provider'
 3. Provider running in the background:
    ```bash
    # In one terminal, start the provider:
-   go run psmdb_interface.go psmdb_impl.go
-   
-   # Or use the builder approach:
-   go run psmdb_builder.go psmdb_impl.go
+   go run cmd/provider/main.go
    ```
 
 ### Running the Tests
@@ -302,13 +271,11 @@ To create a new provider:
 3. **Define your metadata** with component types and versions
 4. **Generate the Provider CR** using the CLI tool
 5. **Implement the four functions**: Validate, Sync, Status, Cleanup
-6. **Choose your approach** (interface or builder)
 
 See the [SDK Overview](../docs/SDK_OVERVIEW.md) and [Provider CR Generation Guide](../docs/PROVIDER_CR_GENERATION.md) for detailed guidance.
 
 ## 🔗 Related Documentation
 
 - [SDK Overview](../docs/SDK_OVERVIEW.md) - Architecture and concepts
-- [Interface vs Builder Decision](../docs/decisions/INTERFACE_VS_BUILDER.md) - API style comparison
 - [Provider CR Generation](../docs/PROVIDER_CR_GENERATION.md) - How to generate the Provider CR
 - [Metadata Helpers](../docs/METADATA_HELPERS.md) - Working with metadata
