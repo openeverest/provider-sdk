@@ -28,7 +28,7 @@ examples/psmdb/
 
 2. Install the SDK CRDs:
    ```bash
-   kubectl apply -f ../config/crd/bases/
+   kubectl apply -f ../../config/crd/bases/
    ```
    
    **Note:** In production, these CRDs are automatically installed when installing Everest.
@@ -46,11 +46,11 @@ Before running the provider, generate the Provider CR manifest:
 
 ```bash
 # Generate the Provider CR from Go metadata
-go run ./cmd/generate-manifest/main.go
+go run ./cmd/generate-manifest/main.go > provider.yaml
 
-# This creates charts/provider.yaml
+# This creates provider.yaml
 # Install it in your cluster
-kubectl apply -f charts/provider.yaml
+kubectl apply -f provider.yaml
 ```
 
 **Important:** The Provider CR must be created before the provider starts. This tells Everest what component types and versions your provider supports.
