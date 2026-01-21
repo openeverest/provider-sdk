@@ -1,0 +1,9 @@
+apiVersion: kuttl.dev/v1
+kind: TestSuite
+artifactsDir: /tmp/
+startKIND: false
+skipDelete: false
+skipClusterDelete: true
+testDirs:
+  - test/integration
+

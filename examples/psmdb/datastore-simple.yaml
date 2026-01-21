@@ -1,0 +1,46 @@
+apiVersion: everest.percona.com/v2alpha1
+kind: DataStore
+metadata:
+  name: psmdb-simple
+  namespace: everest
+spec:
+  # Provider identifier
+  provider: psmdb
+
+  # Topology is optional - will use provider's default (typically "replicaset")
+  # If omitted, the provider determines the default topology
+
+  # Components with smart defaults
+  components:
+    # Engine is the only required component for default topology
+    engine:
+      type: mongod
+      # Version is optional - will use default from provider metadata
+      # version: 8.0.8-3
+      replicas: 3
+      storage:
+        size: 10Gi
+
+    # Optional: backup agent
+    backupAgent:
+      type: backup
+      # version: 2.9.1
+      replicas: 1
+
+    # Optional: monitoring
+    monitoring:
+      type: pmm
+      # version: 2.44.1
+
+# status:
+#   phase: Running
+#   connectionURL: mongodb://psmdb-simple:27017
+#   credentialSecretRef:
+#     name: psmdb-simple-credentials
+  
+#   conditions:
+#   - type: Ready
+#     status: "True"
+#     reason: AllComponentsHealthy
+#     message: "All components are healthy and running"
+#     lastTransitionTime: "2025-09-03T12:00:00Z"

@@ -1,0 +1,273 @@
+apiVersion: kuttl.dev/v1
+kind: TestAssert
+timeout: 10
+# timeout: 30
+collectors:
+  - command: kubectl get dbc/test-psmdb-cluster -n ${NAMESPACE} -o yaml
+  - command: kubectl get psmdb/test-psmdb-cluster -n ${NAMESPACE} -o yaml
+
+#   - command: kubectl get deploy/everest-controller-manager -n everest-system -o yaml
+#   - type: pod
+#     namespace: everest-system
+#     selector: control-plane=controller-manager
+#     tail: 100
+# commands:
+# # TODO check psmdb.spec.CRVersion
+# # TODO check psmdb.spec.backup.image
+# # TODO check dbc.status.recommendedCRVersion
+#   - command: kubectl wait --for=jsonpath='{.status.crVersion}'=${PSMDB_OPERATOR_VERSION} dbc/test-psmdb-cluster -n ${NAMESPACE}
+#   - command: kubectl wait --for=jsonpath='{.spec.engine.version}'=${PSMDB_DB_ENGINE_VERSION} dbc/test-psmdb-cluster -n ${NAMESPACE}
+#   - command: kubectl wait --for=jsonpath='{.spec.image}'="percona/percona-server-mongodb:${PSMDB_DB_ENGINE_VERSION}" psmdb/test-psmdb-cluster -n ${NAMESPACE}
+resourceRefs:
+  - apiVersion: everest.percona.com/v2alpha1
+    kind: DataStore
+    name: test-psmdb-cluster
+    ref: db
+  - apiVersion: psmdb.percona.com/v1
+    kind: PerconaServerMongoDB
+    name: test-psmdb-cluster
+    ref: psmdb
+assertAll:
+  # - celExpr: "has(db.metadata.finalizers)"
+  #   message: "db doesn't have finalizers"
+
+  # - celExpr: "'everest.percona.com/upstream-cluster-cleanup' in db.metadata.finalizers"
+  #   message: "'everest.percona.com/upstream-cluster-cleanup' is absent in db.metadata.finalizers"
+
+  # - celExpr: "'foregroundDeletion' in db.metadata.finalizers"
+  #   message: "foregroundDeletion' is absent in db.metadata.finalizers"
+
+  # - celExpr: "has(psmdb.metadata.finalizers)"
+  #   message: "psmdb doesn't have finalizers"
+
+  # - celExpr: "'percona.com/delete-psmdb-pods-in-order' in psmdb.metadata.finalizers"
+  #   message: "'percona.com/delete-psmdb-pods-in-order' is absent in psmdb.metadata.finalizers"
+
+  # - celExpr: "'percona.com/delete-psmdb-pvc' in psmdb.metadata.finalizers"
+  #   message: "percona.com/delete-psmdb-pvc' is absent in psmdb.metadata.finalizers"
+
+  - celExpr: "!has(psmdb.spec.pmm.enabled)"
+    message: "psmdb.spec.pmm.enabled is not empty"
+
+  - celExpr: "!has(psmdb.spec.pmm.serverHost)"
+    message: "psmdb.spec.pmm.serverHost is not empty"
+
+  - celExpr: "!has(psmdb.spec.pmm.resources.limits)"
+    message: "psmdb.spec.pmm.resources.limits is not empty"
+
+  - celExpr: "!has(psmdb.spec.pmm.resources.requests)"
+    message: "psmdb.spec.pmm.resources.requests is not empty"
+---
+apiVersion: everest.percona.com/v2alpha1
+kind: DataStore
+metadata:
+  name: test-psmdb-cluster
+spec:
+  provider: psmdb
+  topology:
+    type: sharded
+    config:
+      numShards: 3
+  components:
+    engine:
+      type: mongod
+      replicas: 3
+      resources:
+        cpu: "1"
+        memory: 4G
+      storage:
+        size: 25Gi
+    proxy:
+      type: mongod
+      replicas: 3
+    configServer:
+      type: mongod
+      replicas: 3
+      storage:
+        size: 25Gi
+# spec:
+#   engine:
+#     crVersion: 1.21.1
+#     replicas: 3
+#     resources:
+#       cpu: "1"
+#       memory: 4G
+#     storage:
+#       size: 25Gi
+#     type: psmdb
+#   proxy:
+#     expose:
+#       type: internal
+#   sharding:
+#     configServer:
+#       replicas: 3
+#     enabled: true
+#     shards: 3
+status:
+  # status: ready
+  phase: Running
+---
+apiVersion: psmdb.percona.com/v1
+kind: PerconaServerMongoDB
+metadata:
+  name: test-psmdb-cluster
+spec:
+  backup:
+    configuration:
+      backupOptions:
+        oplogSpanMin: 0
+        timeouts:
+          startingStatus: 120
+    enabled: true
+    pitr: {}
+    resources:
+      limits:
+        cpu: 300m
+        memory: 1G
+  enableVolumeExpansion: true
+  imagePullPolicy: IfNotPresent
+  multiCluster:
+    enabled: false
+  pmm:
+    image: ""
+    resources: {}
+  replsets:
+  - arbiter:
+      enabled: false
+      resources: {}
+      size: 0
+    configuration: |2
+
+            operationProfiling:
+              mode: slowOp
+    expose:
+      enabled: false
+      type: ClusterIP
+    hidden:
+      enabled: false
+      resources: {}
+      size: 0
+    name: rs0
+    nonvoting:
+      enabled: false
+      resources: {}
+      size: 0
+    podDisruptionBudget:
+      maxUnavailable: 1
+    resources:
+      limits:
+        cpu: "1"
+        memory: 4G
+    size: 3
+    volumeSpec:
+      persistentVolumeClaim:
+        resources:
+          requests:
+            storage: 25Gi
+  - arbiter:
+      enabled: false
+      resources: {}
+      size: 0
+    configuration: |2
+
+            operationProfiling:
+              mode: slowOp
+    expose:
+      enabled: false
+      type: ClusterIP
+    hidden:
+      enabled: false
+      resources: {}
+      size: 0
+    name: rs1
+    nonvoting:
+      enabled: false
+      resources: {}
+      size: 0
+    podDisruptionBudget:
+      maxUnavailable: 1
+    resources:
+      limits:
+        cpu: "1"
+        memory: 4G
+    size: 3
+    volumeSpec:
+      persistentVolumeClaim:
+        resources:
+          requests:
+            storage: 25Gi
+  - arbiter:
+      enabled: false
+      resources: {}
+      size: 0
+    configuration: |2
+
+            operationProfiling:
+              mode: slowOp
+    expose:
+      enabled: false
+      type: ClusterIP
+    hidden:
+      enabled: false
+      resources: {}
+      size: 0
+    name: rs2
+    nonvoting:
+      enabled: false
+      resources: {}
+      size: 0
+    podDisruptionBudget:
+      maxUnavailable: 1
+    resources:
+      limits:
+        cpu: "1"
+        memory: 4G
+    size: 3
+    volumeSpec:
+      persistentVolumeClaim:
+        resources:
+          requests:
+            storage: 25Gi
+  secrets:
+    encryptionKey: test-psmdb-cluster-mongodb-encryption-key
+    sslInternal: test-psmdb-cluster-ssl-internal
+    users: everest-secrets-test-psmdb-cluster
+  sharding:
+    balancer: {}
+    configsvrReplSet:
+      arbiter:
+        enabled: false
+        resources: {}
+        size: 0
+      expose:
+        enabled: false
+      hidden:
+        enabled: false
+        resources: {}
+        size: 0
+      nonvoting:
+        enabled: false
+        resources: {}
+        size: 0
+      resources: {}
+      size: 3
+      volumeSpec:
+        persistentVolumeClaim:
+          resources:
+            requests:
+              storage: 25Gi
+    enabled: true
+    mongos:
+      expose:
+        type: ClusterIP
+      resources: {}
+      size: 3
+  unsafeFlags: {}
+  updateStrategy: SmartUpdate
+  upgradeOptions:
+    apply: disabled
+    schedule: 0 4 * * *
+    setFCV: true
+status:
+  state: ready
+

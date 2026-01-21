@@ -1,0 +1,120 @@
+apiVersion: everest.percona.com/v2alpha1
+kind: DataStore
+metadata:
+  name: psmdb-cluster
+  namespace: everest
+spec:
+  # Provider identifier
+  provider: psmdb
+
+  # Topology configuration
+  topology:
+    type: sharded
+    config:
+      # Topology-specific configuration (schema defined by provider)
+      shards: 3
+
+  # Global provider configuration
+  global:
+    allowUnsafeFlags: true
+    # Additional global settings...
+
+  # Component instances
+  components:
+    # Main database engine (required for sharded topology)
+    engine:
+      type: mongod
+      version: 8.0.8-3
+      replicas: 3
+      storage:
+        size: 10Gi
+        storageClass: standard
+      resources:
+        cpu: 2
+        memory: 4Gi
+
+    # Proxy/router (required for sharded topology)
+    proxy:
+      type: mongos
+      version: 8.0.8-3
+      replicas: 3
+      service:
+        exposeType: LoadBalancer
+
+    # Config server (required for sharded topology)
+    configServer:
+      type: mongod
+      version: 8.0.8-3
+      replicas: 3
+      storage:
+        size: 5Gi
+
+    # Backup agent (optional)
+    backupAgent:
+      type: backup
+      version: 2.9.1
+      replicas: 1
+
+    # Monitoring (optional)
+    monitoring:
+      type: pmm
+      version: 2.44.1
+      config:
+        # Reference to monitoring configuration
+        secretRef:
+          name: pmm-config
+        key: pmm.yaml
+
+# status:
+#   phase: Running
+#   connectionURL: mongodb://psmdb-cluster:27017
+#   credentialSecretRef:
+#     name: psmdb-cluster-credentials
+  
+#   conditions:
+#   - type: Ready
+#     status: "True"
+#     reason: AllComponentsHealthy
+#     message: "All components are healthy and running"
+#     lastTransitionTime: "2025-09-03T12:00:00Z"
+  
+#   awaitingTasks:
+#   - type: restart-psmdb-cluster
+#     message: "Restart required for CRVersion update"
+#     lastTransitionTime: "2025-09-03T12:00:00Z"
+#     params:
+#       updateCRVersion: true
+
+#   components:
+#   - name: engine
+#     state: Ready
+#     total: 9  # 3 replicas × 3 shards
+#     ready: 9
+#     pods:
+#     - name: psmdb-cluster-rs0-0
+#     - name: psmdb-cluster-rs0-1
+#     - name: psmdb-cluster-rs0-2
+#     - name: psmdb-cluster-rs1-0
+#     - name: psmdb-cluster-rs1-1
+#     - name: psmdb-cluster-rs1-2
+#     - name: psmdb-cluster-rs2-0
+#     - name: psmdb-cluster-rs2-1
+#     - name: psmdb-cluster-rs2-2
+  
+#   - name: proxy
+#     state: Ready
+#     total: 3
+#     ready: 3
+#     pods:
+#     - name: psmdb-cluster-mongos-0
+#     - name: psmdb-cluster-mongos-1
+#     - name: psmdb-cluster-mongos-2
+  
+#   - name: configServer
+#     state: Ready
+#     total: 3
+#     ready: 3
+#     pods:
+#     - name: psmdb-cluster-cfg-0
+#     - name: psmdb-cluster-cfg-1
+#     - name: psmdb-cluster-cfg-2

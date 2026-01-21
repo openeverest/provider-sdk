@@ -1,0 +1,61 @@
+# Provider CR generated from Go code
+# Do not edit manually - regenerate using: provider-sdk generate-manifest
+---
+apiVersion: everest.percona.com/v2alpha1
+kind: Provider
+metadata:
+  name: percona-server-mongodb-operator
+spec:
+  componentTypes:
+    backup:
+      versions:
+      - default: true
+        image: percona/percona-server-mongodb-backup:2.9.1
+        version: 2.9.1
+    mongod:
+      versions:
+      - image: percona/percona-server-mongodb:6.0.19-16-multi
+        version: 6.0.19-16
+      - image: percona/percona-server-mongodb:6.0.21-18
+        version: 6.0.21-18
+      - image: percona/percona-server-mongodb:7.0.18-11
+        version: 7.0.18-11
+      - image: percona/percona-server-mongodb:8.0.4-1-multi
+        version: 8.0.4-1
+      - default: true
+        image: percona/percona-server-mongodb:8.0.8-3
+        version: 8.0.8-3
+    pmm:
+      versions:
+      - default: true
+        image: percona/pmm-server:2.44.1
+        version: 2.44.1
+  components:
+    backupAgent:
+      type: backup
+    configServer:
+      type: mongod
+    engine:
+      type: mongod
+    monitoring:
+      type: pmm
+    proxy:
+      type: mongod
+  topologies:
+    sharded:
+      components:
+        backupAgent:
+          optional: true
+        configServer: {}
+        engine: {}
+        monitoring:
+          optional: true
+        proxy: {}
+    standard:
+      components:
+        backupAgent:
+          optional: true
+        engine: {}
+        monitoring:
+          optional: true
+status: {}
