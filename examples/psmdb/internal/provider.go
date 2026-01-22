@@ -406,7 +406,7 @@ func PSMDBMetadata() *sdk.ProviderMetadata {
 			// backup is the backup agent component
 			ComponentTypeBackup: {
 				Versions: []sdk.ComponentVersionMeta{
-					{Version: "2.9.1", Image: "percona/percona-server-mongodb-backup:2.9.1", Default: true},
+					{Version: "2.9.1", Image: "percona/percona-backup-mongodb:2.9.1", Default: true},
 				},
 			},
 			// pmm is the Percona Monitoring and Management component
