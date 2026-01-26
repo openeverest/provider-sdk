@@ -24,7 +24,7 @@ generate-openapi: openapi-gen ## Generate OpenAPI definitions for custom spec ty
 
 .PHONY: test-integration
 test-integration: ## Run integration tests against K8S cluster
-	. ./test/vars.sh && kubectl kuttl test --config ./test/integration/kuttl.yaml
+	. ./test/vars.sh && kubectl kuttl test --config ./test/integration/kuttl.yaml --test split_horizon_new_secret
 
 .PHONY: openapi-gen
 openapi-gen: $(OPENAPI_GEN) ## Download openapi-gen locally if necessary

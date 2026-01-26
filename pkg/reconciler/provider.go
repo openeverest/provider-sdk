@@ -7,6 +7,7 @@ import (
 	"github.com/openeverest/provider-sdk/pkg/apis/v2alpha1"
 	"github.com/openeverest/provider-sdk/pkg/controller"
 	"github.com/openeverest/provider-sdk/pkg/server"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
@@ -98,6 +99,11 @@ func newReconciler(p providerAdapter, opts ...ReconcilerOption) (*ProviderReconc
 		opt(options)
 	}
 	scheme := runtime.NewScheme()
+
+	// Register core Kubernetes types
+	if err := corev1.AddToScheme(scheme); err != nil {
+		return nil, fmt.Errorf("failed to add corev1 scheme: %w", err)
+	}
 
 	// Register core types
 	if err := v2alpha1.AddToScheme(scheme); err != nil {
@@ -314,6 +320,12 @@ func (r *ProviderReconciler) Reconcile(ctx context.Context, req reconcile.Reques
 	if err != nil {
 		logger.Error(err, "Status computation failed")
 		return reconcile.Result{}, err
+	}
+
+	// Refetch the DataStore to avoid conflicts from concurrent modifications
+	if err := r.Client.Get(ctx, req.NamespacedName, ds); err != nil {
+		logger.Error(err, "Failed to refetch DataStore before status update")
+		return reconcile.Result{}, client.IgnoreNotFound(err)
 	}
 
 	ds.Status = status.ToV2Alpha1()

@@ -11,6 +11,7 @@ package provider
 //   - CleanupPSMDB: Handle deletion cleanup
 
 import (
+	"encoding/json"
 	"fmt"
 
 	"github.com/AlekSi/pointer"
@@ -98,6 +99,46 @@ func ValidatePSMDB(c *sdk.Context) error {
 	fmt.Println("Validating PSMDB cluster:", c.Name())
 	// TODO: Add actual validation logic
 	// Example: Check for required components, validate storage sizes, etc.
+	return nil
+}
+
+// applySplitHorizonToPSMDB applies split horizon DNS configuration to PSMDB cluster spec.
+// This configures the cluster for split horizon DNS setup, which allows clients to connect
+// to MongoDB through different DNS names depending on the network/region they are in.
+func applySplitHorizonToPSMDB(psmdb *psmdbv1.PerconaServerMongoDB, spec *types.SplitHorizonDNSSpec) error {
+	if spec == nil {
+		return nil
+	}
+
+	// Configure split horizon horizons map per replset member
+	if psmdb.Spec.Replsets != nil {
+		for _, replset := range psmdb.Spec.Replsets {
+			if replset == nil {
+				continue
+			}
+
+			if replset.Horizons == nil {
+				replset.Horizons = make(map[string]map[string]string)
+			}
+
+			size := int(replset.Size)
+			for i := 0; i < size; i++ {
+				podKey := fmt.Sprintf("%s-%s-%d", psmdb.Name, replset.Name, i)
+				externalHost := fmt.Sprintf("%s-%s-%d-%s.%s", psmdb.Name, replset.Name, i, psmdb.Namespace, spec.Config.BaseDomainNameSuffix)
+				replset.Horizons[podKey] = map[string]string{
+					"external": externalHost,
+				}
+			}
+		}
+	}
+
+	// Store the split horizon configuration reference in annotations for visibility
+	if psmdb.ObjectMeta.Annotations == nil {
+		psmdb.ObjectMeta.Annotations = make(map[string]string)
+	}
+	psmdb.ObjectMeta.Annotations["split-horizon-base-domain"] = spec.Config.BaseDomainNameSuffix
+	psmdb.ObjectMeta.Annotations["split-horizon-tls-secret"] = spec.Config.SecretName
+
 	return nil
 }
 
@@ -304,6 +345,26 @@ func SyncPSMDB(c *sdk.Context) error {
 		Users:         "everest-secrets-" + c.Name(),
 		EncryptionKey: c.Name() + "-mongodb-encryption-key",
 		SSLInternal:   c.Name() + "-ssl-internal",
+	}
+
+	// Apply split horizon DNS configuration if referenced in engine component's CustomSpec
+	if engine.CustomSpec != nil && engine.CustomSpec.Raw != nil {
+		mongodSpec := &types.MongodCustomSpec{}
+		if err := json.Unmarshal(engine.CustomSpec.Raw, mongodSpec); err != nil {
+			return fmt.Errorf("failed to decode CustomSpec: %w", err)
+		}
+
+		if mongodSpec.SplitHorizonDNSRef != nil {
+			// Retrieve the pre-configured split horizon configuration
+			shConfig, err := GetSplitHorizonConfigByRef(c, mongodSpec.SplitHorizonDNSRef)
+			if err != nil {
+				return fmt.Errorf("failed to retrieve split horizon configuration by reference: %w", err)
+			}
+
+			if err := applySplitHorizonToPSMDB(psmdb, shConfig); err != nil {
+				return fmt.Errorf("failed to apply split horizon configuration to PSMDB: %w", err)
+			}
+		}
 	}
 
 	if err := c.Apply(psmdb); err != nil {
