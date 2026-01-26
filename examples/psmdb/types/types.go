@@ -97,24 +97,6 @@ type ShardedTopologyConfig struct {
 // SPLIT HORIZON DNS CONFIG (Pre-configured, referenced by DataStore)
 // =============================================================================
 
-// SplitHorizonDNS defines config and certificate configuration for split horizon DNS.
-type SplitHorizonDNSSpec struct {
-	Config SplitHorizonDNSConfig
-
-	Certificate SplitHorizonDNSConfigTLSCertificateSpec
-}
-
-// SplitHorizonDNSConfigTLSCertificateSpec defines the certificate data for split horizon.
-type SplitHorizonDNSConfigTLSCertificateSpec struct {
-	// CACert is the base64-encoded CA certificate.
-	// +kubebuilder:validation:Required
-	CACert string `json:"ca.crt"`
-
-	// CAKey is the base64-encoded CA private key.
-	// +kubebuilder:validation:Required
-	CAKey string `json:"ca.key"`
-}
-
 // SplitHorizonDNSConfig defines DNS configuration for split horizon setup.
 // This is typically stored in a ConfigMap in the cluster and referenced by DataStores.
 type SplitHorizonDNSConfig struct {

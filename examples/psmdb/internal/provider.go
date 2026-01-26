@@ -105,8 +105,8 @@ func ValidatePSMDB(c *sdk.Context) error {
 // applySplitHorizonToPSMDB applies split horizon DNS configuration to PSMDB cluster spec.
 // This configures the cluster for split horizon DNS setup, which allows clients to connect
 // to MongoDB through different DNS names depending on the network/region they are in.
-func applySplitHorizonToPSMDB(psmdb *psmdbv1.PerconaServerMongoDB, spec *types.SplitHorizonDNSSpec) error {
-	if spec == nil {
+func applySplitHorizonToPSMDB(psmdb *psmdbv1.PerconaServerMongoDB, config *types.SplitHorizonDNSConfig) error {
+	if config == nil {
 		return nil
 	}
 
@@ -124,7 +124,7 @@ func applySplitHorizonToPSMDB(psmdb *psmdbv1.PerconaServerMongoDB, spec *types.S
 			size := int(replset.Size)
 			for i := 0; i < size; i++ {
 				podKey := fmt.Sprintf("%s-%s-%d", psmdb.Name, replset.Name, i)
-				externalHost := fmt.Sprintf("%s-%s-%d-%s.%s", psmdb.Name, replset.Name, i, psmdb.Namespace, spec.Config.BaseDomainNameSuffix)
+				externalHost := fmt.Sprintf("%s-%s-%d-%s.%s", psmdb.Name, replset.Name, i, psmdb.Namespace, config.BaseDomainNameSuffix)
 				replset.Horizons[podKey] = map[string]string{
 					"external": externalHost,
 				}
@@ -136,8 +136,8 @@ func applySplitHorizonToPSMDB(psmdb *psmdbv1.PerconaServerMongoDB, spec *types.S
 	if psmdb.ObjectMeta.Annotations == nil {
 		psmdb.ObjectMeta.Annotations = make(map[string]string)
 	}
-	psmdb.ObjectMeta.Annotations["split-horizon-base-domain"] = spec.Config.BaseDomainNameSuffix
-	psmdb.ObjectMeta.Annotations["split-horizon-tls-secret"] = spec.Config.SecretName
+	psmdb.ObjectMeta.Annotations["split-horizon-base-domain"] = config.BaseDomainNameSuffix
+	psmdb.ObjectMeta.Annotations["split-horizon-tls-secret"] = config.SecretName
 
 	return nil
 }
