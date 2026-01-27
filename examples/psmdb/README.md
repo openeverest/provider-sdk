@@ -35,7 +35,7 @@ examples/psmdb/
 
 3. Install the PSMDB operator:
    ```bash
-   kubectl apply --server-side -f https://raw.githubusercontent.com/percona/percona-server-mongodb-operator/v1.21.1/deploy/bundle.yaml
+   kubectl apply --server-side -f https://raw.githubusercontent.com/percona/percona-server-mongodb-operator/v1.21.1/deploy/cw-bundle.yaml
    ```
    
    **Note:** This is a PoC requirement. In production, the underlying database operator (PSMDB in this case) should be packaged within the provider's Helm chart to ensure it installs automatically with the provider.

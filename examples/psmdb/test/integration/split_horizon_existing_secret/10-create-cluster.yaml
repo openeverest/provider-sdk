@@ -1,0 +1,49 @@
+apiVersion: kuttl.dev/v1
+kind: TestStep
+---
+apiVersion: everest.percona.com/v2alpha1
+kind: DataStore
+metadata:
+  name: psmdb-shdc
+spec:
+  provider: psmdb
+  components:
+    engine:
+      type: mongod
+      replicas: 3
+      resources:
+        cpu: "1"
+        memory: 4G
+      storage:
+        size: 1Gi
+      customSpec:
+        splitHorizonDNSRef:
+          name: shdc-psmdb
+    proxy:
+      type: mongos
+      version: 8.0.8-3
+      replicas: 1
+# kind: DatabaseCluster
+# metadata:
+#   name: psmdb-shdc
+# spec:
+#   engine:
+#     replicas: 3
+#     resources:
+#       cpu: "1"
+#       memory: 4G
+#     storage:
+#       class: local-path
+#       size: 1Gi
+#     type: psmdb
+#   engineFeatures:
+#     psmdb:
+#       splitHorizonDnsConfigName: shdc-psmdb
+#   proxy:
+#     expose:
+#       type: internal
+#     replicas: 1
+#     resources:
+#       cpu: "1"
+#       memory: 2G
+#     type: mongos

@@ -11,7 +11,6 @@ package provider
 //   - CleanupPSMDB: Handle deletion cleanup
 
 import (
-	"encoding/json"
 	"fmt"
 
 	"github.com/AlekSi/pointer"
@@ -46,6 +45,10 @@ const (
         mode: slowOp
 `
 	defaultBackupStartingTimeout = 120
+)
+
+const (
+	topologySharded = "sharded"
 )
 
 var maxUnavailable = intstr.FromInt(1)
@@ -99,46 +102,6 @@ func ValidatePSMDB(c *sdk.Context) error {
 	fmt.Println("Validating PSMDB cluster:", c.Name())
 	// TODO: Add actual validation logic
 	// Example: Check for required components, validate storage sizes, etc.
-	return nil
-}
-
-// applySplitHorizonToPSMDB applies split horizon DNS configuration to PSMDB cluster spec.
-// This configures the cluster for split horizon DNS setup, which allows clients to connect
-// to MongoDB through different DNS names depending on the network/region they are in.
-func applySplitHorizonToPSMDB(psmdb *psmdbv1.PerconaServerMongoDB, config *types.SplitHorizonDNSConfig) error {
-	if config == nil {
-		return nil
-	}
-
-	// Configure split horizon horizons map per replset member
-	if psmdb.Spec.Replsets != nil {
-		for _, replset := range psmdb.Spec.Replsets {
-			if replset == nil {
-				continue
-			}
-
-			if replset.Horizons == nil {
-				replset.Horizons = make(map[string]map[string]string)
-			}
-
-			size := int(replset.Size)
-			for i := 0; i < size; i++ {
-				podKey := fmt.Sprintf("%s-%s-%d", psmdb.Name, replset.Name, i)
-				externalHost := fmt.Sprintf("%s-%s-%d-%s.%s", psmdb.Name, replset.Name, i, psmdb.Namespace, config.BaseDomainNameSuffix)
-				replset.Horizons[podKey] = map[string]string{
-					"external": externalHost,
-				}
-			}
-		}
-	}
-
-	// Store the split horizon configuration reference in annotations for visibility
-	if psmdb.ObjectMeta.Annotations == nil {
-		psmdb.ObjectMeta.Annotations = make(map[string]string)
-	}
-	psmdb.ObjectMeta.Annotations["split-horizon-base-domain"] = config.BaseDomainNameSuffix
-	psmdb.ObjectMeta.Annotations["split-horizon-tls-secret"] = config.SecretName
-
 	return nil
 }
 
@@ -204,7 +167,7 @@ func configureReplsets(c *sdk.Context) []*psmdbv1.ReplsetSpec {
 	engine := spec.Components[ComponentEngine]
 
 	// TODO: implement disabling
-	if spec.Topology == nil || spec.Topology.Type != "sharded" {
+	if spec.Topology == nil || spec.Topology.Type != topologySharded {
 		return []*psmdbv1.ReplsetSpec{
 			configureReplset(rsName(0), engine.Replicas, engine.Resources, engine.Storage, true),
 		}
@@ -232,7 +195,7 @@ func configureConfigServerReplset(c *sdk.Context) *psmdbv1.ReplsetSpec {
 	cfgSrv := spec.Components[ComponentConfigServer]
 
 	// TODO: implement disabling
-	if spec.Topology == nil || spec.Topology.Type != "sharded" {
+	if spec.Topology == nil || spec.Topology.Type != topologySharded {
 		return replset
 	}
 
@@ -333,7 +296,7 @@ func SyncPSMDB(c *sdk.Context) error {
 	psmdb.Spec.ImagePullPolicy = corev1.PullIfNotPresent
 
 	psmdb.Spec.Replsets = configureReplsets(c)
-	if c.DB().Spec.Topology != nil && c.DB().Spec.Topology.Type == "sharded" {
+	if c.DB().Spec.Topology != nil && c.DB().Spec.Topology.Type == topologySharded {
 		psmdb.Spec.Sharding.Enabled = true
 		psmdb.Spec.Sharding.ConfigsvrReplSet = configureConfigServerReplset(c)
 		psmdb.Spec.Sharding.Mongos = configureMongos(c)
@@ -347,23 +310,14 @@ func SyncPSMDB(c *sdk.Context) error {
 		SSLInternal:   c.Name() + "-ssl-internal",
 	}
 
-	// Apply split horizon DNS configuration if referenced in engine component's CustomSpec
-	if engine.CustomSpec != nil && engine.CustomSpec.Raw != nil {
-		mongodSpec := &types.MongodCustomSpec{}
-		if err := json.Unmarshal(engine.CustomSpec.Raw, mongodSpec); err != nil {
-			return fmt.Errorf("failed to decode CustomSpec: %w", err)
-		}
+	splitHorizonRef, err := getSpritHorizonFromCustomSpec(c)
+	if err != nil {
+		return fmt.Errorf("failed to retrieve split horizon ref: %w", err)
+	}
 
-		if mongodSpec.SplitHorizonDNSRef != nil {
-			// Retrieve the pre-configured split horizon configuration
-			shConfig, err := GetSplitHorizonConfigByRef(c, mongodSpec.SplitHorizonDNSRef)
-			if err != nil {
-				return fmt.Errorf("failed to retrieve split horizon configuration by reference: %w", err)
-			}
-
-			if err := applySplitHorizonToPSMDB(psmdb, shConfig); err != nil {
-				return fmt.Errorf("failed to apply split horizon configuration to PSMDB: %w", err)
-			}
+	if splitHorizonRef != nil {
+		if err := configureSplitHorizon(c, psmdb, splitHorizonRef); err != nil {
+			return fmt.Errorf("failed to apply split horizon configuration to PSMDB: %w", err)
 		}
 	}
 
@@ -387,6 +341,19 @@ func StatusPSMDB(c *sdk.Context) (sdk.Status, error) {
 	}
 	switch psmdb.Status.State {
 	case psmdbv1.AppStateReady:
+		// Check if split horizon DNS is configured and ready
+		splitHorizonRef, err := getSpritHorizonFromCustomSpec(c)
+		if err != nil {
+			return sdk.Failed(err.Error()), nil
+		}
+
+		if splitHorizonRef != nil {
+			// Split horizon is configured, check if it's ready
+			if err := statusSplitHorizon(c, psmdb); err != nil {
+				return sdk.Creating("Waiting for split horizon DNS to be ready"), nil
+			}
+		}
+
 		return sdk.Running(), nil
 	case psmdbv1.AppStateError:
 		return sdk.Failed(psmdb.Status.Message), nil
