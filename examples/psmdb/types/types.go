@@ -33,14 +33,24 @@ package types
 // MongodCustomSpec defines custom configuration for mongod components.
 // This struct is converted to OpenAPI schema and served via the /schema endpoint.
 // Provider users can specify these fields in the DataStore's component CustomSpec.
-type MongodCustomSpec struct{}
+type MongodCustomSpec struct {
+	// SplitHorizonDNSRef is an optional reference to a pre-configured split horizon DNS configuration.
+	// When set, this component will be configured with split horizon DNS for multi-region deployments.
+	// +optional
+	SplitHorizonDNSRef *SplitHorizonDNSRef `json:"splitHorizonDNSRef,omitempty"`
+}
 
 // =============================================================================
 // MONGOS COMPONENT SPEC
 // =============================================================================
 
 // MongosCustomSpec defines custom configuration for mongos (proxy) components.
-type MongosCustomSpec struct{}
+type MongosCustomSpec struct {
+	// SplitHorizonDNSRef is an optional reference to a pre-configured split horizon DNS configuration.
+	// When set, this component will be configured with split horizon DNS for multi-region deployments.
+	// +optional
+	SplitHorizonDNSRef *SplitHorizonDNSRef `json:"splitHorizonDNSRef,omitempty"`
+}
 
 // =============================================================================
 // PMM (MONITORING) COMPONENT SPEC
@@ -84,8 +94,44 @@ type ShardedTopologyConfig struct {
 }
 
 // =============================================================================
+// SPLIT HORIZON DNS CONFIG (Pre-configured, referenced by DataStore)
+// =============================================================================
+
+// SplitHorizonDNSConfig defines DNS configuration for split horizon setup.
+// This is typically stored in a ConfigMap in the cluster and referenced by DataStores.
+type SplitHorizonDNSConfig struct {
+	// BaseDomainNameSuffix is the base domain name suffix for the cluster.
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
+	BaseDomainNameSuffix string `json:"baseDomainNameSuffix"`
+
+	// SecretName is the name of the secret containing CA certificate and key.
+	// +kubebuilder:validation:Required
+	SecretName string `json:"secretName"`
+}
+
+// SplitHorizonDNSRef defines a reference to a pre-configured split horizon DNS configuration.
+type SplitHorizonDNSRef struct {
+	// Name is the name of the split horizon configuration.
+	// The configuration should be stored as a ConfigMap in the cluster.
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
+	Name string `json:"name"`
+
+	// Namespace is the namespace where the split horizon configuration is stored.
+	// If omitted, defaults to the DataStore's namespace.
+	// +optional
+	Namespace string `json:"namespace,omitempty"`
+}
+
+// =============================================================================
 // GLOBAL CONFIG
 // =============================================================================
 
 // GlobalConfig defines global configuration that applies to the entire cluster.
-type GlobalConfig struct{}
+type GlobalConfig struct {
+	// SplitHorizonDNSRef is a reference to a pre-configured split horizon DNS configuration.
+	// The configuration should be stored as a ConfigMap in the cluster.
+	// +optional
+	SplitHorizonDNSRef *SplitHorizonDNSRef `json:"splitHorizonDNSRef,omitempty"`
+}

@@ -22,9 +22,12 @@ generate-openapi: openapi-gen ## Generate OpenAPI definitions for custom spec ty
 		--go-header-file ../../hack/boilerplate.go.txt \
 		github.com/openeverest/provider-sdk/examples/psmdb/types
 
+## Optional test directory name for running subset of integration tests
+TEST ?=
+
 .PHONY: test-integration
-test-integration: ## Run integration tests against K8S cluster
-	. ./test/vars.sh && kubectl kuttl test --config ./test/integration/kuttl.yaml
+test-integration: ## Run integration tests. Usage: make test-integration TEST=<test-name>
+	. ./test/vars.sh && kubectl kuttl test --config ./test/integration/kuttl.yaml $(if $(TEST),--test $(TEST))
 
 .PHONY: openapi-gen
 openapi-gen: $(OPENAPI_GEN) ## Download openapi-gen locally if necessary

@@ -47,6 +47,10 @@ const (
 	defaultBackupStartingTimeout = 120
 )
 
+const (
+	topologySharded = "sharded"
+)
+
 var maxUnavailable = intstr.FromInt(1)
 
 func defaultSpec() psmdbv1.PerconaServerMongoDBSpec {
@@ -163,7 +167,7 @@ func configureReplsets(c *sdk.Context) []*psmdbv1.ReplsetSpec {
 	engine := spec.Components[ComponentEngine]
 
 	// TODO: implement disabling
-	if spec.Topology == nil || spec.Topology.Type != "sharded" {
+	if spec.Topology == nil || spec.Topology.Type != topologySharded {
 		return []*psmdbv1.ReplsetSpec{
 			configureReplset(rsName(0), engine.Replicas, engine.Resources, engine.Storage, true),
 		}
@@ -191,7 +195,7 @@ func configureConfigServerReplset(c *sdk.Context) *psmdbv1.ReplsetSpec {
 	cfgSrv := spec.Components[ComponentConfigServer]
 
 	// TODO: implement disabling
-	if spec.Topology == nil || spec.Topology.Type != "sharded" {
+	if spec.Topology == nil || spec.Topology.Type != topologySharded {
 		return replset
 	}
 
@@ -292,7 +296,7 @@ func SyncPSMDB(c *sdk.Context) error {
 	psmdb.Spec.ImagePullPolicy = corev1.PullIfNotPresent
 
 	psmdb.Spec.Replsets = configureReplsets(c)
-	if c.DB().Spec.Topology != nil && c.DB().Spec.Topology.Type == "sharded" {
+	if c.DB().Spec.Topology != nil && c.DB().Spec.Topology.Type == topologySharded {
 		psmdb.Spec.Sharding.Enabled = true
 		psmdb.Spec.Sharding.ConfigsvrReplSet = configureConfigServerReplset(c)
 		psmdb.Spec.Sharding.Mongos = configureMongos(c)
@@ -304,6 +308,17 @@ func SyncPSMDB(c *sdk.Context) error {
 		Users:         "everest-secrets-" + c.Name(),
 		EncryptionKey: c.Name() + "-mongodb-encryption-key",
 		SSLInternal:   c.Name() + "-ssl-internal",
+	}
+
+	splitHorizonRef, err := getSpritHorizonFromCustomSpec(c)
+	if err != nil {
+		return fmt.Errorf("failed to retrieve split horizon ref: %w", err)
+	}
+
+	if splitHorizonRef != nil {
+		if err := configureSplitHorizon(c, psmdb, splitHorizonRef); err != nil {
+			return fmt.Errorf("failed to apply split horizon configuration to PSMDB: %w", err)
+		}
 	}
 
 	if err := c.Apply(psmdb); err != nil {
@@ -326,6 +341,19 @@ func StatusPSMDB(c *sdk.Context) (sdk.Status, error) {
 	}
 	switch psmdb.Status.State {
 	case psmdbv1.AppStateReady:
+		// Check if split horizon DNS is configured and ready
+		splitHorizonRef, err := getSpritHorizonFromCustomSpec(c)
+		if err != nil {
+			return sdk.Failed(err.Error()), nil
+		}
+
+		if splitHorizonRef != nil {
+			// Split horizon is configured, check if it's ready
+			if err := statusSplitHorizon(c, psmdb); err != nil {
+				return sdk.Creating("Waiting for split horizon DNS to be ready"), nil
+			}
+		}
+
 		return sdk.Running(), nil
 	case psmdbv1.AppStateError:
 		return sdk.Failed(psmdb.Status.Message), nil
@@ -406,7 +434,7 @@ func PSMDBMetadata() *sdk.ProviderMetadata {
 			// backup is the backup agent component
 			ComponentTypeBackup: {
 				Versions: []sdk.ComponentVersionMeta{
-					{Version: "2.9.1", Image: "percona/percona-server-mongodb-backup:2.9.1", Default: true},
+					{Version: "2.9.1", Image: "percona/percona-backup-mongodb:2.9.1", Default: true},
 				},
 			},
 			// pmm is the Percona Monitoring and Management component
