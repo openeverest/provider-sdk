@@ -265,6 +265,63 @@ func configureBackup(c *sdk.Context) psmdbv1.BackupSpec {
 	}
 }
 
+// configurePMMMonitoring creates the PMM spec configuration for PSMDB.
+func configureMonitoring(c *sdk.Context) (*psmdbv1.PMMSpec, error) {
+	monitoring, ok := c.DB().Spec.Components[ComponentMonitoring]
+	if !ok {
+		return &psmdbv1.PMMSpec{
+			Enabled: false,
+		}, nil
+	}
+
+	var spec types.MonitoringCustomSpec
+	if err := c.DecodeComponentCustomSpec(monitoring, &spec); err != nil {
+		return nil, err
+	}
+
+	pmmSpec := &psmdbv1.PMMSpec{
+		Enabled:    true,
+		ServerHost: spec.ServerHost,
+	}
+
+	if metadata := c.Metadata(); metadata != nil {
+		pmmSpec.Image = metadata.GetDefaultImage(ComponentTypePMM)
+	} else {
+		pmmSpec.Image = PSMDBMetadata().GetDefaultImage(ComponentTypePMM)
+	}
+
+	if c.DB().Status.Phase == v2alpha1.DataStorePhaseCreating {
+		pmmResources := corev1.ResourceRequirements{}
+		if monitoring.Resources != nil {
+			pmmResources.Requests = corev1.ResourceList{}
+			if !monitoring.Resources.Memory.IsZero() {
+				pmmResources.Requests[corev1.ResourceMemory] = monitoring.Resources.Memory
+			}
+			if !monitoring.Resources.CPU.IsZero() {
+				pmmResources.Requests[corev1.ResourceCPU] = monitoring.Resources.CPU
+			}
+		}
+
+		engine := c.DB().Spec.Components[ComponentEngine]
+		engineResources := corev1.ResourceRequirements{}
+		if engine.Resources != nil {
+			engineResources.Requests = corev1.ResourceList{}
+			if !engine.Resources.Memory.IsZero() {
+				engineResources.Requests[corev1.ResourceMemory] = engine.Resources.Memory
+			}
+			if !engine.Resources.CPU.IsZero() {
+				engineResources.Requests[corev1.ResourceCPU] = engine.Resources.CPU
+			}
+		}
+		pmmSpec.Resources = MergeResources(pmmResources, CalculatePMMResources(engineResources.Requests[corev1.ResourceMemory]))
+	}
+
+	// TODO: calculate resources for existing datastore
+	// TODO: use limit if specified
+
+	return pmmSpec, nil
+}
+
 // SyncPSMDB ensures all PSMDB resources exist and are configured correctly.
 func SyncPSMDB(c *sdk.Context) error {
 	fmt.Println("Syncing PSMDB cluster:", c.Name())
@@ -299,6 +356,13 @@ func SyncPSMDB(c *sdk.Context) error {
 	}
 
 	psmdb.Spec.Backup = configureBackup(c)
+
+	pmmSpec, err := configureMonitoring(c)
+	if err != nil {
+		fmt.Printf("Warning: Failed to configure monitoring: %v\n", err)
+	} else {
+		psmdb.Spec.PMM = *pmmSpec
+	}
 
 	psmdb.Spec.Secrets = &psmdbv1.SecretsSpec{
 		Users:         "everest-secrets-" + c.Name(),
@@ -406,13 +470,13 @@ func PSMDBMetadata() *sdk.ProviderMetadata {
 			// backup is the backup agent component
 			ComponentTypeBackup: {
 				Versions: []sdk.ComponentVersionMeta{
-					{Version: "2.9.1", Image: "percona/percona-server-mongodb-backup:2.9.1", Default: true},
+					{Version: "2.9.1", Image: "percona/percona-backup-mongodb:2.9.1", Default: true},
 				},
 			},
 			// pmm is the Percona Monitoring and Management component
 			ComponentTypePMM: {
 				Versions: []sdk.ComponentVersionMeta{
-					{Version: "2.44.1", Image: "percona/pmm-server:2.44.1", Default: true},
+					{Version: "2.44.1", Image: "percona/pmm-client:2.44.1", Default: true},
 				},
 			},
 		},
@@ -486,7 +550,7 @@ func (p *PSMDBProvider) ComponentSchemas() map[string]interface{} {
 		ComponentConfigServer: &types.MongodCustomSpec{},
 		ComponentProxy:        &types.MongosCustomSpec{},
 		ComponentBackupAgent:  &types.BackupCustomSpec{},
-		ComponentMonitoring:   &types.PMMCustomSpec{},
+		ComponentMonitoring:   &types.MonitoringCustomSpec{},
 	}
 }
 

@@ -70,12 +70,17 @@ func psmdbMetadata() *sdk.ProviderMetadata {
 			},
 			"backup": {
 				Versions: []sdk.ComponentVersionMeta{
-					{Version: "2.9.1", Image: "percona/percona-server-mongodb-backup:2.9.1", Default: true},
+					{Version: "2.9.1", Image: "percona/percona-backup-mongodb:2.9.1", Default: true},
 				},
 			},
 			"pmm": {
 				Versions: []sdk.ComponentVersionMeta{
-					{Version: "2.44.1", Image: "percona/pmm-server:2.44.1", Default: true},
+					{Version: "2.44.1", Image: "percona/pmm-client:2.44.1", Default: true},
+				},
+			},
+			"exporter": {
+				Versions: []sdk.ComponentVersionMeta{
+					{Version: "0.47.2", Image: "percona/mongodb-exporter:0.47.2", Default: true},
 				},
 			},
 		},
@@ -85,6 +90,7 @@ func psmdbMetadata() *sdk.ProviderMetadata {
 			"proxy":        {Type: "mongod"},
 			"backupAgent":  {Type: "backup"},
 			"monitoring":   {Type: "pmm"},
+			"metrics":      {Type: "exporter"},
 		},
 		Topologies: map[string]sdk.TopologyMeta{
 			"standard": {
@@ -95,6 +101,7 @@ func psmdbMetadata() *sdk.ProviderMetadata {
 					},
 					"backupAgent": {Optional: true},
 					"monitoring":  {Optional: true},
+					"metrics":     {Optional: true},
 				},
 			},
 			"sharded": {
@@ -107,6 +114,7 @@ func psmdbMetadata() *sdk.ProviderMetadata {
 					"configServer": {Optional: false},
 					"backupAgent":  {Optional: true},
 					"monitoring":   {Optional: true},
+					"metrics":      {Optional: true},
 				},
 			},
 		},

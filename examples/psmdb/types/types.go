@@ -46,8 +46,22 @@ type MongosCustomSpec struct{}
 // PMM (MONITORING) COMPONENT SPEC
 // =============================================================================
 
-// PMMCustomSpec defines custom configuration for PMM monitoring.
-type PMMCustomSpec struct{}
+// MonitoringCustomSpec defines custom configuration for PMM monitoring.
+// This allows users to configure PMM as a monitoring solution for PSMDB.
+// +k8s:openapi-gen=true
+type MonitoringCustomSpec struct {
+	// ServerHost specifies the hostname/IP of the PMM server.
+	ServerHost string `json:"serverHost,omitempty"`
+}
+
+// =============================================================================
+// EXPORTER (METRICS) COMPONENT SPEC
+// =============================================================================
+
+// MongoDBExporterConfig defines custom configuration for MongoDB Exporter sidecar.
+// MongoDB Exporter provides Prometheus-compatible metrics from MongoDB.
+// +k8s:openapi-gen=true
+type MongoDBExporterConfig struct{}
 
 // =============================================================================
 // BACKUP COMPONENT SPEC
