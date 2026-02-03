@@ -58,10 +58,8 @@ type MonitoringCustomSpec struct {
 // EXPORTER (METRICS) COMPONENT SPEC
 // =============================================================================
 
-// MongoDBExporterConfig defines custom configuration for MongoDB Exporter sidecar.
-// MongoDB Exporter provides Prometheus-compatible metrics from MongoDB.
-// +k8s:openapi-gen=true
-type MongoDBExporterConfig struct{}
+// MongoDBExporterSpec defines custom configuration for MongoDB Exporter sidecar.
+type MongoDBExporterSpec struct{}
 
 // =============================================================================
 // BACKUP COMPONENT SPEC

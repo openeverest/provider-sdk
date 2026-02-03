@@ -80,7 +80,7 @@ func psmdbMetadata() *sdk.ProviderMetadata {
 			},
 			"exporter": {
 				Versions: []sdk.ComponentVersionMeta{
-					{Version: "0.47.2", Image: "percona/mongodb-exporter:0.47.2", Default: true},
+					{Version: "0.47.2", Image: "percona/mongodb_exporter:0.47.2", Default: true},
 				},
 			},
 		},

@@ -15,7 +15,7 @@ spec:
     exporter:
       versions:
       - default: true
-        image: percona/mongodb-exporter:0.47.2
+        image: percona/mongodb_exporter:0.47.2
         version: 0.47.2
     mongod:
       versions:

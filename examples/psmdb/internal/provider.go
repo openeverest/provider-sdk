@@ -33,10 +33,12 @@ const (
 	ComponentProxy        = "proxy"
 	ComponentBackupAgent  = "backupAgent"
 	ComponentMonitoring   = "monitoring"
+	ComponentMetrics      = "metrics"
 
-	ComponentTypeMongod = "mongod"
-	ComponentTypeBackup = "backup"
-	ComponentTypePMM    = "pmm"
+	ComponentTypeMongod   = "mongod"
+	ComponentTypeBackup   = "backup"
+	ComponentTypePMM      = "pmm"
+	ComponentTypeExporter = "exporter"
 )
 
 const (
@@ -265,6 +267,66 @@ func configureBackup(c *sdk.Context) psmdbv1.BackupSpec {
 	}
 }
 
+// configureExporter creates a sidecar container configuration for MongoDB Exporter.
+func configureExporter(c *sdk.Context, secretName string) *corev1.Container {
+	if _, ok := c.DB().Spec.Components[ComponentMetrics]; !ok {
+		return nil
+	}
+
+	// Use the image from the component spec if provided, otherwise use default
+	var exporterImage string
+	if metadata := c.Metadata(); metadata != nil {
+		exporterImage = metadata.GetDefaultImage(ComponentTypeExporter)
+	} else {
+		exporterImage = PSMDBMetadata().GetDefaultImage(ComponentTypeExporter)
+	}
+
+	container := &corev1.Container{
+		Name:  "metrics-exporter-" + c.Name(),
+		Image: exporterImage,
+		Args:  []string{"--discovering-mode", "--compatible-mode", "--collect-all", "--mongodb.uri=$(MONGODB_URI)"},
+		Env: []corev1.EnvVar{
+			{
+				Name: "MONGODB_USER",
+				ValueFrom: &corev1.EnvVarSource{
+					SecretKeyRef: &corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: secretName,
+						},
+						Key: "MONGODB_CLUSTER_MONITOR_USER",
+					},
+				},
+			},
+			{
+				Name: "MONGODB_PASSWORD",
+				ValueFrom: &corev1.EnvVarSource{
+					SecretKeyRef: &corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: secretName,
+						},
+						Key: "MONGODB_CLUSTER_MONITOR_PASSWORD",
+					},
+				},
+			},
+			{
+				Name: "POD_NAME",
+				ValueFrom: &corev1.EnvVarSource{
+					FieldRef: &corev1.ObjectFieldSelector{
+						APIVersion: "v1",
+						FieldPath:  "metadata.name",
+					},
+				},
+			},
+			{
+				Name:  "MONGODB_URI",
+				Value: "mongodb://$(MONGODB_USER):$(MONGODB_PASSWORD)@$(POD_NAME)",
+			},
+		},
+	}
+
+	return container
+}
+
 // configurePMMMonitoring creates the PMM spec configuration for PSMDB.
 func configureMonitoring(c *sdk.Context) (*psmdbv1.PMMSpec, error) {
 	monitoring, ok := c.DB().Spec.Components[ComponentMonitoring]
@@ -368,6 +430,22 @@ func SyncPSMDB(c *sdk.Context) error {
 		Users:         "everest-secrets-" + c.Name(),
 		EncryptionKey: c.Name() + "-mongodb-encryption-key",
 		SSLInternal:   c.Name() + "-ssl-internal",
+	}
+
+	// attaches the MongoDB exporter sidecar to replsets, if enabled.
+	if sidecar := configureExporter(c, psmdb.Spec.Secrets.Users); sidecar != nil {
+		for _, replset := range psmdb.Spec.Replsets {
+			if replset == nil {
+				continue
+			}
+
+			replset.MultiAZ.Sidecars, _ = replset.MultiAZ.WithSidecars(*sidecar)
+		}
+
+		// Also add exporter to config server replset in sharded topology
+		if psmdb.Spec.Sharding.Enabled && psmdb.Spec.Sharding.ConfigsvrReplSet != nil {
+			psmdb.Spec.Sharding.ConfigsvrReplSet.MultiAZ.Sidecars, _ = psmdb.Spec.Sharding.ConfigsvrReplSet.MultiAZ.WithSidecars(*sidecar)
+		}
 	}
 
 	if err := c.Apply(psmdb); err != nil {
@@ -479,16 +557,22 @@ func PSMDBMetadata() *sdk.ProviderMetadata {
 					{Version: "2.44.1", Image: "percona/pmm-client:2.44.1", Default: true},
 				},
 			},
+			ComponentTypeExporter: {
+				Versions: []sdk.ComponentVersionMeta{
+					{Version: "0.47.2", Image: "percona/mongodb_exporter:0.47.2", Default: true},
+				},
+			},
 		},
 
 		// Components defines the logical components that use the component types.
 		// Multiple components can reference the same component type (e.g., engine and configServer both use mongod).
 		Components: map[string]sdk.ComponentMeta{
-			ComponentEngine:       {Type: ComponentTypeMongod}, // Main database engine
-			ComponentConfigServer: {Type: ComponentTypeMongod}, // Config server for sharded clusters
-			ComponentProxy:        {Type: ComponentTypeMongod}, // Proxy/mongos for sharded clusters
-			ComponentBackupAgent:  {Type: ComponentTypeBackup}, // Backup agent
-			ComponentMonitoring:   {Type: ComponentTypePMM},    // Monitoring agent
+			ComponentEngine:       {Type: ComponentTypeMongod},   // Main database engine
+			ComponentConfigServer: {Type: ComponentTypeMongod},   // Config server for sharded clusters
+			ComponentProxy:        {Type: ComponentTypeMongod},   // Proxy/mongos for sharded clusters
+			ComponentBackupAgent:  {Type: ComponentTypeBackup},   // Backup agent
+			ComponentMonitoring:   {Type: ComponentTypePMM},      // Monitoring agent
+			ComponentMetrics:      {Type: ComponentTypeExporter}, // Metrics exporter
 		},
 	}
 

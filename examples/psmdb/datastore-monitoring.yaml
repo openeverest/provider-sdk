@@ -1,7 +1,7 @@
 apiVersion: everest.percona.com/v2alpha1
 kind: DataStore
 metadata:
-  name: psmdb-simple
+  name: psmdb-exporter
   namespace: everest
 spec:
   # Provider identifier
@@ -30,19 +30,11 @@ spec:
     # Optional: monitoring
     monitoring:
       type: pmm
-      # version: 2.44.1
+      config:
       customSpec:
         serverHost: pmm-server-everest
 
-# status:
-#   phase: Running
-#   connectionURL: mongodb://psmdb-simple:27017
-#   credentialSecretRef:
-#     name: psmdb-simple-credentials
-  
-#   conditions:
-#   - type: Ready
-#     status: "True"
-#     reason: AllComponentsHealthy
-#     message: "All components are healthy and running"
-#     lastTransitionTime: "2025-09-03T12:00:00Z"
+    # Optional: metrics - configured as exporter
+    metrics:
+      type: exporter
+      # version: 0.47.2
