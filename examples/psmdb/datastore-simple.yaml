@@ -31,8 +31,6 @@ spec:
     monitoring:
       type: pmm
       # version: 2.44.1
-      customSpec:
-        serverHost: pmm-server-everest
 
 # status:
 #   phase: Running

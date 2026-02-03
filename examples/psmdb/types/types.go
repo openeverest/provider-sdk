@@ -51,6 +51,7 @@ type MongosCustomSpec struct{}
 // +k8s:openapi-gen=true
 type MonitoringCustomSpec struct {
 	// ServerHost specifies the hostname/IP of the PMM server.
+	// +optional
 	ServerHost string `json:"serverHost,omitempty"`
 }
 

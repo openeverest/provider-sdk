@@ -281,8 +281,8 @@ func configureExporter(c *sdk.Context, secretName string) *corev1.Container {
 		exporterImage = PSMDBMetadata().GetDefaultImage(ComponentTypeExporter)
 	}
 
-	container := &corev1.Container{
-		Name:  "metrics-exporter-" + c.Name(),
+	return &corev1.Container{
+		Name:  c.Name() + "-metrics-exporter",
 		Image: exporterImage,
 		Args:  []string{"--discovering-mode", "--compatible-mode", "--collect-all", "--mongodb.uri=$(MONGODB_URI)"},
 		Env: []corev1.EnvVar{
@@ -323,8 +323,6 @@ func configureExporter(c *sdk.Context, secretName string) *corev1.Container {
 			},
 		},
 	}
-
-	return container
 }
 
 // configurePMMMonitoring creates the PMM spec configuration for PSMDB.
