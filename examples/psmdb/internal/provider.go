@@ -268,6 +268,7 @@ func configureBackup(c *sdk.Context) psmdbv1.BackupSpec {
 }
 
 // configureExporter creates a sidecar container configuration for MongoDB Exporter.
+// It exposes metrics on localhost:9216/metrics.
 func configureExporter(c *sdk.Context, secretName string) *corev1.Container {
 	if _, ok := c.DB().Spec.Components[ComponentMetrics]; !ok {
 		return nil
