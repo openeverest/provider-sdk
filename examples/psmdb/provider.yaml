@@ -12,11 +12,6 @@ spec:
       - default: true
         image: percona/percona-backup-mongodb:2.9.1
         version: 2.9.1
-    exporter:
-      versions:
-      - default: true
-        image: percona/mongodb_exporter:0.47.2
-        version: 0.47.2
     mongod:
       versions:
       - image: percona/percona-server-mongodb:6.0.19-16-multi
@@ -42,8 +37,6 @@ spec:
       type: mongod
     engine:
       type: mongod
-    metrics:
-      type: exporter
     monitoring:
       type: pmm
     proxy:
@@ -55,8 +48,6 @@ spec:
           optional: true
         configServer: {}
         engine: {}
-        metrics:
-          optional: true
         monitoring:
           optional: true
         proxy: {}
@@ -65,8 +56,6 @@ spec:
         backupAgent:
           optional: true
         engine: {}
-        metrics:
-          optional: true
         monitoring:
           optional: true
 status: {}
