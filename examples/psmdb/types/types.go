@@ -50,6 +50,13 @@ type MongosCustomSpec struct{}
 type PMMCustomSpec struct{}
 
 // =============================================================================
+// EXPORTER (METRICS) COMPONENT SPEC
+// =============================================================================
+
+// ExporterSpec defines custom configuration for MongoDB Exporter sidecar.
+type ExporterSpec struct{}
+
+// =============================================================================
 // BACKUP COMPONENT SPEC
 // =============================================================================
 

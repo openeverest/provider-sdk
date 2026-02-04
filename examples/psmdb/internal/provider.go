@@ -33,10 +33,12 @@ const (
 	ComponentProxy        = "proxy"
 	ComponentBackupAgent  = "backupAgent"
 	ComponentMonitoring   = "monitoring"
+	ComponentMetrics      = "metrics"
 
-	ComponentTypeMongod = "mongod"
-	ComponentTypeBackup = "backup"
-	ComponentTypePMM    = "pmm"
+	ComponentTypeMongod   = "mongod"
+	ComponentTypeBackup   = "backup"
+	ComponentTypePMM      = "pmm"
+	ComponentTypeExporter = "exporter"
 )
 
 const (
@@ -265,6 +267,65 @@ func configureBackup(c *sdk.Context) psmdbv1.BackupSpec {
 	}
 }
 
+// configureExporter creates a sidecar container configuration for MongoDB Exporter.
+// It exposes metrics on localhost:9216/metrics.
+func configureExporter(c *sdk.Context, secretName string) *corev1.Container {
+	if _, ok := c.DB().Spec.Components[ComponentMetrics]; !ok {
+		return nil
+	}
+
+	// Use the image from the component spec if provided, otherwise use default
+	var exporterImage string
+	if metadata := c.Metadata(); metadata != nil {
+		exporterImage = metadata.GetDefaultImage(ComponentTypeExporter)
+	} else {
+		exporterImage = PSMDBMetadata().GetDefaultImage(ComponentTypeExporter)
+	}
+
+	return &corev1.Container{
+		Name:  c.Name() + "-metrics-exporter",
+		Image: exporterImage,
+		Args:  []string{"--discovering-mode", "--compatible-mode", "--collect-all", "--mongodb.uri=$(MONGODB_URI)"},
+		Env: []corev1.EnvVar{
+			{
+				Name: "MONGODB_USER",
+				ValueFrom: &corev1.EnvVarSource{
+					SecretKeyRef: &corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: secretName,
+						},
+						Key: "MONGODB_CLUSTER_MONITOR_USER",
+					},
+				},
+			},
+			{
+				Name: "MONGODB_PASSWORD",
+				ValueFrom: &corev1.EnvVarSource{
+					SecretKeyRef: &corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{
+							Name: secretName,
+						},
+						Key: "MONGODB_CLUSTER_MONITOR_PASSWORD",
+					},
+				},
+			},
+			{
+				Name: "POD_NAME",
+				ValueFrom: &corev1.EnvVarSource{
+					FieldRef: &corev1.ObjectFieldSelector{
+						APIVersion: "v1",
+						FieldPath:  "metadata.name",
+					},
+				},
+			},
+			{
+				Name:  "MONGODB_URI",
+				Value: "mongodb://$(MONGODB_USER):$(MONGODB_PASSWORD)@$(POD_NAME)",
+			},
+		},
+	}
+}
+
 // SyncPSMDB ensures all PSMDB resources exist and are configured correctly.
 func SyncPSMDB(c *sdk.Context) error {
 	fmt.Println("Syncing PSMDB cluster:", c.Name())
@@ -304,6 +365,22 @@ func SyncPSMDB(c *sdk.Context) error {
 		Users:         "everest-secrets-" + c.Name(),
 		EncryptionKey: c.Name() + "-mongodb-encryption-key",
 		SSLInternal:   c.Name() + "-ssl-internal",
+	}
+
+	// attaches the MongoDB exporter sidecar to replsets, if enabled.
+	if sidecar := configureExporter(c, psmdb.Spec.Secrets.Users); sidecar != nil {
+		for _, replset := range psmdb.Spec.Replsets {
+			if replset == nil {
+				continue
+			}
+
+			replset.MultiAZ.Sidecars, _ = replset.MultiAZ.WithSidecars(*sidecar)
+		}
+
+		// Also add exporter to config server replset in sharded topology
+		if psmdb.Spec.Sharding.Enabled && psmdb.Spec.Sharding.ConfigsvrReplSet != nil {
+			psmdb.Spec.Sharding.ConfigsvrReplSet.MultiAZ.Sidecars, _ = psmdb.Spec.Sharding.ConfigsvrReplSet.MultiAZ.WithSidecars(*sidecar)
+		}
 	}
 
 	if err := c.Apply(psmdb); err != nil {
@@ -406,7 +483,7 @@ func PSMDBMetadata() *sdk.ProviderMetadata {
 			// backup is the backup agent component
 			ComponentTypeBackup: {
 				Versions: []sdk.ComponentVersionMeta{
-					{Version: "2.9.1", Image: "percona/percona-server-mongodb-backup:2.9.1", Default: true},
+					{Version: "2.9.1", Image: "percona/percona-backup-mongodb:2.9.1", Default: true},
 				},
 			},
 			// pmm is the Percona Monitoring and Management component
@@ -415,16 +492,22 @@ func PSMDBMetadata() *sdk.ProviderMetadata {
 					{Version: "2.44.1", Image: "percona/pmm-server:2.44.1", Default: true},
 				},
 			},
+			ComponentTypeExporter: {
+				Versions: []sdk.ComponentVersionMeta{
+					{Version: "0.47.2", Image: "percona/mongodb_exporter:0.47.2", Default: true},
+				},
+			},
 		},
 
 		// Components defines the logical components that use the component types.
 		// Multiple components can reference the same component type (e.g., engine and configServer both use mongod).
 		Components: map[string]sdk.ComponentMeta{
-			ComponentEngine:       {Type: ComponentTypeMongod}, // Main database engine
-			ComponentConfigServer: {Type: ComponentTypeMongod}, // Config server for sharded clusters
-			ComponentProxy:        {Type: ComponentTypeMongod}, // Proxy/mongos for sharded clusters
-			ComponentBackupAgent:  {Type: ComponentTypeBackup}, // Backup agent
-			ComponentMonitoring:   {Type: ComponentTypePMM},    // Monitoring agent
+			ComponentEngine:       {Type: ComponentTypeMongod},   // Main database engine
+			ComponentConfigServer: {Type: ComponentTypeMongod},   // Config server for sharded clusters
+			ComponentProxy:        {Type: ComponentTypeMongod},   // Proxy/mongos for sharded clusters
+			ComponentBackupAgent:  {Type: ComponentTypeBackup},   // Backup agent
+			ComponentMonitoring:   {Type: ComponentTypePMM},      // Monitoring agent
+			ComponentMetrics:      {Type: ComponentTypeExporter}, // Metrics exporter
 		},
 	}
 
@@ -487,6 +570,7 @@ func (p *PSMDBProvider) ComponentSchemas() map[string]interface{} {
 		ComponentProxy:        &types.MongosCustomSpec{},
 		ComponentBackupAgent:  &types.BackupCustomSpec{},
 		ComponentMonitoring:   &types.PMMCustomSpec{},
+		ComponentMetrics:      &types.ExporterSpec{},
 	}
 }
 
