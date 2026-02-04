@@ -439,6 +439,7 @@ func PSMDBTopologyDefinitions() map[string]sdk.TopologyDefinition {
 				ComponentEngine:      {Optional: false, Defaults: map[string]interface{}{"replicas": 3}},
 				ComponentBackupAgent: {Optional: true},
 				ComponentMonitoring:  {Optional: true},
+				ComponentMetrics:     {Optional: true},
 			},
 		},
 		string(types.TopologyTypeSharded): {
@@ -449,6 +450,7 @@ func PSMDBTopologyDefinitions() map[string]sdk.TopologyDefinition {
 				ComponentConfigServer: {Optional: false},
 				ComponentBackupAgent:  {Optional: true},
 				ComponentMonitoring:   {Optional: true},
+				ComponentMetrics:      {Optional: true},
 			},
 		},
 	}
