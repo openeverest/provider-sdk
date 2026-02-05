@@ -51,8 +51,17 @@ type MongosCustomSpec struct{}
 // +k8s:openapi-gen=true
 type PMMCustomSpec struct {
 	// ServerHost specifies the hostname/IP of the PMM server.
-	// +optional
 	ServerHost string `json:"serverHost,omitempty"`
+
+	// SecretRef references a Kubernetes Secret containing PMM credentials.
+	SecretRef *PMMSecretRef `json:"secretRef,omitempty"`
+}
+
+// PMMSecretRef references a Kubernetes Secret for PMM authentication.
+// +k8s:openapi-gen=true
+type PMMSecretRef struct {
+	// Name is the name of the Kubernetes Secret.
+	Name string `json:"name,omitempty"`
 }
 
 // =============================================================================

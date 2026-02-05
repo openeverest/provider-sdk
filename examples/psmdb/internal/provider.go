@@ -266,7 +266,8 @@ func configureBackup(c *sdk.Context) psmdbv1.BackupSpec {
 }
 
 // configurePMMMonitoring creates the PMM spec configuration for PSMDB.
-func configureMonitoring(c *sdk.Context) (*psmdbv1.PMMSpec, error) {
+// Returns the PMMSpec and the secret name containing PMM credentials.
+func configureMonitoring(c *sdk.Context, usersSecretName string) (*psmdbv1.PMMSpec, error) {
 	monitoring, ok := c.DB().Spec.Components[ComponentMonitoring]
 	if !ok {
 		return &psmdbv1.PMMSpec{
@@ -282,6 +283,12 @@ func configureMonitoring(c *sdk.Context) (*psmdbv1.PMMSpec, error) {
 	pmmSpec := &psmdbv1.PMMSpec{
 		Enabled:    true,
 		ServerHost: spec.ServerHost,
+	}
+
+	if spec.SecretRef != nil && spec.SecretRef.Name != "" {
+		if err := applyPMMTokenToUserSecrets(c, usersSecretName, spec.SecretRef.Name); err != nil {
+			return nil, fmt.Errorf("failed to apply PMM token to user secrets: %w", err)
+		}
 	}
 
 	if metadata := c.Metadata(); metadata != nil {
@@ -322,6 +329,32 @@ func configureMonitoring(c *sdk.Context) (*psmdbv1.PMMSpec, error) {
 	return pmmSpec, nil
 }
 
+// applyPMMTokenToUserSecrets copies PMM token from the PMM secret and applies to the users secret.
+func applyPMMTokenToUserSecrets(c *sdk.Context, usersSecretName, pmmSecretName string) error {
+	pmmSecret := &corev1.Secret{}
+	if err := c.Get(pmmSecret, pmmSecretName); err != nil {
+		return fmt.Errorf("failed to get PMM secret %s: %w", pmmSecretName, err)
+	}
+
+	usersSecret := &corev1.Secret{}
+	if err := c.Get(usersSecret, usersSecretName); err != nil {
+		// If the secret doesn't exist, create it
+		usersSecret = &corev1.Secret{
+			ObjectMeta: c.ObjectMeta(usersSecretName),
+			Data:       make(map[string][]byte),
+		}
+	}
+
+	if apiKey, ok := pmmSecret.Data["apiKey"]; ok {
+		if usersSecret.Data == nil {
+			usersSecret.Data = make(map[string][]byte)
+		}
+		usersSecret.Data["PMM_SERVER_TOKEN"] = apiKey
+	}
+
+	return c.Apply(usersSecret)
+}
+
 // SyncPSMDB ensures all PSMDB resources exist and are configured correctly.
 func SyncPSMDB(c *sdk.Context) error {
 	fmt.Println("Syncing PSMDB cluster:", c.Name())
@@ -357,7 +390,9 @@ func SyncPSMDB(c *sdk.Context) error {
 
 	psmdb.Spec.Backup = configureBackup(c)
 
-	pmmSpec, err := configureMonitoring(c)
+	usersSecretName := "everest-secrets-" + c.Name()
+
+	pmmSpec, err := configureMonitoring(c, usersSecretName)
 	if err != nil {
 		fmt.Printf("Warning: Failed to configure monitoring: %v\n", err)
 	} else {
@@ -365,7 +400,7 @@ func SyncPSMDB(c *sdk.Context) error {
 	}
 
 	psmdb.Spec.Secrets = &psmdbv1.SecretsSpec{
-		Users:         "everest-secrets-" + c.Name(),
+		Users:         usersSecretName,
 		EncryptionKey: c.Name() + "-mongodb-encryption-key",
 		SSLInternal:   c.Name() + "-ssl-internal",
 	}
@@ -374,6 +409,7 @@ func SyncPSMDB(c *sdk.Context) error {
 		return err
 	}
 	fmt.Println("PSMDB cluster synced:", c.Name())
+
 	return nil
 }
 

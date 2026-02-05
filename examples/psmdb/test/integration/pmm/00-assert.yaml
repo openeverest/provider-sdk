@@ -65,19 +65,19 @@ spec:
 #     image: percona/pmm-client:latest
 # status:
 #   inUse: false
-# ---
-# apiVersion: v1
-# kind: Secret
-# metadata:
-#   name: mc-psmdb-secret
-#   ownerReferences:
-#     - apiVersion: everest.percona.com/v1alpha1
-#       blockOwnerDeletion: true
-#       controller: true
-#       kind: MonitoringConfig
-#       name: mc-psmdb
-# data:
-#   apiKey: YWJjZGVm
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: mc-psmdb-secret
+  # ownerReferences:
+  #   - apiVersion: everest.percona.com/v1alpha1
+  #     blockOwnerDeletion: true
+  #     controller: true
+  #     kind: MonitoringConfig
+  #     name: mc-psmdb
+data:
+  apiKey: YWJjZGVm
 # ---
 # apiVersion: operator.victoriametrics.com/v1beta1
 # kind: VMAgent

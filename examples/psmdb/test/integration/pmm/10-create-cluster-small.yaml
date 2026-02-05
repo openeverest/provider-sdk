@@ -25,7 +25,8 @@ spec:
       version: 2.44.1
       customSpec:
         serverHost: localhost-mc-psmdb
-
+        secretRef:
+          name: mc-psmdb-secret
 # ---
 # apiVersion: everest.percona.com/v1alpha1
 # kind: DatabaseCluster

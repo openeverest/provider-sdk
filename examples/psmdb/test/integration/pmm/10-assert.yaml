@@ -101,16 +101,16 @@ spec:
       requests:
         memory: 99604Ki
         cpu: 95m
-#   secrets:
-#     users: everest-secrets-psmdb-mc
-# ---
-# apiVersion: v1
-# kind: Secret
-# metadata:
-#   name: everest-secrets-psmdb-mc
-# type: Opaque
-# data:
-#   PMM_SERVER_TOKEN: YWJjZGVm
+  secrets:
+    users: everest-secrets-psmdb-mc
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: everest-secrets-psmdb-mc
+type: Opaque
+data:
+  PMM_SERVER_TOKEN: YWJjZGVm
 # ---
 # apiVersion: operator.victoriametrics.com/v1beta1
 # kind: VMAgent
