@@ -138,11 +138,11 @@ func configureReplset(name string, replicas *int32, resources *v2alpha1.Resource
 	if replicas != nil {
 		rsSpec.Size = *replicas
 	}
-	if resources != nil && !resources.CPU.IsZero() {
-		rsSpec.MultiAZ.Resources.Limits[corev1.ResourceCPU] = resources.CPU
+	if resources != nil && resources.Limits != nil && !resources.Limits.CPU.IsZero() {
+		rsSpec.MultiAZ.Resources.Limits[corev1.ResourceCPU] = resources.Limits.CPU
 	}
-	if resources != nil && !resources.Memory.IsZero() {
-		rsSpec.MultiAZ.Resources.Limits[corev1.ResourceMemory] = resources.Memory
+	if resources != nil && resources.Limits != nil && !resources.Limits.Memory.IsZero() {
+		rsSpec.MultiAZ.Resources.Limits[corev1.ResourceMemory] = resources.Limits.Memory
 	}
 	if storageSize != nil && !storageSize.Size.IsZero() {
 		rsSpec.VolumeSpec.PersistentVolumeClaim.PersistentVolumeClaimSpec.Resources.Requests[corev1.ResourceStorage] = storageSize.Size
@@ -217,11 +217,11 @@ func configureMongos(c *sdk.Context) *psmdbv1.MongosSpec {
 	if proxy.Replicas != nil {
 		mongosSpec.Size = *proxy.Replicas
 	}
-	if proxy.Resources != nil && !proxy.Resources.CPU.IsZero() {
-		mongosSpec.MultiAZ.Resources.Limits[corev1.ResourceCPU] = proxy.Resources.CPU
+	if proxy.Resources != nil && proxy.Resources.Limits != nil && !proxy.Resources.Limits.CPU.IsZero() {
+		mongosSpec.MultiAZ.Resources.Limits[corev1.ResourceCPU] = proxy.Resources.Limits.CPU
 	}
-	if proxy.Resources != nil && !proxy.Resources.Memory.IsZero() {
-		mongosSpec.MultiAZ.Resources.Limits[corev1.ResourceMemory] = proxy.Resources.Memory
+	if proxy.Resources != nil && proxy.Resources.Limits != nil && !proxy.Resources.Limits.Memory.IsZero() {
+		mongosSpec.MultiAZ.Resources.Limits[corev1.ResourceMemory] = proxy.Resources.Limits.Memory
 	}
 
 	// TODO: implement exposing mongos
@@ -301,11 +301,11 @@ func configureMonitoring(c *sdk.Context, usersSecretName string) (*psmdbv1.PMMSp
 		pmmResources := corev1.ResourceRequirements{}
 		if monitoring.Resources != nil {
 			pmmResources.Requests = corev1.ResourceList{}
-			if !monitoring.Resources.Memory.IsZero() {
-				pmmResources.Requests[corev1.ResourceMemory] = monitoring.Resources.Memory
+			if monitoring.Resources.Requests != nil && !monitoring.Resources.Requests.Memory.IsZero() {
+				pmmResources.Requests[corev1.ResourceMemory] = monitoring.Resources.Requests.Memory
 			}
-			if !monitoring.Resources.CPU.IsZero() {
-				pmmResources.Requests[corev1.ResourceCPU] = monitoring.Resources.CPU
+			if monitoring.Resources.Requests != nil && !monitoring.Resources.Requests.CPU.IsZero() {
+				pmmResources.Requests[corev1.ResourceCPU] = monitoring.Resources.Requests.CPU
 			}
 		}
 
@@ -313,11 +313,11 @@ func configureMonitoring(c *sdk.Context, usersSecretName string) (*psmdbv1.PMMSp
 		engineResources := corev1.ResourceRequirements{}
 		if engine.Resources != nil {
 			engineResources.Requests = corev1.ResourceList{}
-			if !engine.Resources.Memory.IsZero() {
-				engineResources.Requests[corev1.ResourceMemory] = engine.Resources.Memory
+			if engine.Resources.Requests != nil && !engine.Resources.Requests.Memory.IsZero() {
+				engineResources.Requests[corev1.ResourceMemory] = engine.Resources.Requests.Memory
 			}
-			if !engine.Resources.CPU.IsZero() {
-				engineResources.Requests[corev1.ResourceCPU] = engine.Resources.CPU
+			if engine.Resources.Requests != nil && !engine.Resources.Requests.CPU.IsZero() {
+				engineResources.Requests[corev1.ResourceCPU] = engine.Resources.Requests.CPU
 			}
 		}
 		pmmSpec.Resources = MergeResources(pmmResources, CalculatePMMResources(engineResources.Requests[corev1.ResourceMemory]))

@@ -163,8 +163,12 @@ type Storage struct {
 	StorageClass *string           `json:"storageClass,omitempty"`
 }
 
-// FIXME: consider adding Requests and Limits
 type Resources struct {
+	Requests *Resource `json:"requests,omitempty"`
+	Limits   *Resource `json:"limits,omitempty"`
+}
+
+type Resource struct {
 	CPU    resource.Quantity `json:"cpu,omitempty"`
 	Memory resource.Quantity `json:"memory,omitempty"`
 }

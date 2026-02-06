@@ -67,8 +67,9 @@ spec:
       type: mongod
       replicas: 1
       resources:
-        cpu: "1"
-        memory: 4G
+        limits:
+          cpu: "1"
+          memory: 4G
       storage:
         size: 25Gi
   # engine:
