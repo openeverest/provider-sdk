@@ -101,7 +101,7 @@ func ValidatePSMDB(c *sdk.Context) error {
 	return nil
 }
 
-func configureReplset(name string, replicas *int32, resources *v2alpha1.Resources, storageSize *v2alpha1.Storage, expose bool) *psmdbv1.ReplsetSpec {
+func configureReplset(name string, replicas *int32, resources *corev1.ResourceRequirements, storageSize *v2alpha1.Storage, expose bool) *psmdbv1.ReplsetSpec {
 	rsSpec := &psmdbv1.ReplsetSpec{
 		Name:          name,
 		Configuration: psmdbv1.MongoConfiguration(psmdbDefaultConfigurationTemplate),
@@ -138,11 +138,11 @@ func configureReplset(name string, replicas *int32, resources *v2alpha1.Resource
 	if replicas != nil {
 		rsSpec.Size = *replicas
 	}
-	if resources != nil && resources.Limits != nil && !resources.Limits.CPU.IsZero() {
-		rsSpec.MultiAZ.Resources.Limits[corev1.ResourceCPU] = resources.Limits.CPU
+	if resources != nil && resources.Limits != nil && !resources.Limits.Cpu().IsZero() {
+		rsSpec.MultiAZ.Resources.Limits[corev1.ResourceCPU] = *resources.Limits.Cpu()
 	}
-	if resources != nil && resources.Limits != nil && !resources.Limits.Memory.IsZero() {
-		rsSpec.MultiAZ.Resources.Limits[corev1.ResourceMemory] = resources.Limits.Memory
+	if resources != nil && resources.Limits != nil && !resources.Limits.Memory().IsZero() {
+		rsSpec.MultiAZ.Resources.Limits[corev1.ResourceMemory] = *resources.Limits.Memory()
 	}
 	if storageSize != nil && !storageSize.Size.IsZero() {
 		rsSpec.VolumeSpec.PersistentVolumeClaim.PersistentVolumeClaimSpec.Resources.Requests[corev1.ResourceStorage] = storageSize.Size
@@ -217,11 +217,11 @@ func configureMongos(c *sdk.Context) *psmdbv1.MongosSpec {
 	if proxy.Replicas != nil {
 		mongosSpec.Size = *proxy.Replicas
 	}
-	if proxy.Resources != nil && proxy.Resources.Limits != nil && !proxy.Resources.Limits.CPU.IsZero() {
-		mongosSpec.MultiAZ.Resources.Limits[corev1.ResourceCPU] = proxy.Resources.Limits.CPU
+	if proxy.Resources != nil && proxy.Resources.Limits != nil && !proxy.Resources.Limits.Cpu().IsZero() {
+		mongosSpec.MultiAZ.Resources.Limits[corev1.ResourceCPU] = *proxy.Resources.Limits.Cpu()
 	}
-	if proxy.Resources != nil && proxy.Resources.Limits != nil && !proxy.Resources.Limits.Memory.IsZero() {
-		mongosSpec.MultiAZ.Resources.Limits[corev1.ResourceMemory] = proxy.Resources.Limits.Memory
+	if proxy.Resources != nil && proxy.Resources.Limits != nil && !proxy.Resources.Limits.Memory().IsZero() {
+		mongosSpec.MultiAZ.Resources.Limits[corev1.ResourceMemory] = *proxy.Resources.Limits.Memory()
 	}
 
 	// TODO: implement exposing mongos
@@ -267,7 +267,7 @@ func configureBackup(c *sdk.Context) psmdbv1.BackupSpec {
 
 // configurePMMMonitoring creates the PMM spec configuration for PSMDB.
 // Returns the PMMSpec and the secret name containing PMM credentials.
-func configureMonitoring(c *sdk.Context, usersSecretName string) (*psmdbv1.PMMSpec, error) {
+func configureMonitoring(c *sdk.Context, psmdb *psmdbv1.PerconaServerMongoDBSpec, usersSecretName string) (*psmdbv1.PMMSpec, error) {
 	monitoring, ok := c.DB().Spec.Components[ComponentMonitoring]
 	if !ok {
 		return &psmdbv1.PMMSpec{
@@ -297,34 +297,7 @@ func configureMonitoring(c *sdk.Context, usersSecretName string) (*psmdbv1.PMMSp
 		pmmSpec.Image = PSMDBMetadata().GetDefaultImage(ComponentTypePMM)
 	}
 
-	if c.DB().Status.Phase == v2alpha1.DataStorePhaseCreating {
-		pmmResources := corev1.ResourceRequirements{}
-		if monitoring.Resources != nil {
-			pmmResources.Requests = corev1.ResourceList{}
-			if monitoring.Resources.Requests != nil && !monitoring.Resources.Requests.Memory.IsZero() {
-				pmmResources.Requests[corev1.ResourceMemory] = monitoring.Resources.Requests.Memory
-			}
-			if monitoring.Resources.Requests != nil && !monitoring.Resources.Requests.CPU.IsZero() {
-				pmmResources.Requests[corev1.ResourceCPU] = monitoring.Resources.Requests.CPU
-			}
-		}
-
-		engine := c.DB().Spec.Components[ComponentEngine]
-		engineResources := corev1.ResourceRequirements{}
-		if engine.Resources != nil {
-			engineResources.Requests = corev1.ResourceList{}
-			if engine.Resources.Requests != nil && !engine.Resources.Requests.Memory.IsZero() {
-				engineResources.Requests[corev1.ResourceMemory] = engine.Resources.Requests.Memory
-			}
-			if engine.Resources.Requests != nil && !engine.Resources.Requests.CPU.IsZero() {
-				engineResources.Requests[corev1.ResourceCPU] = engine.Resources.Requests.CPU
-			}
-		}
-		pmmSpec.Resources = MergeResources(pmmResources, CalculatePMMResources(engineResources.Requests[corev1.ResourceMemory]))
-	}
-
-	// TODO: calculate resources for existing datastore
-	// TODO: use limit if specified
+	pmmSpec.Resources = getPMMResources(c, psmdb)
 
 	return pmmSpec, nil
 }
@@ -392,7 +365,7 @@ func SyncPSMDB(c *sdk.Context) error {
 
 	usersSecretName := "everest-secrets-" + c.Name()
 
-	pmmSpec, err := configureMonitoring(c, usersSecretName)
+	pmmSpec, err := configureMonitoring(c, &psmdb.Spec, usersSecretName)
 	if err != nil {
 		fmt.Printf("Warning: Failed to configure monitoring: %v\n", err)
 	} else {

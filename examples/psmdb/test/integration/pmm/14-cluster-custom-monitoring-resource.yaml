@@ -1,6 +1,6 @@
-# apiVersion: kuttl.dev/v1
-# kind: TestStep
-# timeout: 10
+apiVersion: kuttl.dev/v1
+kind: TestStep
+timeout: 10
 # ---
 # apiVersion: everest.percona.com/v1alpha1
 # kind: DatabaseCluster
@@ -16,3 +16,18 @@
 #       limits:
 #         memory: 128Mi
 #         cpu: 500m
+---
+apiVersion: everest.percona.com/v2alpha1
+kind: DataStore
+metadata:
+  name: psmdb-mc
+spec:
+  components:
+    monitoring:
+      resources:
+        requests:
+          memory: 64Mi
+          cpu: 250m
+        limits:
+          memory: 128Mi
+          cpu: 500m

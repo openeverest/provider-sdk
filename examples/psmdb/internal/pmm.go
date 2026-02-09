@@ -1,8 +1,12 @@
 package provider
 
 import (
+	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+
+	"github.com/openeverest/provider-sdk/pkg/apis/v2alpha1"
+	sdk "github.com/openeverest/provider-sdk/pkg/controller"
 )
 
 const (
@@ -57,6 +61,80 @@ var (
 		},
 	}
 )
+
+// getPMMResources returns the PMM resources to be used for the DB cluster.
+// The logic is as follows:
+//  1. If this is a new DB cluster, use the resources specified in the DB spec, if any.
+//     Otherwise, use the default resources based on the DB size.
+//  2. If this is an existing DB cluster and the DB size has changed, use the resources specified in the DB spec, if any.
+//     Otherwise, use the default resources based on the new DB size.
+//  3. If this is an existing DB cluster and PMM was enabled before, use the resources specified in the DB spec, if any.
+//     Otherwise, use the current PMM resources.
+//  4. If this is an existing DB cluster and PMM was not enabled before, use the resources specified in the DB spec, if any.
+//     Otherwise, use the default resources based on the DB size.
+func getPMMResources(c *sdk.Context, curPsmdbSpec *psmdbv1.PerconaServerMongoDBSpec,
+) corev1.ResourceRequirements {
+	monitoring := c.DB().Spec.Components[ComponentMonitoring]
+
+	requestedResources := corev1.ResourceRequirements{}
+	if monitoring.Resources != nil {
+		requestedResources = *monitoring.Resources
+	}
+
+	engine := c.DB().Spec.Components[ComponentEngine]
+	engineLimitsMemory := resource.Quantity{}
+	if engine.Resources != nil {
+		engineLimitsMemory = engine.Resources.Limits[corev1.ResourceMemory]
+	}
+
+	if c.DB().Status.Phase == v2alpha1.DataStorePhaseCreating {
+		// This is new DB cluster.
+		// DB spec may contain custom PMM resources -> merge them with defaults.
+		// If none are specified, default resources will be used.
+
+		return MergeResources(requestedResources, CalculatePMMResources(engineLimitsMemory))
+	}
+
+	// Prepare current DB cluster size
+	var currentReplSet psmdbv1.ReplsetSpec
+	for _, replset := range curPsmdbSpec.Replsets {
+		if replset.Name == rsName(0) {
+			currentReplSet = *replset
+			break
+		}
+	}
+
+	if !equalSize(engineLimitsMemory, *currentReplSet.Resources.Requests.Memory()) {
+		// DB cluster size has changed -> need to update PMM resources.
+		// DB spec may contain custom PMM resources -> merge them with defaults.
+		return MergeResources(requestedResources, CalculatePMMResources(engineLimitsMemory))
+	}
+
+	if curPsmdbSpec.PMM.Enabled {
+		// DB cluster is not new and PMM was enabled before.
+		// DB spec may contain new custom PMM resources -> merge them with previously used PMM resources.
+		return MergeResources(requestedResources, curPsmdbSpec.PMM.Resources)
+	}
+
+	// DB cluster is not new and PMM was not enabled before. Now it is being enabled.
+	// DB spec may contain custom PMM resources -> merge them with defaults.
+	return MergeResources(requestedResources, CalculatePMMResources(engineLimitsMemory))
+}
+
+// equalSize checks if two memory sizes fall into the same predefined size category.
+func equalSize(a, b resource.Quantity) bool {
+	switch {
+	case a.Cmp(MemoryLargeSize) >= 0:
+		// a is large size -> b must be large size
+		return b.Cmp(MemoryLargeSize) >= 0
+	case a.Cmp(MemoryMediumSize) >= 0:
+		// a is medium size -> b must be medium size
+		return b.Cmp(MemoryMediumSize) >= 0 && b.Cmp(MemoryLargeSize) == -1
+	default:
+		// a is small size -> b must be small size (less than medium)
+		return b.Cmp(MemoryMediumSize) == -1
+	}
+}
 
 // CalculatePMMResources returns the resource requirements for PMM based on memoery size.
 func CalculatePMMResources(m resource.Quantity) corev1.ResourceRequirements {

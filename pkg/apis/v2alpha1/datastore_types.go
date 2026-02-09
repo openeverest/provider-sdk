@@ -139,7 +139,7 @@ type ComponentSpec struct {
 	Storage *Storage `json:"storage,omitempty"`
 	// Resources requirements for this component.
 	// +optional
-	Resources *Resources `json:"resources,omitempty"`
+	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
 	// Config specifies the component specific configuration.
 	// +optional
 	Config *Config `json:"config,omitempty"`
@@ -161,16 +161,6 @@ type Config struct {
 type Storage struct {
 	Size         resource.Quantity `json:"size,omitempty"`
 	StorageClass *string           `json:"storageClass,omitempty"`
-}
-
-type Resources struct {
-	Requests *Resource `json:"requests,omitempty"`
-	Limits   *Resource `json:"limits,omitempty"`
-}
-
-type Resource struct {
-	CPU    resource.Quantity `json:"cpu,omitempty"`
-	Memory resource.Quantity `json:"memory,omitempty"`
 }
 
 //+kubebuilder:object:root=true

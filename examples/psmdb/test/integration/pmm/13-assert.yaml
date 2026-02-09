@@ -7,7 +7,8 @@ collectors:
   # - command: kubectl get vmagent/everest-monitoring -n everest-monitoring -o yaml
 
   # - command: kubectl get db/psmdb-mc -n ${NAMESPACE} -o yaml
-  # - command: kubectl get psmdb/psmdb-mc -n ${NAMESPACE} -o yaml
+  - command: kubectl get dst/psmdb-mc -n ${NAMESPACE} -o yaml
+  - command: kubectl get psmdb/psmdb-mc -n ${NAMESPACE} -o yaml
   # - command: kubectl get secret/everest-secrets-psmdb-mc -n ${NAMESPACE} -o yaml
 
   # - command: kubectl get deploy/everest-controller-manager -n everest-system -o yaml
@@ -86,26 +87,26 @@ assertAll:
 #       limits:
 #         cpu: "1"
 #         memory: 1G
-# ---
-# apiVersion: psmdb.percona.com/v1
-# kind: PerconaServerMongoDB
-# metadata:
-#   name: psmdb-mc
-# spec:
-#   pmm:
-#     enabled: true
-#     serverHost: localhost-mc-psmdb
-#     # image: percona/pmm-client:latest
-#     image: percona/pmm-client:2.44.1
-#     resources:
-#       requests:
-#         cpu: 220m
-#         memory: 330M
-#       limits:
-#         cpu: "1"
-#         memory: 1G
-#   secrets:
-#     users: everest-secrets-psmdb-mc
+---
+apiVersion: psmdb.percona.com/v1
+kind: PerconaServerMongoDB
+metadata:
+  name: psmdb-mc
+spec:
+  pmm:
+    enabled: true
+    serverHost: localhost-mc-psmdb
+    # image: percona/pmm-client:latest
+    image: percona/pmm-client:2.44.1
+    resources:
+      requests:
+        cpu: 220m
+        memory: 330M
+      limits:
+        cpu: "1"
+        memory: 1G
+  secrets:
+    users: everest-secrets-psmdb-mc
 # ---
 # apiVersion: v1
 # kind: Secret

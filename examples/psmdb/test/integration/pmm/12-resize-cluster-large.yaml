@@ -1,43 +1,49 @@
-# apiVersion: kuttl.dev/v1
-# kind: TestStep
-# timeout: 10
+apiVersion: kuttl.dev/v1
+kind: TestStep
+timeout: 10
+---
+apiVersion: everest.percona.com/v2alpha1
+kind: DataStore
+metadata:
+  name: psmdb-mc
+spec:
+  provider: psmdb
+  components:
+    engine:
+      type: mongod
+      replicas: 3
+      storage:
+        size: 4Gi
+      resources:
+        limits:
+          memory: 32G
+    proxy:
+      type: mongod
+      replicas: 1
+    monitoring:
+      type: pmm
+      version: 2.44.1
+      resources:
+        requests:
+          memory: 330M
+        limits:
+          cpu: 330m
+      customSpec:
+        serverHost: localhost-mc-psmdb
+        secretRef:
+          name: mc-psmdb-secret
 # ---
-# apiVersion: everest.percona.com/v2alpha1
-# kind: DataStore
+# apiVersion: everest.percona.com/v1alpha1
+# kind: DatabaseCluster
 # metadata:
 #   name: psmdb-mc
 # spec:
-#   provider: psmdb
-#   components:
-#     engine:
-#       type: mongod
-#       replicas: 3
-#       storage:
-#         size: 4Gi
-#       resources:
-#         cpu: 300m
-#         memory: 500M
-#     proxy:
-#       type: mongod
-#       replicas: 1
-#     monitoring:
-#       type: pmm
-#       version: 2.44.1
-#       resources:
-#         cpu: 330m
+#   monitoring:
+#     resources:
+#       requests:
 #         memory: 330M
-# # ---
-# # apiVersion: everest.percona.com/v1alpha1
-# # kind: DatabaseCluster
-# # metadata:
-# #   name: psmdb-mc
-# # spec:
-# #   monitoring:
-# #     resources:
-# #       requests:
-# #         memory: 330M
-# #       limits:
-# #         cpu: 330m
-# #   engine:
-# #     resources:
-# #       memory: 32G
+#       limits:
+#         cpu: 330m
+#   engine:
+#     resources:
+#       memory: 32G
