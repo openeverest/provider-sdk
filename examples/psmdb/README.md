@@ -45,6 +45,7 @@ examples/psmdb/
 Before running the provider, generate the Provider CR manifest:
 
 ```bash
+# From the examples/psmdb directory
 # Generate the Provider CR from Go metadata
 go run ./cmd/generate-manifest/main.go > provider.yaml
 

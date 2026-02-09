@@ -12,8 +12,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
@@ -37,7 +39,6 @@ type ProviderReconciler struct {
 type providerAdapter interface {
 	Name() string
 	Types() func(*runtime.Scheme) error
-	OwnedTypes() []client.Object
 	Validate(c *controller.Context) error
 	Sync(c *controller.Context) error
 	Status(c *controller.Context) (controller.Status, error)
@@ -61,7 +62,8 @@ func New(p controller.ProviderInterface, opts ...ReconcilerOption) (*ProviderRec
 type ReconcilerOption func(*reconcilerOptions)
 
 type reconcilerOptions struct {
-	serverConfig *server.ServerConfig
+	serverConfig       *server.ServerConfig
+	metricsBindAddress string
 }
 
 // WithServer enables the integrated HTTP server for schema exposure and validation webhook.
@@ -90,6 +92,29 @@ func WithServer(config server.ServerConfig) ReconcilerOption {
 	}
 }
 
+// WithMetrics configures the metrics server bind address.
+//
+// The metrics server exposes Prometheus metrics for the controller.
+// By default, it binds to ":8080". You can customize the address or disable
+// it entirely by passing "0".
+//
+// Example:
+//
+//	// Custom port
+//	r, err := reconciler.New(provider,
+//	    reconciler.WithMetrics(":9090"),
+//	)
+//
+//	// Disable metrics
+//	r, err := reconciler.New(provider,
+//	    reconciler.WithMetrics("0"),
+//	)
+func WithMetrics(bindAddress string) ReconcilerOption {
+	return func(o *reconcilerOptions) {
+		o.metricsBindAddress = bindAddress
+	}
+}
+
 // newReconciler creates a reconciler from any provider that satisfies providerAdapter.
 func newReconciler(p providerAdapter, opts ...ReconcilerOption) (*ProviderReconciler, error) {
 	// Apply options
@@ -113,9 +138,31 @@ func newReconciler(p providerAdapter, opts ...ReconcilerOption) (*ProviderReconc
 
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&zap.Options{Development: true})))
 
-	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{Scheme: scheme})
+	// Configure manager options
+	mgrOpts := ctrl.Options{Scheme: scheme}
+	if options.metricsBindAddress != "" {
+		mgrOpts.Metrics = metricsserver.Options{
+			BindAddress: options.metricsBindAddress,
+		}
+	}
+
+	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), mgrOpts)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create manager: %w", err)
+	}
+
+	// Setup field indexes if provider implements FieldIndexProvider
+	if fip, ok := p.(controller.FieldIndexProvider); ok {
+		for _, fi := range fip.FieldIndexes() {
+			if err := mgr.GetFieldIndexer().IndexField(
+				context.Background(),
+				fi.Object,
+				fi.FieldPath,
+				fi.Extractor,
+			); err != nil {
+				return nil, fmt.Errorf("failed to create field index %s on %T: %w", fi.FieldPath, fi.Object, err)
+			}
+		}
 	}
 
 	r := &ProviderReconciler{
@@ -245,9 +292,32 @@ func (r *ProviderReconciler) setup() error {
 		For(&v2alpha1.DataStore{}, builder.WithPredicates(filter)).
 		Named(r.provider.Name() + "-controller")
 
-	// Watch owned types
-	for _, obj := range r.provider.OwnedTypes() {
-		b.Owns(obj)
+	// Configure watches if provider implements WatchProvider
+	if wp, ok := r.provider.(controller.WatchProvider); ok {
+		for _, wc := range wp.Watches() {
+			if wc.Owned {
+				// Owned resource: use Owns() for automatic owner-reference handling
+				if len(wc.Predicates) > 0 {
+					opts := []builder.OwnsOption{builder.WithPredicates(wc.Predicates...)}
+					b.Owns(wc.Object, opts...)
+				} else {
+					b.Owns(wc.Object)
+				}
+			} else {
+				// External resource: use Watches() with custom handler
+				h := wc.Handler
+				if h == nil {
+					// Default to EnqueueRequestForObject if no handler specified
+					// (though this is rarely useful for external resources)
+					h = &handler.EnqueueRequestForObject{}
+				}
+				opts := wc.WatchOptions
+				if len(wc.Predicates) > 0 {
+					opts = append(opts, builder.WithPredicates(wc.Predicates...))
+				}
+				b.Watches(wc.Object, h, opts...)
+			}
+		}
 	}
 
 	return b.Complete(r)

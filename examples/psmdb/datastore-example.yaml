@@ -18,6 +18,7 @@ spec:
   global:
     allowUnsafeFlags: true
     # Additional global settings...
+    splitHorizonDNSConfigName: mySplitHorizonConfig
 
   # Component instances
   components:
@@ -32,6 +33,10 @@ spec:
       resources:
         cpu: 2
         memory: 4Gi
+      config:
+        configMapRef:
+          name: psmdb-custom-config
+        key: mongod.conf
 
     # Proxy/router (required for sharded topology)
     proxy:

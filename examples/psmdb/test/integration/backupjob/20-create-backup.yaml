@@ -1,0 +1,13 @@
+apiVersion: kuttl.dev/v1
+kind: TestStep
+timeout: 10
+---
+apiVersion: everest.percona.com/v2alpha1
+kind: BackupJob
+metadata:
+  name: test-db-backup-s3
+spec:
+  backupToolName: everest-percona-psmdb-operator
+  destination:
+    backupStorageName: test-storage-s3
+  sourceClusterName: test-psmdb-cluster

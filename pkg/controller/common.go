@@ -36,6 +36,16 @@ func NewContextWithMetadata(ctx context.Context, c client.Client, ds *v2alpha1.D
 	return &Context{ctx: ctx, client: c, ds: ds, metadata: metadata}
 }
 
+// Context returns the underlying context.Context.
+func (c *Context) Context() context.Context {
+	return c.ctx
+}
+
+// Client returns the underlying Kubernetes client.
+func (c *Context) Client() client.Client {
+	return c.client
+}
+
 // Spec returns the datastore specification.
 func (c *Context) Spec() *v2alpha1.DataStoreSpec {
 	return &c.ds.Spec
@@ -66,6 +76,7 @@ func (c *Context) ComponentsOfType(componentType string) []v2alpha1.ComponentSpe
 	return c.ds.GetComponentsOfType(componentType)
 }
 
+// FIXME
 // DB returns the underlying DataStore for direct access.
 func (c *Context) DB() *v2alpha1.DataStore {
 	return c.ds

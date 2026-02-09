@@ -1,0 +1,12 @@
+apiVersion: kuttl.dev/v1
+kind: TestStep
+timeout: 10
+delete:
+  - apiVersion: everest.percona.com/v1alpha1
+    kind: BackupStorage
+    metadata:
+      name: test-storage-s3
+  - apiVersion: everest.percona.com/v2alpha1
+    kind: BackupTool
+    metadata:
+      name: everest-percona-psmdb-operator

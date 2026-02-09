@@ -1,0 +1,18 @@
+apiVersion: everest.percona.com/v2alpha1
+kind: BackupJob
+metadata:
+  name: test-1234
+spec:
+  sourceClusterName: psmdb-cluster
+  backupToolName: everest-percona-psmdb-operator
+  destination:
+    path: "/backups/psmdb/test-1234"
+    s3:
+      bucket: "my-s3-bucket"
+      region: "us-west-2"
+      endpointURL: "https://s3.us-west-2.amazonaws.com"
+      verifyTLS: true
+      forcePathStyle: false
+      credentialsSecretName: "s3-credentials"
+      accessKeyId: "AKIAEXAMPLE"
+      secretAccessKey: "mysecretkey"

@@ -21,6 +21,8 @@ func main() {
 			SchemaPath:     "/schema",
 			ValidationPath: "/validate",
 		}),
+		// Configure metrics server port
+		reconciler.WithMetrics(":8083"),
 	)
 	if err != nil {
 		panic(fmt.Errorf("failed to create reconciler: %w", err))

@@ -11,6 +11,8 @@ package provider
 //   - CleanupPSMDB: Handle deletion cleanup
 
 import (
+	"context"
+	"errors"
 	"fmt"
 
 	"github.com/AlekSi/pointer"
@@ -18,11 +20,17 @@ import (
 	sdk "github.com/openeverest/provider-sdk/pkg/controller"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/runtime"
+	k8stypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	types "github.com/openeverest/provider-sdk/examples/psmdb/types"
+	everestv1alpha1 "github.com/percona/everest-operator/api/everest/v1alpha1"
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 )
 
@@ -89,7 +97,7 @@ func defaultSpec() psmdbv1.PerconaServerMongoDBSpec {
 		},
 		VolumeExpansionEnabled: true,
 		// FIXME
-		CRVersion: "1.21.1",
+		CRVersion: "1.21.2",
 	}
 }
 
@@ -236,6 +244,10 @@ func configureMongos(c *sdk.Context) *psmdbv1.MongosSpec {
 }
 
 func configureBackup(c *sdk.Context) psmdbv1.BackupSpec {
+	// ds := c.DB()
+	ctx := c.Context()
+	cl := c.Client()
+
 	// TODO: Implement proper backup configuration
 	var backupImage string
 	if metadata := c.Metadata(); metadata != nil {
@@ -244,10 +256,13 @@ func configureBackup(c *sdk.Context) psmdbv1.BackupSpec {
 		backupImage = PSMDBMetadata().GetDefaultImage("backup")
 	}
 
-	return psmdbv1.BackupSpec{
+	emptySpec := psmdbv1.BackupSpec{Enabled: false}
+	backupSpec := psmdbv1.BackupSpec{
 		Enabled: true,
 		Image:   backupImage,
 		PITR: psmdbv1.PITRSpec{
+			// FIXME
+			// Enabled: database.Spec.Backup.PITR.Enabled,
 			Enabled: false,
 		},
 		Configuration: psmdbv1.BackupConfig{
@@ -263,6 +278,201 @@ func configureBackup(c *sdk.Context) psmdbv1.BackupSpec {
 			},
 		},
 	}
+
+	storages := make(map[string]psmdbv1.BackupStorageSpec)
+
+	// FIXME: move ".spec.sourceClusterName" to consts
+	// TODO: filter by backup tool name
+	// List BackupJob objects for this datastore
+	backupList, err := backupJobsThatReferenceObject(ctx, cl, ".spec.sourceClusterName", c.Namespace(), c.Name())
+	if err != nil {
+		fmt.Println("Error listing BackupJob objects:", err)
+		// return emptySpec, err
+		return emptySpec
+	}
+	// Add the storages used by the BackupJob objects
+	if err := addBackupStoragesByBackupJobs(c, backupList, storages); err != nil {
+		fmt.Println("Error adding backup storages by BackupJob objects:", err)
+		// return emptySpec, err
+		return emptySpec
+	}
+
+	// TODO: add storages used by restores
+	// List DatabaseClusterRestore objects for this datastore
+	// restoreList, err := common.DatabaseClusterRestoresThatReferenceObject(ctx, cl, consts.DBClusterRestoreDBClusterNameField, c.Namespace(), c.Name())
+	// if err != nil {
+	// 	return emptySpec, err
+	// }
+	// Add the storages used by restores.
+	// if err := p.addBackupStoragesByRestores(restoreList, storages); err != nil {
+	// 	return emptySpec, err
+	// }
+
+	// TODO: Implement backup tasks based on schedules
+	// If there are no schedules, just return the storages used in
+	// DatabaseClusterBackup objects
+	// if len(ds.Spec.Backup.Schedules) == 0 {
+	storages, err = withMarkedAsMain(storages)
+	if err != nil {
+		fmt.Println("Error marking storages as main:", err)
+		// return emptySpec, err
+		return emptySpec
+	}
+	// TODO: Check if it's correct to return backupSpec instead of emptySpec if
+	// there are no storages. This is how it was implemented in the
+	// everest-operator but I'm not sure if it's correct. Maybe returning
+	// emptySpec that has Enabled: false is more correct.
+	backupSpec.Storages = storages
+	// return backupSpec, nil
+	return backupSpec
+	// }
+
+	// tasks, err := p.getBackupTasks(storages)
+	// if err != nil {
+	// 	return emptySpec, err
+	// }
+
+	// if ds.Spec.Backup.PITR.Enabled {
+	// 	interval := ds.Spec.Backup.PITR.UploadIntervalSec
+	// 	if interval != nil {
+	// 		// the integer amount of minutes. default 10
+	// 		intervalMinutes := *interval / int(time.Minute.Seconds())
+	// 		psmdbBackupSpec.PITR.OplogSpanMin = numstr.NumberString(strconv.Itoa(intervalMinutes))
+	// 	}
+	// }
+
+	// storages, err = withMarkedAsMain(storages)
+	// if err != nil {
+	// 	return emptySpec, err
+	// }
+
+	// backupSpec.Storages = storages
+	// backupSpec.Tasks = tasks
+
+	// return backupSpec
+}
+
+func backupJobsThatReferenceObject(
+	ctx context.Context,
+	c client.Client,
+	keyPath, namespace, keyValue string,
+) (*v2alpha1.BackupJobList, error) {
+	attachedList := &v2alpha1.BackupJobList{}
+	err := findObjectsThatReferenceObject(ctx, c, attachedList, keyPath, namespace, keyValue)
+	return attachedList, err
+}
+
+func findObjectsThatReferenceObject(ctx context.Context, c client.Client, objList client.ObjectList, keyPath, namespace, keyValue string) error {
+	listOpts := &client.ListOptions{
+		FieldSelector: fields.OneTermEqualSelector(keyPath, keyValue),
+		Namespace:     namespace,
+	}
+	return c.List(ctx, objList, listOpts)
+}
+
+// Add the storages used by the BackupJob objects.
+func addBackupStoragesByBackupJobs(
+	c *sdk.Context,
+	backupList *v2alpha1.BackupJobList,
+	storages map[string]psmdbv1.BackupStorageSpec,
+) error {
+	ds := c.DB()
+	ctx := c.Context()
+	cl := c.Client()
+
+	for _, backup := range backupList.Items {
+		// TODO: handle other destinations other than just BackupStorageName
+		if backup.Spec.Destination == nil || backup.Spec.Destination.BackupStorageName == nil {
+			continue
+		}
+
+		backupStorageName := *backup.Spec.Destination.BackupStorageName
+
+		// Check if we already fetched that backup storage
+		if _, ok := storages[backupStorageName]; ok {
+			continue
+		}
+
+		backupStorage, err := getBackupStorage(ctx, cl, backupStorageName, c.Namespace())
+		if err != nil {
+			return err
+		}
+
+		// configures the storage for S3.
+		handleStorageS3 := func() {
+			storages[backupStorageName] = psmdbv1.BackupStorageSpec{
+				Type: psmdbv1.BackupStorageS3,
+				S3: psmdbv1.BackupStorageS3Spec{
+					Bucket:                backupStorage.Spec.Bucket,
+					CredentialsSecret:     backupStorage.Spec.CredentialsSecretName,
+					Region:                backupStorage.Spec.Region,
+					EndpointURL:           backupStorage.Spec.EndpointURL,
+					Prefix:                backupStoragePrefix(ds),
+					InsecureSkipTLSVerify: !pointer.Get(backupStorage.Spec.VerifyTLS),
+				},
+			}
+		}
+		// configures the storage for Azure.
+		handleStorageAzure := func() {
+			storages[backupStorageName] = psmdbv1.BackupStorageSpec{
+				Type: psmdbv1.BackupStorageAzure,
+				Azure: psmdbv1.BackupStorageAzureSpec{
+					Container:         backupStorage.Spec.Bucket,
+					Prefix:            backupStoragePrefix(ds),
+					CredentialsSecret: backupStorage.Spec.CredentialsSecretName,
+				},
+			}
+		}
+
+		switch backupStorage.Spec.Type {
+		case everestv1alpha1.BackupStorageTypeS3:
+			handleStorageS3()
+		case everestv1alpha1.BackupStorageTypeAzure:
+			handleStorageAzure()
+		default:
+			return fmt.Errorf("unsupported backup storage type %s for %s", backupStorage.Spec.Type, backupStorage.Name)
+		}
+	}
+	return nil
+}
+
+// TODO: Move to provider-sdk
+// getBackupStorage returns a BackupStorage object
+// with the specified name and namespace.
+func getBackupStorage(
+	ctx context.Context,
+	c client.Client,
+	name, namespace string,
+) (*everestv1alpha1.BackupStorage, error) {
+	backupStorage := &everestv1alpha1.BackupStorage{}
+	key := k8stypes.NamespacedName{Name: name, Namespace: namespace}
+	if err := c.Get(ctx, key, backupStorage); err != nil {
+		return nil,
+			fmt.Errorf("failed to get backup storage '%s': %w", name, err)
+	}
+	return backupStorage, nil
+}
+
+// backupStoragePrefix returns the prefix for the backup storage.
+func backupStoragePrefix(ds *v2alpha1.DataStore) string {
+	return fmt.Sprintf("%s/%s", ds.Name, ds.UID)
+}
+
+// FIXME: is it okay to define it here?
+var ErrPSMDBOneStorageRestriction = errors.New("using more than one storage is not allowed for psmdb clusters")
+
+func withMarkedAsMain(storages map[string]psmdbv1.BackupStorageSpec) (map[string]psmdbv1.BackupStorageSpec, error) {
+	if len(storages) > 1 {
+		return nil, ErrPSMDBOneStorageRestriction
+		// return nil, common.ErrPSMDBOneStorageRestriction
+	}
+	for key, storage := range storages {
+		// mark the first and the single one as Main
+		storage.Main = true
+		storages[key] = storage
+		return storages, nil
+	}
+	return storages, nil
 }
 
 // SyncPSMDB ensures all PSMDB resources exist and are configured correctly.
@@ -446,16 +656,46 @@ func NewPSMDBProviderInterface() *PSMDBProvider {
 			ProviderName: "psmdb",
 			SchemeFuncs: []func(*runtime.Scheme) error{
 				psmdbv1.SchemeBuilder.AddToScheme,
+				v2alpha1.AddToScheme,
+				everestv1alpha1.AddToScheme,
 			},
-			Owned: []client.Object{
-				&psmdbv1.PerconaServerMongoDB{},
+			WatchConfigs: []sdk.WatchConfig{
+				// Watch owned PSMDB resources - only trigger on spec changes
+				// FIXME: do we need some predicate? The
+				// GenerationChangedPredicate definitely isn't correct because
+				// we need to be notified when the status changes so we can
+				// update the DataStore status.
+				// sdk.WatchOwned(&psmdbv1.PerconaServerMongoDB{},
+				// 	predicate.GenerationChangedPredicate{}),
+				sdk.WatchOwned(&psmdbv1.PerconaServerMongoDB{}),
+
+				// Watch BackupJob resources - when a backup job changes, reconcile the referenced DataStore
+				// This ensures the PSMDB backup configuration is updated when backup jobs are created/deleted
+				sdk.WatchExternal(&v2alpha1.BackupJob{},
+					handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {
+						backupJob, ok := obj.(*v2alpha1.BackupJob)
+						if !ok {
+							return nil
+						}
+						// BackupJob references the source cluster in .spec.sourceClusterName
+						if backupJob.Spec.SourceClusterName == "" {
+							return nil
+						}
+						return []reconcile.Request{{
+							NamespacedName: k8stypes.NamespacedName{
+								Name:      backupJob.Spec.SourceClusterName,
+								Namespace: obj.GetNamespace(),
+							},
+						}}
+					}),
+					predicate.ResourceVersionChangedPredicate{}),
 			},
 			Metadata: PSMDBMetadata(),
 		},
 	}
 }
 
-// Interface implementation - delegates to shared functions in psmdb_impl.go
+// Interface implementation
 
 func (p *PSMDBProvider) Validate(c *sdk.Context) error {
 	return ValidatePSMDB(c)
@@ -477,6 +717,8 @@ func (p *PSMDBProvider) Cleanup(c *sdk.Context) error {
 var _ sdk.ProviderInterface = (*PSMDBProvider)(nil)
 var _ sdk.MetadataProvider = (*PSMDBProvider)(nil)
 var _ sdk.SchemaProvider = (*PSMDBProvider)(nil)
+var _ sdk.WatchProvider = (*PSMDBProvider)(nil)
+var _ sdk.FieldIndexProvider = (*PSMDBProvider)(nil)
 
 // SchemaProvider implementation for OpenAPI schema generation
 
@@ -496,4 +738,21 @@ func (p *PSMDBProvider) Topologies() map[string]sdk.TopologyDefinition {
 
 func (p *PSMDBProvider) GlobalSchema() interface{} {
 	return &types.GlobalConfig{}
+}
+
+// FieldIndexProvider implementation for efficient querying
+
+func (p *PSMDBProvider) FieldIndexes() []sdk.FieldIndex {
+	return []sdk.FieldIndex{
+		{
+			Object:    &v2alpha1.BackupJob{},
+			FieldPath: ".spec.sourceClusterName",
+			Extractor: func(obj client.Object) []string {
+				if bj, ok := obj.(*v2alpha1.BackupJob); ok && bj.Spec.SourceClusterName != "" {
+					return []string{bj.Spec.SourceClusterName}
+				}
+				return nil
+			},
+		},
+	}
 }

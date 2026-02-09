@@ -1,0 +1,52 @@
+apiVersion: everest.percona.com/v2alpha1
+kind: BackupTool
+metadata:
+  name: everest-percona-psmdb-operator
+spec:
+  displayName: "Percona PSMDB Operator Backup Tool"
+  description: |
+    Backup tool for taking logical backups using the Percona PSMDB Operator.
+  supportedProviders:
+  - psmdb
+  jobSpec:
+    image: "recharte/psmdb-backup-tool:latest"
+    command: ["/backup-tool", "backup"]
+  cleanupJobSpec:
+    image: "recharte/psmdb-backup-tool:latest"
+    command: ["/backup-tool", "cleanup"]
+  permissions:
+  - apiGroups:
+    - everest.percona.com
+    resources:
+    - backupstorages
+    - datastores
+    - backupjobs
+    verbs:
+    - get
+  - apiGroups:
+    - ""
+    resources:
+    - pods
+    verbs:
+    - get
+  - apiGroups:
+    - "batch"
+    resources:
+    - jobs
+    verbs:
+    - get
+  - apiGroups:
+    - "psmdb.percona.com"
+    resources:
+    - perconaservermongodbs
+    verbs:
+    - get
+  - apiGroups:
+    - "psmdb.percona.com"
+    resources:
+    - perconaservermongodbbackups
+    verbs:
+    - get
+    - create
+    - update
+
