@@ -25,6 +25,7 @@ spec:
       type: pmm
       version: 2.44.1
       customSpec:
+        enabled: true
         serverHost: localhost-mc-psmdb
         secretRef:
           name: mc-psmdb-secret

@@ -50,8 +50,11 @@ type MongosCustomSpec struct{}
 // This allows users to configure PMM as a monitoring solution for PSMDB.
 // +k8s:openapi-gen=true
 type PMMCustomSpec struct {
+	// Enabled indicates whether PMM monitoring is enabled.
+	Enabled *bool `json:"enabled,omitempty"`
+
 	// ServerHost specifies the hostname/IP of the PMM server.
-	ServerHost string `json:"serverHost,omitempty"`
+	ServerHost *string `json:"serverHost,omitempty"`
 
 	// SecretRef references a Kubernetes Secret containing PMM credentials.
 	SecretRef *PMMSecretRef `json:"secretRef,omitempty"`

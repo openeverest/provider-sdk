@@ -8,7 +8,7 @@ collectors:
 
   # - command: kubectl get db/psmdb-mc -n ${NAMESPACE} -o yaml
   - command: kubectl get dst/psmdb-mc -n ${NAMESPACE} -o yaml
-  # - command: kubectl get psmdb/psmdb-mc -n ${NAMESPACE} -o yaml
+  - command: kubectl get psmdb/psmdb-mc -n ${NAMESPACE} -o yaml
   # - command: kubectl get secret/everest-secrets-psmdb-mc -n ${NAMESPACE} -o yaml
 
   # - command: kubectl get deploy/everest-controller-manager -n everest-system -o yaml
@@ -29,10 +29,10 @@ resourceRefs:
     kind: DataStore
     name: psmdb-mc
     ref: dst
-  # - apiVersion: psmdb.percona.com/v1
-  #   kind: PerconaServerMongoDB
-  #   name: psmdb-mc
-  #   ref: psmdb
+  - apiVersion: psmdb.percona.com/v1
+    kind: PerconaServerMongoDB
+    name: psmdb-mc
+    ref: psmdb
   # - apiVersion: operator.victoriametrics.com/v1beta1
   #   kind: VMAgent
   #   name: everest-monitoring
@@ -51,17 +51,17 @@ assertAll:
   # - celExpr: "!has(db.spec.monitoring.monitoringConfigName)"
   #   message: "db.spec.monitoring.monitoringConfigName is not empty"
 
-  # - celExpr: "!has(psmdb.spec.pmm.enabled)"
-  #   message: "psmdb.spec.pmm.enabled is not empty"
+  - celExpr: "!has(psmdb.spec.pmm.enabled)"
+    message: "psmdb.spec.pmm.enabled is not empty"
 
-  # - celExpr: "!has(psmdb.spec.pmm.serverHost)"
-  #   message: "psmdb.spec.pmm.serverHost is not empty"
+  - celExpr: "!has(psmdb.spec.pmm.serverHost)"
+    message: "psmdb.spec.pmm.serverHost is not empty"
 
-  # - celExpr: "!has(psmdb.spec.pmm.resources.limits)"
-  #   message: "psmdb.spec.pmm.resources.limits is not empty"
+  - celExpr: "!has(psmdb.spec.pmm.resources.limits)"
+    message: "psmdb.spec.pmm.resources.limits is not empty"
 
-  # - celExpr: "!has(psmdb.spec.pmm.resources.requests)"
-  #   message: "psmdb.spec.pmm.resources.requests is not empty"
+  - celExpr: "!has(psmdb.spec.pmm.resources.requests)"
+    message: "psmdb.spec.pmm.resources.requests is not empty"
 
   # - celExpr: "has(vmagent.spec.remoteWrite)"
   #   message: "vmagent doesn't have .spec.remoteWrite"
@@ -110,14 +110,14 @@ assertAll:
 # type: Opaque
 # data:
 #   apiKey: YXNkZmcxMjM=
-# ---
-# apiVersion: psmdb.percona.com/v1
-# kind: PerconaServerMongoDB
-# metadata:
-#   name: psmdb-mc
-# spec:
-#   secrets:
-#     users: everest-secrets-psmdb-mc
+---
+apiVersion: psmdb.percona.com/v1
+kind: PerconaServerMongoDB
+metadata:
+  name: psmdb-mc
+spec:
+  secrets:
+    users: everest-secrets-psmdb-mc
 # ---
 # apiVersion: v1
 # kind: Secret

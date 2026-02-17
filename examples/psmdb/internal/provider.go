@@ -280,9 +280,18 @@ func configureMonitoring(c *sdk.Context, psmdb *psmdbv1.PerconaServerMongoDBSpec
 		return nil, err
 	}
 
-	pmmSpec := &psmdbv1.PMMSpec{
-		Enabled:    true,
-		ServerHost: spec.ServerHost,
+	pmmSpec := new(psmdbv1.PMMSpec)
+
+	if spec.Enabled != nil {
+		pmmSpec.Enabled = *spec.Enabled
+	}
+
+	if !pmmSpec.Enabled {
+		return pmmSpec, nil
+	}
+
+	if spec.ServerHost != nil {
+		pmmSpec.ServerHost = *spec.ServerHost
 	}
 
 	if spec.SecretRef != nil && spec.SecretRef.Name != "" {
