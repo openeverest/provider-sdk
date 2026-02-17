@@ -1,0 +1,122 @@
+apiVersion: everest.percona.com/v2alpha1
+kind: DataStore
+metadata:
+  name: psmdb-exporter
+  namespace: default
+spec:
+  # Provider identifier
+  provider: psmdb
+
+  # Topology is optional - will use provider's default (typically "replicaset")
+  # If omitted, the provider determines the default topology
+
+  # Components with smart defaults
+  components:
+    # Engine is the only required component for default topology
+    engine:
+      type: mongod
+      # Version is optional - will use default from provider metadata
+      # version: 8.0.8-3
+      replicas: 3
+      storage:
+        size: 10Gi
+
+    # Optional: backup agent
+    backupAgent:
+      type: backup
+      # version: 2.9.1
+      replicas: 1
+
+    # Optional: metrics exporter
+    metrics:
+      type: exporter
+      customSpec:
+        enabled: true
+      # version: 0.47.2
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: prometheus
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: prometheus
+rules:
+- apiGroups: [""]
+  resources:
+  - nodes
+  - nodes/metrics
+  - services
+  - endpoints
+  - pods
+  verbs: ["get", "list", "watch"]
+- apiGroups: [""]
+  resources:
+  - configmaps
+  verbs: ["get"]
+- apiGroups:
+  - discovery.k8s.io
+  resources:
+  - endpointslices
+  verbs: ["get", "list", "watch"]
+- apiGroups:
+  - networking.k8s.io
+  resources:
+  - ingresses
+  verbs: ["get", "list", "watch"]
+- nonResourceURLs: ["/metrics"]
+  verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: prometheus
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: prometheus
+subjects:
+- kind: ServiceAccount
+  name: prometheus
+  namespace: default
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: psmdb-exporter-scrape-config
+  namespace: default
+type: Opaque
+stringData:
+  scrape-config.yaml: |
+    - job_name: 'psmdb-exporter'
+      kubernetes_sd_configs:
+      - role: pod
+        namespaces:
+          names:
+          - default
+      relabel_configs:
+      - source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_managed_by]
+        action: keep
+        regex: percona-server-mongodb-operator
+      - source_labels: [__address__]
+        action: replace
+        regex: ([^:]+)(?::\d+)?
+        replacement: ${1}:9216
+        target_label: __address__
+      - source_labels: [__meta_kubernetes_pod_name]
+        action: replace
+        target_label: pod
+      metrics_path: /metrics
+---
+apiVersion: monitoring.coreos.com/v1
+kind: Prometheus
+metadata:
+  name: prometheus
+spec:
+  serviceAccountName: prometheus
+  additionalScrapeConfigs:
+    name: psmdb-exporter-scrape-config
+    key: scrape-config.yaml
+---
