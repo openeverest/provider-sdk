@@ -54,7 +54,10 @@ type PMMCustomSpec struct{}
 // =============================================================================
 
 // ExporterSpec defines custom configuration for MongoDB Exporter sidecar.
-type ExporterSpec struct{}
+type ExporterSpec struct {
+	// Enabled indicates whether the exporter should be deployed.
+	Enabled bool `json:"enabled,omitempty"`
+}
 
 // =============================================================================
 // BACKUP COMPONENT SPEC

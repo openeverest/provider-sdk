@@ -269,9 +269,24 @@ func configureBackup(c *sdk.Context) psmdbv1.BackupSpec {
 
 // configureExporter creates a sidecar container configuration for MongoDB Exporter.
 // It exposes metrics on localhost:9216/metrics.
-func configureExporter(c *sdk.Context, secretName string) *corev1.Container {
-	if _, ok := c.DB().Spec.Components[ComponentMetrics]; !ok {
-		return nil
+// Returns nil if metrics component is not enabled or if customSpec.enabled is false.
+func configureExporter(c *sdk.Context, secretName string) (*corev1.Container, error) {
+	metricsComponent, ok := c.DB().Spec.Components[ComponentMetrics]
+	if !ok {
+		return nil, nil
+	}
+
+	// Check if the metrics component has a CustomSpec with Enabled field
+	if metricsComponent.CustomSpec != nil && metricsComponent.CustomSpec.Raw != nil {
+		var spec types.ExporterSpec
+		if err := c.DecodeComponentCustomSpec(metricsComponent, &spec); err != nil {
+			return nil, fmt.Errorf("failed to decode custom spec for metrics component: %w", err)
+		}
+
+		// TODO handle disabled
+		if !spec.Enabled {
+			return nil, nil
+		}
 	}
 
 	// Use the image from the component spec if provided, otherwise use default
@@ -323,7 +338,7 @@ func configureExporter(c *sdk.Context, secretName string) *corev1.Container {
 				Value: "mongodb://$(MONGODB_USER):$(MONGODB_PASSWORD)@$(POD_NAME)",
 			},
 		},
-	}
+	}, nil
 }
 
 // SyncPSMDB ensures all PSMDB resources exist and are configured correctly.
@@ -368,7 +383,12 @@ func SyncPSMDB(c *sdk.Context) error {
 	}
 
 	// attaches the MongoDB exporter sidecar to replsets, if enabled.
-	if sidecar := configureExporter(c, psmdb.Spec.Secrets.Users); sidecar != nil {
+	sidecar, err := configureExporter(c, psmdb.Spec.Secrets.Users)
+	if err != nil {
+		fmt.Printf("Error configuring exporter: %v\n", err)
+	}
+
+	if sidecar != nil {
 		for _, replset := range psmdb.Spec.Replsets {
 			if replset == nil {
 				continue
