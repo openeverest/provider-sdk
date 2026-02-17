@@ -80,6 +80,16 @@ kubectl get psmdb
 kubectl get datastore
 ```
 
+### Monitor a datastore with Prometheus
+
+```bash
+kubectl apply --server-side -f https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/v0.89.0/bundle.yaml
+```
+
+```bash
+kubectl apply -f datastore-exporter.yaml
+```
+
 ## 📖 Understanding the Code
 
 ### Business Logic (`internal/provider.go`)
