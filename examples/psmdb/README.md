@@ -80,6 +80,10 @@ kubectl get psmdb
 kubectl get datastore
 ```
 
+```bash
+   kubectl apply -f https://raw.githubusercontent.com/openeverest/openeverest-operator/v1.13.0/bundle/manifests/everest.percona.com_monitoringconfigs.yaml
+```
+
 ## 📖 Understanding the Code
 
 ### Business Logic (`internal/provider.go`)

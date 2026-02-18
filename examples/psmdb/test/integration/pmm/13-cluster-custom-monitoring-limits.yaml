@@ -32,3 +32,5 @@ spec:
         limits:
           memory: 1G
           cpu: 1
+      customSpec:
+        monitoringConfigName: mc-psmdb

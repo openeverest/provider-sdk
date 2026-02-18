@@ -12,6 +12,7 @@ package provider
 
 import (
 	"fmt"
+	"net/url"
 
 	"github.com/AlekSi/pointer"
 	"github.com/openeverest/provider-sdk/pkg/apis/v2alpha1"
@@ -23,6 +24,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	types "github.com/openeverest/provider-sdk/examples/psmdb/types"
+	everestv1alpha1 "github.com/percona/everest-operator/api/everest/v1alpha1"
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 )
 
@@ -266,13 +268,12 @@ func configureBackup(c *sdk.Context) psmdbv1.BackupSpec {
 }
 
 // configurePMMMonitoring creates the PMM spec configuration for PSMDB.
-// Returns the PMMSpec and the secret name containing PMM credentials.
+// Returns nil if no update is needed or the monitoring component is not defined in the DataStore spec.
 func configureMonitoring(c *sdk.Context, psmdb *psmdbv1.PerconaServerMongoDBSpec, usersSecretName string) (*psmdbv1.PMMSpec, error) {
 	monitoring, ok := c.DB().Spec.Components[ComponentMonitoring]
 	if !ok {
-		return &psmdbv1.PMMSpec{
-			Enabled: false,
-		}, nil
+		// do not update if monitoring component is not specified
+		return nil, nil
 	}
 
 	var spec types.PMMCustomSpec
@@ -280,31 +281,45 @@ func configureMonitoring(c *sdk.Context, psmdb *psmdbv1.PerconaServerMongoDBSpec
 		return nil, err
 	}
 
-	pmmSpec := new(psmdbv1.PMMSpec)
-
-	if spec.Enabled != nil {
-		pmmSpec.Enabled = *spec.Enabled
+	// do not update if monitoring config name key is not specified
+	if spec.MonitoringConfigName == nil {
+		return nil, nil
 	}
 
-	if !pmmSpec.Enabled {
-		return pmmSpec, nil
+	// if monitoring config name is specified but empty, disable monitoring
+	if *spec.MonitoringConfigName == "" {
+		return &psmdbv1.PMMSpec{
+			Enabled: false,
+		}, nil
 	}
 
-	if spec.ServerHost != nil {
-		pmmSpec.ServerHost = *spec.ServerHost
+	pmmSpec := &psmdbv1.PMMSpec{
+		Enabled: true,
 	}
 
-	if spec.SecretRef != nil && spec.SecretRef.Name != "" {
-		if err := applyPMMTokenToUserSecrets(c, usersSecretName, spec.SecretRef.Name); err != nil {
-			return nil, fmt.Errorf("failed to apply PMM token to user secrets: %w", err)
-		}
+	var monitoringConfig = &everestv1alpha1.MonitoringConfig{}
+	if err := c.Get(monitoringConfig, *spec.MonitoringConfigName); err != nil {
+		return nil, fmt.Errorf("failed to get monitoring config %s: %w", *spec.MonitoringConfigName, err)
 	}
 
-	if metadata := c.Metadata(); metadata != nil {
-		pmmSpec.Image = metadata.GetDefaultImage(ComponentTypePMM)
-	} else {
-		pmmSpec.Image = PSMDBMetadata().GetDefaultImage(ComponentTypePMM)
+	u, err := url.Parse(monitoringConfig.Spec.PMM.URL)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse PMM URL %s: %w", monitoringConfig.Spec.PMM.URL, err)
 	}
+
+	pmmSpec.ServerHost = u.Host
+	if err := applyPMMTokenToUserSecrets(c, usersSecretName, monitoringConfig.Spec.CredentialsSecretName); err != nil {
+		return nil, fmt.Errorf("failed to apply PMM token from monitoring config to user secrets: %w", err)
+	}
+
+	// Uses the image specified in the monitoring config, or provider images?
+	pmmSpec.Image = monitoringConfig.Spec.PMM.Image
+
+	// if metadata := c.Metadata(); metadata != nil {
+	// 	pmmSpec.Image = metadata.GetDefaultImage(ComponentTypePMM)
+	// } else {
+	// 	pmmSpec.Image = PSMDBMetadata().GetDefaultImage(ComponentTypePMM)
+	// }
 
 	pmmSpec.Resources = getPMMResources(c, psmdb)
 
@@ -323,7 +338,6 @@ func applyPMMTokenToUserSecrets(c *sdk.Context, usersSecretName, pmmSecretName s
 		// If the secret doesn't exist, create it
 		usersSecret = &corev1.Secret{
 			ObjectMeta: c.ObjectMeta(usersSecretName),
-			Data:       make(map[string][]byte),
 		}
 	}
 
@@ -331,6 +345,7 @@ func applyPMMTokenToUserSecrets(c *sdk.Context, usersSecretName, pmmSecretName s
 		if usersSecret.Data == nil {
 			usersSecret.Data = make(map[string][]byte)
 		}
+
 		usersSecret.Data["PMM_SERVER_TOKEN"] = apiKey
 	}
 
@@ -377,7 +392,9 @@ func SyncPSMDB(c *sdk.Context) error {
 	pmmSpec, err := configureMonitoring(c, &psmdb.Spec, usersSecretName)
 	if err != nil {
 		fmt.Printf("Warning: Failed to configure monitoring: %v\n", err)
-	} else {
+	}
+
+	if pmmSpec != nil {
 		psmdb.Spec.PMM = *pmmSpec
 	}
 

@@ -21,11 +21,9 @@ metadata:
 spec:
   components:
     monitoring:
-      type: pmm
-      version: 2.44.1
       resources:
         requests:
           memory: 335Mi
           cpu: 335m
       customSpec:
-        enabled: true
+        monitoringConfigName: mc-psmdb

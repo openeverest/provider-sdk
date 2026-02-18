@@ -2,14 +2,14 @@ apiVersion: kuttl.dev/v1
 kind: TestAssert
 timeout: 30
 collectors:
-  # - command: kubectl get monitoringconfig/mc-psmdb -n ${NAMESPACE} -o yaml
-  # - command: kubectl get secret/mc-psmdb-secret -n ${NAMESPACE} -o yaml
+  - command: kubectl get monitoringconfig/mc-psmdb -n ${NAMESPACE} -o yaml
+  - command: kubectl get secret/mc-psmdb-secret -n ${NAMESPACE} -o yaml
   # - command: kubectl get vmagent/everest-monitoring -n everest-monitoring -o yaml
 
   # - command: kubectl get db/psmdb-mc -n ${NAMESPACE} -o yaml
   - command: kubectl get dst/psmdb-mc -n ${NAMESPACE} -o yaml
   - command: kubectl get psmdb/psmdb-mc -n ${NAMESPACE} -o yaml
-  # - command: kubectl get secret/everest-secrets-psmdb-mc -n ${NAMESPACE} -o yaml
+  - command: kubectl get secret/everest-secrets-psmdb-mc -n ${NAMESPACE} -o yaml
 
   # - command: kubectl get deploy/everest-controller-manager -n everest-system -o yaml
   # - type: pod
@@ -17,10 +17,10 @@ collectors:
   #   selector: control-plane=controller-manager
   #   tail: 100
 resourceRefs:
-  # - apiVersion: everest.percona.com/v1alpha1
-  #   kind: MonitoringConfig
-  #   name: mc-psmdb
-  #   ref: mc
+  - apiVersion: everest.percona.com/v1alpha1
+    kind: MonitoringConfig
+    name: mc-psmdb
+    ref: mc
   # - apiVersion: operator.victoriametrics.com/v1beta1
   #   kind: VMAgent
   #   name: everest-monitoring
@@ -48,34 +48,34 @@ assertAll:
 
   # - celExpr: "vmagent.spec.remoteWrite.exists(i, i.url == 'http://localhost-mc-psmdb/victoriametrics/api/v1/write')"
   #   message: "vmagent.spec.remoteWrite does not contain url 'http://localhost-mc-psmdb/victoriametrics/api/v1/write'"
-# ---
-# apiVersion: everest.percona.com/v1alpha1
-# kind: MonitoringConfig
-# metadata:
-#   name: mc-psmdb
-# spec:
-#   type: pmm
-#   credentialsSecretName: mc-psmdb-secret
-#   verifyTLS: false
-#   pmm:
-#     url: http://localhost-mc-psmdb
-#     image: percona/pmm-client:latest
+---
+apiVersion: everest.percona.com/v1alpha1
+kind: MonitoringConfig
+metadata:
+  name: mc-psmdb
+spec:
+  type: pmm
+  credentialsSecretName: mc-psmdb-secret
+  verifyTLS: false
+  pmm:
+    url: http://localhost-mc-psmdb
+    image: percona/pmm-client:latest
 # status:
 #   inUse: true
-# ---
-# apiVersion: v1
-# kind: Secret
-# metadata:
-#   name: mc-psmdb-secret
-#   ownerReferences:
-#     - apiVersion: everest.percona.com/v1alpha1
-#       blockOwnerDeletion: true
-#       controller: true
-#       kind: MonitoringConfig
-#       name: mc-psmdb
-# type: Opaque
-# data:
-#   apiKey: YWJjZGVm
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: mc-psmdb-secret
+  # ownerReferences:
+  #   - apiVersion: everest.percona.com/v1alpha1
+  #     blockOwnerDeletion: true
+  #     controller: true
+  #     kind: MonitoringConfig
+  #     name: mc-psmdb
+type: Opaque
+data:
+  apiKey: YWJjZGVm
 # ---
 # apiVersion: everest.percona.com/v1alpha1
 # kind: DatabaseCluster
@@ -92,6 +92,23 @@ assertAll:
 #         cpu: 330m
 #         memory: 220M
 ---
+apiVersion: everest.percona.com/v2alpha1
+kind: DataStore
+metadata:
+  name: psmdb-mc
+spec:
+  components:
+    monitoring:
+      resources:
+        requests:
+          cpu: 220m
+          memory: 330M
+        limits:
+          cpu: 330m
+          memory: 220M
+      customSpec:
+        monitoringConfigName: mc-psmdb
+---
 apiVersion: psmdb.percona.com/v1
 kind: PerconaServerMongoDB
 metadata:
@@ -100,8 +117,7 @@ spec:
   pmm:
     enabled: true
     serverHost: localhost-mc-psmdb
-    # image: percona/pmm-client:latest
-    image: percona/pmm-client:2.44.1
+    image: percona/pmm-client:latest
     resources:
       requests:
         cpu: 220m
@@ -111,14 +127,14 @@ spec:
         memory: 220M
   secrets:
     users: everest-secrets-psmdb-mc
-# ---
-# apiVersion: v1
-# kind: Secret
-# metadata:
-#   name: everest-secrets-psmdb-mc
-# type: Opaque
-# data:
-#   PMM_SERVER_TOKEN: YWJjZGVm
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: everest-secrets-psmdb-mc
+type: Opaque
+data:
+  PMM_SERVER_TOKEN: YWJjZGVm
 # ---
 # apiVersion: operator.victoriametrics.com/v1beta1
 # kind: VMAgent

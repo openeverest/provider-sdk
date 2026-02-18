@@ -10,7 +10,7 @@ spec:
   provider: psmdb
   components:
     engine:
-      type: mongod
+      type: mongos
       replicas: 3
       storage:
         size: 4Gi
@@ -19,16 +19,13 @@ spec:
           cpu: 300m
           memory: 500M
     proxy:
-      type: mongod
+      type: mongos
       replicas: 1
     monitoring:
       type: pmm
       version: 2.44.1
       customSpec:
-        enabled: true
-        serverHost: localhost-mc-psmdb
-        secretRef:
-          name: mc-psmdb-secret
+        monitoringConfigName: mc-psmdb
 # ---
 # apiVersion: everest.percona.com/v1alpha1
 # kind: DatabaseCluster

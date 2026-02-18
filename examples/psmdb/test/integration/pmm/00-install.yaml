@@ -14,15 +14,15 @@ metadata:
 type: Opaque
 data:
   apiKey: YWJjZGVm
-# ---
-# apiVersion: everest.percona.com/v1alpha1
-# kind: MonitoringConfig
-# metadata:
-#   name: mc-psmdb
-# spec:
-#   type: pmm
-#   credentialsSecretName: mc-psmdb-secret
-#   verifyTLS: false
-#   pmm:
-#     url: http://localhost-mc-psmdb
-#     image: percona/pmm-client:latest
+---
+apiVersion: everest.percona.com/v1alpha1
+kind: MonitoringConfig
+metadata:
+  name: mc-psmdb
+spec:
+  type: pmm
+  credentialsSecretName: mc-psmdb-secret
+  verifyTLS: false
+  pmm:
+    url: http://localhost-mc-psmdb
+    image: percona/pmm-client:latest

@@ -2,14 +2,14 @@ apiVersion: kuttl.dev/v1
 kind: TestAssert
 timeout: 30
 collectors:
-  # - command: kubectl get monitoringconfig/mc-psmdb -n ${NAMESPACE} -o yaml
-  # - command: kubectl get secret/mc-psmdb-secret -n ${NAMESPACE} -o yaml
+  - command: kubectl get monitoringconfig/mc-psmdb -n ${NAMESPACE} -o yaml
+  - command: kubectl get secret/mc-psmdb-secret -n ${NAMESPACE} -o yaml
   # - command: kubectl get vmagent/everest-monitoring -n everest-monitoring -o yaml
 
   # - command: kubectl get db/psmdb-mc -n ${NAMESPACE} -o yaml
   - command: kubectl get dst/psmdb-mc -n ${NAMESPACE} -o yaml
   - command: kubectl get psmdb/psmdb-mc -n ${NAMESPACE} -o yaml
-  # - command: kubectl get secret/everest-secrets-psmdb-mc -n ${NAMESPACE} -o yaml
+  - command: kubectl get secret/everest-secrets-psmdb-mc -n ${NAMESPACE} -o yaml
 
   # - command: kubectl get deploy/everest-controller-manager -n everest-system -o yaml
   # - type: pod
@@ -17,10 +17,10 @@ collectors:
   #   selector: control-plane=controller-manager
   #   tail: 100
 resourceRefs:
-  # - apiVersion: everest.percona.com/v1alpha1
-  #   kind: MonitoringConfig
-  #   name: mc-psmdb
-  #   ref: mc
+  - apiVersion: everest.percona.com/v1alpha1
+    kind: MonitoringConfig
+    name: mc-psmdb
+    ref: mc
   # - apiVersion: everest.percona.com/v1alpha1
   #   kind: DatabaseCluster
   #   name: psmdb-mc
@@ -82,18 +82,33 @@ assertAll:
 #       limits:
 #         memory: "128Mi"
 #         cpu: "500m"
-# ---
-# apiVersion: everest.percona.com/v1alpha1
-# kind: MonitoringConfig
-# metadata:
-#   name: mc-psmdb
-# spec:
-#   type: pmm
-#   credentialsSecretName: mc-psmdb-secret
-#   verifyTLS: false
-#   pmm:
-#     url: http://localhost-mc-psmdb-updated
-#     image: percona/pmm-client:updated
+---
+apiVersion: everest.percona.com/v2alpha1
+kind: DataStore
+metadata:
+  name: psmdb-mc
+spec:
+  components:
+    monitoring:
+      resources:
+        requests:
+          memory: "64Mi"
+          cpu: "250m"
+        limits:
+          memory: "128Mi"
+          cpu: "500m"
+---
+apiVersion: everest.percona.com/v1alpha1
+kind: MonitoringConfig
+metadata:
+  name: mc-psmdb
+spec:
+  type: pmm
+  credentialsSecretName: mc-psmdb-secret
+  verifyTLS: false
+  pmm:
+    url: http://localhost-mc-psmdb-updated
+    image: percona/pmm-client:updated
 # status:
 #   inUse: false
 # ---

@@ -2,7 +2,7 @@ apiVersion: kuttl.dev/v1
 kind: TestAssert
 timeout: 30
 collectors:
-  # - command: kubectl get monitoringconfig/mc-psmdb -n ${NAMESPACE} -o yaml
+  - command: kubectl get monitoringconfig/mc-psmdb -n ${NAMESPACE} -o yaml
   # - command: kubectl get secret/mc-psmdb-secret -n ${NAMESPACE} -o yaml
   # - command: kubectl get vmagent/everest-monitoring -n everest-monitoring -o yaml
   # - command: kubectl get deploy/everest-controller-manager -n everest-system -o yaml
@@ -11,10 +11,10 @@ collectors:
   #   selector: control-plane=controller-manager
   #   tail: 100
 resourceRefs:
-  # - apiVersion: everest.percona.com/v1alpha1
-  #   kind: MonitoringConfig
-  #   name: mc-psmdb
-  #   ref: mc
+  - apiVersion: everest.percona.com/v1alpha1
+    kind: MonitoringConfig
+    name: mc-psmdb
+    ref: mc
   # - apiVersion: operator.victoriametrics.com/v1beta1
   #   kind: VMAgent
   #   name: everest-monitoring
@@ -22,7 +22,7 @@ resourceRefs:
   #   ref: vmagent
 assertAll:
   # - celExpr: "has(mc.metadata.finalizers)"
-  #   message: "mc doesn't have finalizers"
+    # message: "mc doesn't have finalizers"
 
   # - celExpr: "'everest.percona.com/vmagent' in mc.metadata.finalizers"
   #   message: "'everest.percona.com/vmagent' is absent in mc.metadata.finalizers"
@@ -51,20 +51,20 @@ spec:
 #   type: psmdb
 # status:
 #   status: installed
-# ---
-# apiVersion: everest.percona.com/v1alpha1
-# kind: MonitoringConfig
-# metadata:
-#   name: mc-psmdb
-# spec:
-#   type: pmm
-#   credentialsSecretName: mc-psmdb-secret
-#   verifyTLS: false
-#   pmm:
-#     url: http://localhost-mc-psmdb
-#     image: percona/pmm-client:latest
-# status:
-#   inUse: false
+---
+apiVersion: everest.percona.com/v1alpha1
+kind: MonitoringConfig
+metadata:
+  name: mc-psmdb
+spec:
+  type: pmm
+  credentialsSecretName: mc-psmdb-secret
+  verifyTLS: false
+  pmm:
+    url: http://localhost-mc-psmdb
+    image: percona/pmm-client:latest
+status:
+  inUse: false
 ---
 apiVersion: v1
 kind: Secret

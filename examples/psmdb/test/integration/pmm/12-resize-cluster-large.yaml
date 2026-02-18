@@ -10,19 +10,10 @@ spec:
   provider: psmdb
   components:
     engine:
-      type: mongod
-      replicas: 3
-      storage:
-        size: 4Gi
       resources:
         limits:
           memory: 32G
-    proxy:
-      type: mongod
-      replicas: 1
     monitoring:
-      type: pmm
-      version: 2.44.1
       resources:
         requests:
           memory: 330M

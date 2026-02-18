@@ -2,12 +2,12 @@ apiVersion: kuttl.dev/v1
 kind: TestAssert
 timeout: 30
 collectors:
-  # - command: kubectl get monitoringconfig/mc-psmdb -n ${NAMESPACE} -o yaml
-  # - command: kubectl get secret/mc-psmdb-secret -n ${NAMESPACE} -o yaml
+  - command: kubectl get monitoringconfig/mc-psmdb -n ${NAMESPACE} -o yaml
+  - command: kubectl get secret/mc-psmdb-secret -n ${NAMESPACE} -o yaml
   # - command: kubectl get vmagent/everest-monitoring -n everest-monitoring -o yaml
   # - command: kubectl get deploy/everest-controller-manager -n everest-system -o yaml
-  # - command: kubectl get psmdb/psmdb-mc -n ${NAMESPACE} -o yaml
-  # - command: kubectl get secret/everest-secrets-psmdb-mc -n ${NAMESPACE} -o yaml
+  - command: kubectl get psmdb/psmdb-mc -n ${NAMESPACE} -o yaml
+  - command: kubectl get secret/everest-secrets-psmdb-mc -n ${NAMESPACE} -o yaml
   # - type: pod
   #   namespace: everest-system
   #   selector: control-plane=controller-manager
@@ -17,10 +17,10 @@ commands:
   - command: kubectl wait --for=delete dst/psmdb-mc -n ${NAMESPACE}
   - command: kubectl wait --for=delete psmdb/psmdb-mc -n ${NAMESPACE}
 resourceRefs:
-  # - apiVersion: everest.percona.com/v1alpha1
-  #   kind: MonitoringConfig
-  #   name: mc-psmdb
-  #   ref: mc
+  - apiVersion: everest.percona.com/v1alpha1
+    kind: MonitoringConfig
+    name: mc-psmdb
+    ref: mc
   # - apiVersion: operator.victoriametrics.com/v1beta1
   #   kind: VMAgent
   #   name: everest-monitoring
@@ -41,18 +41,18 @@ assertAll:
 
   # - celExpr: "vmagent.spec.remoteWrite.exists(i, i.url == 'http://localhost-mc-psmdb-updated/victoriametrics/api/v1/write')"
   #   message: "vmagent.spec.remoteWrite does not contain url 'http://localhost-mc-psmdb-updated/victoriametrics/api/v1/write'"
-# ---
-# apiVersion: everest.percona.com/v1alpha1
-# kind: MonitoringConfig
-# metadata:
-#   name: mc-psmdb
-# spec:
-#   type: pmm
-#   credentialsSecretName: mc-psmdb-secret
-#   verifyTLS: false
-#   pmm:
-#     url: http://localhost-mc-psmdb-updated
-#     image: percona/pmm-client:updated
+---
+apiVersion: everest.percona.com/v1alpha1
+kind: MonitoringConfig
+metadata:
+  name: mc-psmdb
+spec:
+  type: pmm
+  credentialsSecretName: mc-psmdb-secret
+  verifyTLS: false
+  pmm:
+    url: http://localhost-mc-psmdb-updated
+    image: percona/pmm-client:updated
 # status:
 #   inUse: false
 # ---
