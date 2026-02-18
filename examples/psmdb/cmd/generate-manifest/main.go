@@ -70,12 +70,12 @@ func psmdbMetadata() *sdk.ProviderMetadata {
 			},
 			"backup": {
 				Versions: []sdk.ComponentVersionMeta{
-					{Version: "2.9.1", Image: "percona/percona-server-mongodb-backup:2.9.1", Default: true},
+					{Version: "2.9.1", Image: "percona/percona-backup-mongodb:2.9.1", Default: true},
 				},
 			},
 			"pmm": {
 				Versions: []sdk.ComponentVersionMeta{
-					{Version: "2.44.1", Image: "percona/pmm-server:2.44.1", Default: true},
+					{Version: "2.44.1", Image: "percona/pmm-client:2.44.1", Default: true},
 				},
 			},
 		},

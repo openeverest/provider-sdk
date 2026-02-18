@@ -43,11 +43,16 @@ type MongodCustomSpec struct{}
 type MongosCustomSpec struct{}
 
 // =============================================================================
-// PMM (MONITORING) COMPONENT SPEC
+// MONITORING COMPONENT SPEC
 // =============================================================================
 
-// PMMCustomSpec defines custom configuration for PMM monitoring.
-type PMMCustomSpec struct{}
+// MonitoringCustomSpec defines custom configuration for monitoring.
+// +k8s:openapi-gen=true
+type MonitoringCustomSpec struct {
+	// MonitoringConfigName specifies the name of the monitoring configuration to use.
+	// This can be used to reference a predefined monitoring configuration settings.
+	MonitoringConfigName *string `json:"monitoringConfigName,omitempty"`
+}
 
 // =============================================================================
 // BACKUP COMPONENT SPEC

@@ -12,6 +12,7 @@ package provider
 
 import (
 	"fmt"
+	"net/url"
 
 	"github.com/AlekSi/pointer"
 	"github.com/openeverest/provider-sdk/pkg/apis/v2alpha1"
@@ -23,6 +24,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	types "github.com/openeverest/provider-sdk/examples/psmdb/types"
+	everestv1alpha1 "github.com/percona/everest-operator/api/everest/v1alpha1"
 	psmdbv1 "github.com/percona/percona-server-mongodb-operator/pkg/apis/psmdb/v1"
 )
 
@@ -101,7 +103,7 @@ func ValidatePSMDB(c *sdk.Context) error {
 	return nil
 }
 
-func configureReplset(name string, replicas *int32, resources *v2alpha1.Resources, storageSize *v2alpha1.Storage, expose bool) *psmdbv1.ReplsetSpec {
+func configureReplset(name string, replicas *int32, resources *corev1.ResourceRequirements, storageSize *v2alpha1.Storage, expose bool) *psmdbv1.ReplsetSpec {
 	rsSpec := &psmdbv1.ReplsetSpec{
 		Name:          name,
 		Configuration: psmdbv1.MongoConfiguration(psmdbDefaultConfigurationTemplate),
@@ -138,11 +140,11 @@ func configureReplset(name string, replicas *int32, resources *v2alpha1.Resource
 	if replicas != nil {
 		rsSpec.Size = *replicas
 	}
-	if resources != nil && !resources.CPU.IsZero() {
-		rsSpec.MultiAZ.Resources.Limits[corev1.ResourceCPU] = resources.CPU
+	if resources != nil && resources.Limits != nil && !resources.Limits.Cpu().IsZero() {
+		rsSpec.MultiAZ.Resources.Limits[corev1.ResourceCPU] = *resources.Limits.Cpu()
 	}
-	if resources != nil && !resources.Memory.IsZero() {
-		rsSpec.MultiAZ.Resources.Limits[corev1.ResourceMemory] = resources.Memory
+	if resources != nil && resources.Limits != nil && !resources.Limits.Memory().IsZero() {
+		rsSpec.MultiAZ.Resources.Limits[corev1.ResourceMemory] = *resources.Limits.Memory()
 	}
 	if storageSize != nil && !storageSize.Size.IsZero() {
 		rsSpec.VolumeSpec.PersistentVolumeClaim.PersistentVolumeClaimSpec.Resources.Requests[corev1.ResourceStorage] = storageSize.Size
@@ -217,11 +219,11 @@ func configureMongos(c *sdk.Context) *psmdbv1.MongosSpec {
 	if proxy.Replicas != nil {
 		mongosSpec.Size = *proxy.Replicas
 	}
-	if proxy.Resources != nil && !proxy.Resources.CPU.IsZero() {
-		mongosSpec.MultiAZ.Resources.Limits[corev1.ResourceCPU] = proxy.Resources.CPU
+	if proxy.Resources != nil && proxy.Resources.Limits != nil && !proxy.Resources.Limits.Cpu().IsZero() {
+		mongosSpec.MultiAZ.Resources.Limits[corev1.ResourceCPU] = *proxy.Resources.Limits.Cpu()
 	}
-	if proxy.Resources != nil && !proxy.Resources.Memory.IsZero() {
-		mongosSpec.MultiAZ.Resources.Limits[corev1.ResourceMemory] = proxy.Resources.Memory
+	if proxy.Resources != nil && proxy.Resources.Limits != nil && !proxy.Resources.Limits.Memory().IsZero() {
+		mongosSpec.MultiAZ.Resources.Limits[corev1.ResourceMemory] = *proxy.Resources.Limits.Memory()
 	}
 
 	// TODO: implement exposing mongos
@@ -265,6 +267,94 @@ func configureBackup(c *sdk.Context) psmdbv1.BackupSpec {
 	}
 }
 
+// configureMonitoring creates the PMM spec configuration for PSMDB.
+// It updates user secrets with PMM token if monitoring is enabled.
+// Returns nil if no update is needed.
+func configureMonitoring(c *sdk.Context, psmdb *psmdbv1.PerconaServerMongoDBSpec, usersSecretName string) (*psmdbv1.PMMSpec, error) {
+	monitoring, ok := c.DB().Spec.Components[ComponentMonitoring]
+	if !ok {
+		// do not update if monitoring component is not specified
+		return nil, nil
+	}
+
+	var spec types.MonitoringCustomSpec
+	if err := c.DecodeComponentCustomSpec(monitoring, &spec); err != nil {
+		return nil, err
+	}
+
+	// do not update if monitoring config name key is not specified
+	if spec.MonitoringConfigName == nil {
+		return nil, nil
+	}
+
+	// if monitoring config name key is present but empty, disable monitoring
+	if *spec.MonitoringConfigName == "" {
+		return &psmdbv1.PMMSpec{
+			Enabled: false,
+		}, nil
+	}
+
+	var mc = &everestv1alpha1.MonitoringConfig{}
+	if err := c.Get(mc, *spec.MonitoringConfigName); err != nil {
+		return nil, fmt.Errorf("failed to get monitoring config %s: %w", *spec.MonitoringConfigName, err)
+	}
+
+	u, err := url.Parse(mc.Spec.PMM.URL)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse PMM URL %s: %w", mc.Spec.PMM.URL, err)
+	}
+
+	if err := copySecretData(c, mc.Spec.CredentialsSecretName, usersSecretName, "apiKey", "PMM_SERVER_TOKEN"); err != nil {
+		return nil, fmt.Errorf("failed to apply PMM token from monitoring config to user secrets: %w", err)
+	}
+
+	// PMM image specified in monitoring config takes precedence over provider images
+	image := mc.Spec.PMM.Image
+	switch {
+	case mc.Spec.PMM.Image != "":
+		image = mc.Spec.PMM.Image
+	case c.Metadata() != nil:
+		image = c.Metadata().GetDefaultImage(ComponentTypePMM)
+	default:
+		image = PSMDBMetadata().GetDefaultImage(ComponentTypePMM)
+	}
+
+	return &psmdbv1.PMMSpec{
+		Enabled:    true,
+		ServerHost: u.Host,
+		Image:      image,
+		Resources:  getPMMResources(c, psmdb),
+	}, nil
+}
+
+// copySecretData copies the value of a source key from the secret
+// and applies it to the destination with the destination key.
+func copySecretData(c *sdk.Context, source, dest, sourceKey, destKey string) error {
+	sourceSecret := &corev1.Secret{}
+	if err := c.Get(sourceSecret, source); err != nil {
+		return fmt.Errorf("failed to get secret %s: %w", source, err)
+	}
+
+	destSecret := &corev1.Secret{}
+	if err := c.Get(destSecret, dest); err != nil {
+		// If the secret doesn't exist, create it
+		destSecret = &corev1.Secret{ObjectMeta: c.ObjectMeta(dest)}
+	}
+
+	apiKey, ok := sourceSecret.Data[sourceKey]
+	if !ok {
+		return fmt.Errorf("failed to get key %s from secret %s", sourceKey, source)
+	}
+
+	if destSecret.Data == nil {
+		destSecret.Data = make(map[string][]byte)
+	}
+
+	destSecret.Data[destKey] = apiKey
+
+	return c.Apply(destSecret)
+}
+
 // SyncPSMDB ensures all PSMDB resources exist and are configured correctly.
 func SyncPSMDB(c *sdk.Context) error {
 	fmt.Println("Syncing PSMDB cluster:", c.Name())
@@ -300,8 +390,19 @@ func SyncPSMDB(c *sdk.Context) error {
 
 	psmdb.Spec.Backup = configureBackup(c)
 
+	usersSecretName := "everest-secrets-" + c.Name()
+
+	pmmSpec, err := configureMonitoring(c, &psmdb.Spec, usersSecretName)
+	if err != nil {
+		fmt.Printf("Warning: Failed to configure monitoring: %v\n", err)
+	}
+
+	if pmmSpec != nil {
+		psmdb.Spec.PMM = *pmmSpec
+	}
+
 	psmdb.Spec.Secrets = &psmdbv1.SecretsSpec{
-		Users:         "everest-secrets-" + c.Name(),
+		Users:         usersSecretName,
 		EncryptionKey: c.Name() + "-mongodb-encryption-key",
 		SSLInternal:   c.Name() + "-ssl-internal",
 	}
@@ -310,6 +411,7 @@ func SyncPSMDB(c *sdk.Context) error {
 		return err
 	}
 	fmt.Println("PSMDB cluster synced:", c.Name())
+
 	return nil
 }
 
@@ -406,13 +508,13 @@ func PSMDBMetadata() *sdk.ProviderMetadata {
 			// backup is the backup agent component
 			ComponentTypeBackup: {
 				Versions: []sdk.ComponentVersionMeta{
-					{Version: "2.9.1", Image: "percona/percona-server-mongodb-backup:2.9.1", Default: true},
+					{Version: "2.9.1", Image: "percona/percona-backup-mongodb:2.9.1", Default: true},
 				},
 			},
 			// pmm is the Percona Monitoring and Management component
 			ComponentTypePMM: {
 				Versions: []sdk.ComponentVersionMeta{
-					{Version: "2.44.1", Image: "percona/pmm-server:2.44.1", Default: true},
+					{Version: "2.44.1", Image: "percona/pmm-client:2.44.1", Default: true},
 				},
 			},
 		},
@@ -486,7 +588,7 @@ func (p *PSMDBProvider) ComponentSchemas() map[string]interface{} {
 		ComponentConfigServer: &types.MongodCustomSpec{},
 		ComponentProxy:        &types.MongosCustomSpec{},
 		ComponentBackupAgent:  &types.BackupCustomSpec{},
-		ComponentMonitoring:   &types.PMMCustomSpec{},
+		ComponentMonitoring:   &types.MonitoringCustomSpec{},
 	}
 }
 

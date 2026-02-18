@@ -7,6 +7,8 @@ import (
 	"github.com/openeverest/provider-sdk/pkg/apis/v2alpha1"
 	"github.com/openeverest/provider-sdk/pkg/controller"
 	"github.com/openeverest/provider-sdk/pkg/server"
+	everestv1alpha1 "github.com/percona/everest-operator/api/everest/v1alpha1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
@@ -99,9 +101,19 @@ func newReconciler(p providerAdapter, opts ...ReconcilerOption) (*ProviderReconc
 	}
 	scheme := runtime.NewScheme()
 
+	// Register core Kubernetes types
+	if err := corev1.AddToScheme(scheme); err != nil {
+		return nil, fmt.Errorf("failed to add corev1 scheme: %w", err)
+	}
+
 	// Register core types
 	if err := v2alpha1.AddToScheme(scheme); err != nil {
 		return nil, fmt.Errorf("failed to add v2alpha1 scheme: %w", err)
+	}
+
+	// Register everestv1alpha1 Kubernetes types
+	if err := everestv1alpha1.AddToScheme(scheme); err != nil {
+		return nil, fmt.Errorf("failed to add everestv1alpha1 scheme: %w", err)
 	}
 
 	// Register provider-specific types
