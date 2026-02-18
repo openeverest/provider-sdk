@@ -92,7 +92,7 @@ func getPMMResources(c *sdk.Context, curPsmdbSpec *psmdbv1.PerconaServerMongoDBS
 		// DB spec may contain custom PMM resources -> merge them with defaults.
 		// If none are specified, default resources will be used.
 
-		return MergeResources(requestedResources, CalculatePMMResources(engineLimitsMemory))
+		return mergeResources(requestedResources, calculatePMMResources(engineLimitsMemory))
 	}
 
 	// Prepare current DB cluster size
@@ -107,18 +107,18 @@ func getPMMResources(c *sdk.Context, curPsmdbSpec *psmdbv1.PerconaServerMongoDBS
 	if !equalSize(engineLimitsMemory, *currentReplSet.Resources.Requests.Memory()) {
 		// DB cluster size has changed -> need to update PMM resources.
 		// DB spec may contain custom PMM resources -> merge them with defaults.
-		return MergeResources(requestedResources, CalculatePMMResources(engineLimitsMemory))
+		return mergeResources(requestedResources, calculatePMMResources(engineLimitsMemory))
 	}
 
 	if curPsmdbSpec.PMM.Enabled {
 		// DB cluster is not new and PMM was enabled before.
 		// DB spec may contain new custom PMM resources -> merge them with previously used PMM resources.
-		return MergeResources(requestedResources, curPsmdbSpec.PMM.Resources)
+		return mergeResources(requestedResources, curPsmdbSpec.PMM.Resources)
 	}
 
 	// DB cluster is not new and PMM was not enabled before. Now it is being enabled.
 	// DB spec may contain custom PMM resources -> merge them with defaults.
-	return MergeResources(requestedResources, CalculatePMMResources(engineLimitsMemory))
+	return mergeResources(requestedResources, calculatePMMResources(engineLimitsMemory))
 }
 
 // equalSize checks if two memory sizes fall into the same predefined size category.
@@ -136,8 +136,8 @@ func equalSize(a, b resource.Quantity) bool {
 	}
 }
 
-// CalculatePMMResources returns the resource requirements for PMM based on memoery size.
-func CalculatePMMResources(m resource.Quantity) corev1.ResourceRequirements {
+// calculatePMMResources returns the resource requirements for PMM based on memoery size.
+func calculatePMMResources(m resource.Quantity) corev1.ResourceRequirements {
 	if m.Cmp(MemoryLargeSize) >= 0 {
 		return PmmResourceRequirementsLarge
 	}
@@ -149,10 +149,10 @@ func CalculatePMMResources(m resource.Quantity) corev1.ResourceRequirements {
 	return PmmResourceRequirementsSmall
 }
 
-// MergeResources merges highPriorityResources and lowPriorityResources.
+// mergeResources merges highPriorityResources and lowPriorityResources.
 // If a resource is specified in both, the value from highPriorityResources is used.
 // If a resource is only specified in one, that value is used.
-func MergeResources(highPriorityResources, lowPriorityResources corev1.ResourceRequirements) corev1.ResourceRequirements {
+func mergeResources(highPriorityResources, lowPriorityResources corev1.ResourceRequirements) corev1.ResourceRequirements {
 	mergedResources := corev1.ResourceRequirements{
 		Requests: corev1.ResourceList{},
 		Limits:   corev1.ResourceList{},

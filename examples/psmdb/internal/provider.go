@@ -267,8 +267,9 @@ func configureBackup(c *sdk.Context) psmdbv1.BackupSpec {
 	}
 }
 
-// configurePMMMonitoring creates the PMM spec configuration for PSMDB.
-// Returns nil if no update is needed or the monitoring component is not defined in the DataStore spec.
+// configureMonitoring creates the PMM spec configuration for PSMDB.
+// It updates user secrets with PMM token if monitoring is enabled.
+// Returns nil if no update is needed.
 func configureMonitoring(c *sdk.Context, psmdb *psmdbv1.PerconaServerMongoDBSpec, usersSecretName string) (*psmdbv1.PMMSpec, error) {
 	monitoring, ok := c.DB().Spec.Components[ComponentMonitoring]
 	if !ok {
@@ -276,7 +277,7 @@ func configureMonitoring(c *sdk.Context, psmdb *psmdbv1.PerconaServerMongoDBSpec
 		return nil, nil
 	}
 
-	var spec types.PMMCustomSpec
+	var spec types.MonitoringCustomSpec
 	if err := c.DecodeComponentCustomSpec(monitoring, &spec); err != nil {
 		return nil, err
 	}
@@ -286,70 +287,72 @@ func configureMonitoring(c *sdk.Context, psmdb *psmdbv1.PerconaServerMongoDBSpec
 		return nil, nil
 	}
 
-	// if monitoring config name is specified but empty, disable monitoring
+	// if monitoring config name key is present but empty, disable monitoring
 	if *spec.MonitoringConfigName == "" {
 		return &psmdbv1.PMMSpec{
 			Enabled: false,
 		}, nil
 	}
 
-	pmmSpec := &psmdbv1.PMMSpec{
-		Enabled: true,
-	}
-
-	var monitoringConfig = &everestv1alpha1.MonitoringConfig{}
-	if err := c.Get(monitoringConfig, *spec.MonitoringConfigName); err != nil {
+	var mc = &everestv1alpha1.MonitoringConfig{}
+	if err := c.Get(mc, *spec.MonitoringConfigName); err != nil {
 		return nil, fmt.Errorf("failed to get monitoring config %s: %w", *spec.MonitoringConfigName, err)
 	}
 
-	u, err := url.Parse(monitoringConfig.Spec.PMM.URL)
+	u, err := url.Parse(mc.Spec.PMM.URL)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse PMM URL %s: %w", monitoringConfig.Spec.PMM.URL, err)
+		return nil, fmt.Errorf("failed to parse PMM URL %s: %w", mc.Spec.PMM.URL, err)
 	}
 
-	pmmSpec.ServerHost = u.Host
-	if err := applyPMMTokenToUserSecrets(c, usersSecretName, monitoringConfig.Spec.CredentialsSecretName); err != nil {
+	if err := copySecretData(c, mc.Spec.CredentialsSecretName, usersSecretName, "apiKey", "PMM_SERVER_TOKEN"); err != nil {
 		return nil, fmt.Errorf("failed to apply PMM token from monitoring config to user secrets: %w", err)
 	}
 
-	// Uses the image specified in the monitoring config, or provider images?
-	pmmSpec.Image = monitoringConfig.Spec.PMM.Image
+	// PMM image specified in monitoring config takes precedence over provider images
+	image := mc.Spec.PMM.Image
+	switch {
+	case mc.Spec.PMM.Image != "":
+		image = mc.Spec.PMM.Image
+	case c.Metadata() != nil:
+		image = c.Metadata().GetDefaultImage(ComponentTypePMM)
+	default:
+		image = PSMDBMetadata().GetDefaultImage(ComponentTypePMM)
+	}
 
-	// if metadata := c.Metadata(); metadata != nil {
-	// 	pmmSpec.Image = metadata.GetDefaultImage(ComponentTypePMM)
-	// } else {
-	// 	pmmSpec.Image = PSMDBMetadata().GetDefaultImage(ComponentTypePMM)
-	// }
-
-	pmmSpec.Resources = getPMMResources(c, psmdb)
-
-	return pmmSpec, nil
+	return &psmdbv1.PMMSpec{
+		Enabled:    true,
+		ServerHost: u.Host,
+		Image:      image,
+		Resources:  getPMMResources(c, psmdb),
+	}, nil
 }
 
-// applyPMMTokenToUserSecrets copies PMM token from the PMM secret and applies to the users secret.
-func applyPMMTokenToUserSecrets(c *sdk.Context, usersSecretName, pmmSecretName string) error {
-	pmmSecret := &corev1.Secret{}
-	if err := c.Get(pmmSecret, pmmSecretName); err != nil {
-		return fmt.Errorf("failed to get PMM secret %s: %w", pmmSecretName, err)
+// copySecretData copies the value of a source key from the secret
+// and applies it to the destination with the destination key.
+func copySecretData(c *sdk.Context, source, dest, sourceKey, destKey string) error {
+	sourceSecret := &corev1.Secret{}
+	if err := c.Get(sourceSecret, source); err != nil {
+		return fmt.Errorf("failed to get secret %s: %w", source, err)
 	}
 
-	usersSecret := &corev1.Secret{}
-	if err := c.Get(usersSecret, usersSecretName); err != nil {
+	destSecret := &corev1.Secret{}
+	if err := c.Get(destSecret, dest); err != nil {
 		// If the secret doesn't exist, create it
-		usersSecret = &corev1.Secret{
-			ObjectMeta: c.ObjectMeta(usersSecretName),
-		}
+		destSecret = &corev1.Secret{ObjectMeta: c.ObjectMeta(dest)}
 	}
 
-	if apiKey, ok := pmmSecret.Data["apiKey"]; ok {
-		if usersSecret.Data == nil {
-			usersSecret.Data = make(map[string][]byte)
-		}
-
-		usersSecret.Data["PMM_SERVER_TOKEN"] = apiKey
+	apiKey, ok := sourceSecret.Data[sourceKey]
+	if !ok {
+		return fmt.Errorf("failed to get key %s from secret %s", sourceKey, source)
 	}
 
-	return c.Apply(usersSecret)
+	if destSecret.Data == nil {
+		destSecret.Data = make(map[string][]byte)
+	}
+
+	destSecret.Data[destKey] = apiKey
+
+	return c.Apply(destSecret)
 }
 
 // SyncPSMDB ensures all PSMDB resources exist and are configured correctly.
@@ -585,7 +588,7 @@ func (p *PSMDBProvider) ComponentSchemas() map[string]interface{} {
 		ComponentConfigServer: &types.MongodCustomSpec{},
 		ComponentProxy:        &types.MongosCustomSpec{},
 		ComponentBackupAgent:  &types.BackupCustomSpec{},
-		ComponentMonitoring:   &types.PMMCustomSpec{},
+		ComponentMonitoring:   &types.MonitoringCustomSpec{},
 	}
 }
 
