@@ -1,0 +1,60 @@
+name: Integration Tests
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Install k3d
+        run: |
+          curl -s https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | bash
+
+      - name: Create k3d cluster
+        run: make k3d-cluster-up
+
+      - name: Install prerequisites
+        run: |
+          # Install OpenEverest CRDs
+          kubectl apply -f https://raw.githubusercontent.com/openeverest/openeverest/v2/config/crd/bases/core.openeverest.io_providers.yaml
+          kubectl apply -f https://raw.githubusercontent.com/openeverest/openeverest/v2/config/crd/bases/core.openeverest.io_instances.yaml
+
+          # TODO: Install your upstream operator
+          # kubectl apply -f https://example.com/operator/deploy/bundle.yaml
+
+          # Install Provider via Helm
+          make helm-install
+
+      - name: Install kuttl
+        run: |
+          curl -Lo /usr/local/bin/kubectl-kuttl https://github.com/kudobuilder/kuttl/releases/latest/download/kubectl-kuttl_linux_amd64
+          chmod +x /usr/local/bin/kubectl-kuttl
+
+      - name: Run provider in background
+        run: |
+          make run &
+          sleep 5
+
+      - name: Run integration tests
+        run: make test-integration
+
+      - name: Cleanup
+        if: always()
+        run: make k3d-cluster-down

@@ -1,0 +1,17 @@
+module [[ .ModulePath ]]
+
+go 1.25.5
+
+require (
+	github.com/openeverest/openeverest/v2 v2.0.0-20260225142827-1058c06795f2
+	k8s.io/api v0.35.0
+	k8s.io/apimachinery v0.35.0
+	sigs.k8s.io/controller-runtime v0.22.4
+)
+
+tool github.com/openeverest/provider-sdk
+
+// TODO: Add your upstream operator dependency, e.g.:
+// require github.com/example/my-operator v1.0.0
+//
+// Then run: go mod tidy

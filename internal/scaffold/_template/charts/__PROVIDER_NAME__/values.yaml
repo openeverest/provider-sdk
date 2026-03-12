@@ -1,0 +1,124 @@
+# Default values for [[ .ProviderName ]].
+
+# -- Number of replicas for the provider deployment
+replicaCount: 1
+
+image:
+  # -- Container image repository
+  repository: ghcr.io/openeverest/[[ .ProviderName ]]-dev
+  # -- Image pull policy
+  pullPolicy: IfNotPresent
+  # -- Overrides the image tag whose default is the chart appVersion
+  tag: "latest"
+
+# -- Image pull secrets for private registries
+imagePullSecrets: []
+
+# -- Override the name of the chart
+nameOverride: ""
+# -- Override the full name of the chart
+fullnameOverride: ""
+
+serviceAccount:
+  # -- Specifies whether a service account should be created
+  create: true
+  # -- Annotations to add to the service account
+  annotations: {}
+  # -- Automount API credentials for the service account
+  automountServiceAccountToken: true
+  # -- The name of the service account to use. If not set and create is true, a name is generated using the fullname template
+  name: ""
+
+rbac:
+  # -- Specifies whether RBAC resources should be created
+  create: true
+
+# -- Annotations to add to the deployment pods
+podAnnotations: {}
+
+# -- Labels to add to the deployment pods
+podLabels: {}
+
+podSecurityContext:
+  # -- Run as non-root
+  runAsNonRoot: true
+  # -- Security context fsGroup
+  fsGroup: 65534
+
+securityContext:
+  # -- Disallow privilege escalation
+  allowPrivilegeEscalation: false
+  # -- Drop all capabilities
+  capabilities:
+    drop:
+      - ALL
+  # -- Read-only root filesystem
+  readOnlyRootFilesystem: true
+  # -- Run as non-root user
+  runAsNonRoot: true
+  # -- Run as user ID
+  runAsUser: 65534
+
+service:
+  # -- Service type
+  type: ClusterIP
+  # -- Service port for the HTTP server (schema/validation endpoints)
+  port: 8082
+
+# -- Resource limits and requests
+resources:
+  limits:
+    cpu: 500m
+    memory: 256Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+livenessProbe:
+  httpGet:
+    path: /schema
+    port: http
+  initialDelaySeconds: 15
+  periodSeconds: 20
+
+readinessProbe:
+  httpGet:
+    path: /schema
+    port: http
+  initialDelaySeconds: 5
+  periodSeconds: 10
+
+# -- Node selector for pod scheduling
+nodeSelector: {}
+
+# -- Tolerations for pod scheduling
+tolerations: []
+
+# -- Affinity rules for pod scheduling
+affinity: {}
+
+provider:
+  # -- The name to register for the Provider custom resource
+  name: [[ .ProviderName ]]
+
+# -- Additional environment variables to set on the provider container
+extraEnv: []
+# - name: MY_VAR
+#   value: "my-value"
+
+# -- Additional volume mounts to add to the provider container
+extraVolumeMounts: []
+
+# -- Additional volumes to add to the pod
+extraVolumes: []
+
+# -- Leader election configuration
+leaderElection:
+  # -- Enable leader election (recommended for HA deployments)
+  enabled: true
+
+# TODO: Add values for your upstream operator subchart dependency, e.g.:
+# my-operator:
+#   replicaCount: 1
+#   rbac:
+#     create: true
