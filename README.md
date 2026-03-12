@@ -96,14 +96,18 @@ cat definition/PROVIDER_DEVELOPMENT.md
 go get your-operator-module@latest
 go mod tidy
 
-# 3. Configure versions in definition/versions.yaml
-# 4. Implement provider logic in internal/provider/provider.go
-# 5. Add RBAC markers in internal/provider/rbac.go
+# 3. Add components and topologies
+provider-sdk add component --name mydb --type mydb
+provider-sdk add topology --name standalone
 
-# 6. Generate all manifests
+# 4. Configure versions in definition/versions.yaml
+# 5. Implement provider logic in internal/provider/provider.go
+# 6. Add RBAC markers in internal/provider/rbac.go
+
+# 7. Generate all manifests
 make generate
 
-# 7. Run locally against a cluster
+# 8. Run locally against a cluster
 make run
 ```
 
