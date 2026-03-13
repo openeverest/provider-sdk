@@ -1,0 +1,68 @@
+# Standalone topology definition.
+# This file defines both the structural topology and its UI rendering.
+
+# Topology configuration: which components are used and their defaults.
+# Reference a Go type from the types.go via configSchema if the
+# topology has custom configuration fields.
+config:
+  components:
+    engine:
+      defaults:
+        replicas: 1
+
+# UI schema: rendering hints for the frontend form.
+# Paths reference fields in the Instance CR spec.
+ui:
+  sections:
+    basicInfo:
+      label: Basic Information
+      description: Provide the basic information for your new database.
+      components:
+        version:
+          uiType: select
+          path: spec.components.engine.version
+          fieldParams:
+            label: Database Version
+    resources:
+      label: Resources
+      description: Configure the resources your new database will have access to.
+      components:
+        numberOfNodes:
+          path: spec.components.engine.replicas
+          uiType: number
+          fieldParams:
+            label: Number of nodes
+          validation:
+            min: 1
+            max: 7
+        resources:
+          uiType: group
+          groupType: line
+          components:
+            cpu:
+              path: spec.components.engine.resources.requests.cpu
+              uiType: number
+              fieldParams:
+                label: CPU
+              validation:
+                min: 1
+                max: 10
+            memory:
+              path: spec.components.engine.resources.requests.memory
+              uiType: number
+              fieldParams:
+                label: Memory
+              validation:
+                min: 1
+                max: 10
+            disk:
+              path: spec.components.engine.storage.size
+              uiType: number
+              fieldParams:
+                label: Disk
+              validation:
+                min: 10
+                max: 100
+  sectionsOrder:
+  - basicInfo
+  - resources

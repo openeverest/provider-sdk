@@ -1,0 +1,24 @@
+# Example Instance CR for the [[ .ProviderName ]] provider.
+# Apply this to your cluster to create a database instance.
+#
+# Prerequisites:
+#   1. OpenEverest CRDs installed
+#   2. Provider CR applied (provider.yaml)
+#   3. Upstream operator running
+#   4. Provider controller running
+apiVersion: core.openeverest.io/v1alpha1
+kind: Instance
+metadata:
+  name: example-instance
+spec:
+  provider: [[ .ProviderName ]]
+  components:
+    engine:
+      type: [[ .ComponentType ]]
+      replicas: 1
+      resources:
+        limits:
+          cpu: "1"
+          memory: 2G
+      storage:
+        size: 10Gi

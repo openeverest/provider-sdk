@@ -1,0 +1,13 @@
+# Minimal Instance CR — smallest viable configuration.
+apiVersion: core.openeverest.io/v1alpha1
+kind: Instance
+metadata:
+  name: my-database-simple
+spec:
+  provider: [[ .ProviderName ]]
+  components:
+    engine:
+      type: [[ .ComponentType ]]
+      replicas: 1
+      storage:
+        size: 10Gi

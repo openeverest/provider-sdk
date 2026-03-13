@@ -1,0 +1,20 @@
+# Provider identity and component definitions.
+# Component types define what software each component runs (e.g. mongod, backup).
+# Component names are the logical roles used in topologies (e.g. engine, proxy).
+#
+# Run `provider-sdk add component` to add components interactively.
+# For more details, see definition/PROVIDER_DEVELOPMENT.md.
+
+name: [[ .ProviderName ]]
+
+# Components map logical component names to their type.
+# The type must match a key in versions.yaml's componentTypes.
+# Add customSpecSchema to reference a Go type from components/types.go
+# when a component needs custom configuration fields.
+#
+# Example:
+#   engine:
+#     type: mongod
+#   backup:
+#     type: pbm
+components: {}
