@@ -149,6 +149,10 @@ func buildSpecMap(cfg *AssembledConfig, schemas map[string]any) map[string]any {
 		spec["componentTypes"] = cfg.ComponentTypes
 	}
 
+	if cfg.Versions != nil {
+		spec["versions"] = cfg.Versions
+	}
+
 	// Components — resolve customSpecSchema references.
 	if cfg.Components != nil {
 		comps := make(map[string]any)

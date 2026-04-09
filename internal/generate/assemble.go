@@ -36,6 +36,9 @@ type AssembledConfig struct {
 	// Components maps logical component names to their spec (type, optional customSpecSchema).
 	Components map[string]any
 
+	// Versions maps bundle names to their VersionBundle spec.
+	Versions map[string]any
+
 	// Topologies maps topology names to their Provider CR spec representation.
 	Topologies map[string]any
 
@@ -83,6 +86,16 @@ func Assemble(defDir string) (*AssembledConfig, error) {
 	if ct, ok := versions["componentTypes"]; ok {
 		if m, ok := ct.(map[string]any); ok {
 			cfg.ComponentTypes = m
+		}
+	}
+
+	// Version bundles from versions.yaml.
+	if vb, ok := versions["versions"]; ok {
+		if m, ok := vb.(map[string]any); ok {
+			cfg.Versions = m
+			if err := validateVersionBundles(cfg.ComponentTypes, cfg.Components, m); err != nil {
+				return nil, fmt.Errorf("invalid version bundles: %w", err)
+			}
 		}
 	}
 
@@ -208,4 +221,73 @@ func readYAML(path string) (map[string]any, error) {
 		return nil, fmt.Errorf("parsing %s: %w", path, err)
 	}
 	return m, nil
+}
+
+// validateVersionBundles checks that every component version referenced in a
+// bundle exists in the componentTypes version catalog, and that every component
+// name exists in the components map.
+func validateVersionBundles(componentTypes, components, bundles map[string]any) error {
+	// Build a lookup: componentName → componentType
+	compTypeOf := make(map[string]string)
+	for compName, raw := range components {
+		if m, ok := raw.(map[string]any); ok {
+			if t, ok := m["type"].(string); ok {
+				compTypeOf[compName] = t
+			}
+		}
+	}
+
+	// Build a lookup: componentType → set of known versions
+	knownVersions := make(map[string]map[string]bool)
+	for typeName, raw := range componentTypes {
+		if m, ok := raw.(map[string]any); ok {
+			if vs, ok := m["versions"]; ok {
+				versions := make(map[string]bool)
+				if vList, ok := vs.([]any); ok {
+					for _, v := range vList {
+						if vm, ok := v.(map[string]any); ok {
+							if ver, ok := vm["version"].(string); ok {
+								versions[ver] = true
+							}
+						}
+					}
+				}
+				knownVersions[typeName] = versions
+			}
+		}
+	}
+
+	for bundleName, bundleRaw := range bundles {
+		bundleMap, ok := bundleRaw.(map[string]any)
+		if !ok {
+			continue
+		}
+		compsRaw, ok := bundleMap["components"]
+		if !ok {
+			continue
+		}
+		comps, ok := compsRaw.(map[string]any)
+		if !ok {
+			continue
+		}
+		for compName, ver := range comps {
+			verStr, ok := ver.(string)
+			if !ok {
+				return fmt.Errorf("bundle %q: component %q version must be a string", bundleName, compName)
+			}
+
+			compType, exists := compTypeOf[compName]
+			if !exists {
+				return fmt.Errorf("bundle %q: component %q is not defined in provider.yaml", bundleName, compName)
+			}
+			versions, exists := knownVersions[compType]
+			if !exists {
+				return fmt.Errorf("bundle %q: component %q has unknown type %q", bundleName, compName, compType)
+			}
+			if !versions[verStr] {
+				return fmt.Errorf("bundle %q: component %q version %q not found in componentTypes[%q]", bundleName, compName, verStr, compType)
+			}
+		}
+	}
+	return nil
 }
