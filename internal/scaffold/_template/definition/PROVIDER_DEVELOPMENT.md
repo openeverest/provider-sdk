@@ -205,21 +205,21 @@ top-level `versions:` key:
 
 ```yaml
 versions:
-  "1.18":                              # Bundle name — shown to users
-    default: true                      # Used when spec.version is omitted
-    components:
-      engine: "8.0.12-4"
-      configServer: "8.0.12-4"
-      proxy: "8.0.12-4"
-      backupAgent: "2.11.0"
-      monitoring: "2.44.1"
-  "1.17":
-    components:
-      engine: "8.0.8-3"
-      configServer: "8.0.8-3"
-      proxy: "8.0.8-3"
-      backupAgent: "2.9.1"
-      monitoring: "2.44.1"
+- name: "8.0.12"                       # Bundle name — shown to users
+  default: true                        # Used when spec.version is omitted
+  components:
+    engine: "8.0.12-4"
+    configServer: "8.0.12-4"
+    proxy: "8.0.12-4"
+    backupAgent: "2.11.0"
+    monitoring: "2.44.1"
+- name: "8.0.8"
+  components:
+    engine: "8.0.8-3"
+    configServer: "8.0.8-3"
+    proxy: "8.0.8-3"
+    backupAgent: "2.9.1"
+    monitoring: "2.44.1"
 ```
 
 **How bundles are resolved**

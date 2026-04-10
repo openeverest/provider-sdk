@@ -37,7 +37,7 @@ type AssembledConfig struct {
 	Components map[string]any
 
 	// Versions maps bundle names to their VersionBundle spec.
-	Versions map[string]any
+	Versions []any
 
 	// Topologies maps topology names to their Provider CR spec representation.
 	Topologies map[string]any
@@ -82,6 +82,13 @@ func Assemble(defDir string) (*AssembledConfig, error) {
 		cfg.Name = name
 	}
 
+	// Components from provider.yaml.
+	if comps, ok := provider["components"]; ok {
+		if m, ok := comps.(map[string]any); ok {
+			cfg.Components = buildComponentsSpec(m, cfg.TypeRefs)
+		}
+	}
+
 	// Component types from versions.yaml.
 	if ct, ok := versions["componentTypes"]; ok {
 		if m, ok := ct.(map[string]any); ok {
@@ -91,18 +98,11 @@ func Assemble(defDir string) (*AssembledConfig, error) {
 
 	// Version bundles from versions.yaml.
 	if vb, ok := versions["versions"]; ok {
-		if m, ok := vb.(map[string]any); ok {
-			cfg.Versions = m
-			if err := validateVersionBundles(cfg.ComponentTypes, cfg.Components, m); err != nil {
+		if list, ok := vb.([]any); ok {
+			cfg.Versions = list
+			if err := validateVersionBundles(cfg.ComponentTypes, cfg.Components, list); err != nil {
 				return nil, fmt.Errorf("invalid version bundles: %w", err)
 			}
-		}
-	}
-
-	// Components from provider.yaml.
-	if comps, ok := provider["components"]; ok {
-		if m, ok := comps.(map[string]any); ok {
-			cfg.Components = buildComponentsSpec(m, cfg.TypeRefs)
 		}
 	}
 
@@ -226,7 +226,7 @@ func readYAML(path string) (map[string]any, error) {
 // validateVersionBundles checks that every component version referenced in a
 // bundle exists in the componentTypes version catalog, and that every component
 // name exists in the components map.
-func validateVersionBundles(componentTypes, components, bundles map[string]any) error {
+func validateVersionBundles(componentTypes, components map[string]any, bundles []any) error {
 	// Build a lookup: componentName → componentType
 	compTypeOf := make(map[string]string)
 	for compName, raw := range components {
@@ -257,10 +257,14 @@ func validateVersionBundles(componentTypes, components, bundles map[string]any) 
 		}
 	}
 
-	for bundleName, bundleRaw := range bundles {
+	for i, bundleRaw := range bundles {
 		bundleMap, ok := bundleRaw.(map[string]any)
 		if !ok {
 			continue
+		}
+		bundleName, _ := bundleMap["name"].(string)
+		if bundleName == "" {
+			return fmt.Errorf("version bundle at index %d is missing required 'name' field", i)
 		}
 		compsRaw, ok := bundleMap["components"]
 		if !ok {
