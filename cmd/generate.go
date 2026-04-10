@@ -36,8 +36,9 @@ func init() {
 }
 
 var generateCmd = &cobra.Command{
-	Use:   "generate",
-	Short: "Generate Provider CR spec for Helm chart from definition/ files",
+	Use:          "generate",
+	Short:        "Generate Provider CR spec for Helm chart from definition/ files",
+	SilenceUsage: true,
 	Long: `Read the definition/ directory, resolve Go type schemas, and generate
 the Provider CR spec YAML for the Helm chart.
 
