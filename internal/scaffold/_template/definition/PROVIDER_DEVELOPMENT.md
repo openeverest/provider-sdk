@@ -13,7 +13,9 @@ directory structure, the provider implementation, and common patterns.
 - [Conceptual Model](#conceptual-model)
 - [Project Structure Overview](#project-structure-overview)
 - [Step 1: Define Components](#step-1-define-components)
-- [Step 2: Define Component Versions](#step-2-define-component-versions)
+- [Step 2: Define Versions](#step-2-define-versions)
+  - [Component Version Catalog](#component-version-catalog)
+  - [Version Bundles](#version-bundles)
 - [Step 3: Define Topologies](#step-3-define-topologies)
 - [Step 4: Define Custom Types](#step-4-define-custom-types)
 - [Step 5: Configure the UI Schema](#step-5-configure-the-ui-schema)
@@ -153,9 +155,15 @@ The `provider-sdk add component` command updates all four files automatically.
 
 ---
 
-## Step 2: Define Component Versions
+## Step 2: Define Versions
 
-Edit `definition/versions.yaml` to list available versions for each component type:
+All version information lives in `definition/versions.yaml`. It has two
+related sections: the **component version catalog** and **version bundles**.
+
+### Component Version Catalog
+
+The catalog maps each component type to the list of versions it supports.
+This is the source of truth for what can be installed.
 
 ```yaml
 componentTypes:
@@ -185,6 +193,91 @@ componentTypes:
 - Exactly one version per type must be marked `default: true`
 - Images should be fully qualified (registry/repository:tag)
 - Add new versions when upstream releases are available
+
+### Version Bundles
+
+Version bundles are curated sets of component versions that are known to be
+mutually compatible. Users set a single `spec.version` field on an Instance
+instead of specifying versions for every component individually.
+
+Bundles are defined in the same `definition/versions.yaml` file, under a
+top-level `versions:` key:
+
+```yaml
+versions:
+- name: "8.0.12"                       # Bundle name — shown to users
+  default: true                        # Used when spec.version is omitted
+  components:
+    engine: "8.0.12-4"
+    configServer: "8.0.12-4"
+    proxy: "8.0.12-4"
+    backupAgent: "2.11.0"
+    monitoring: "2.44.1"
+- name: "8.0.8"
+  components:
+    engine: "8.0.8-3"
+    configServer: "8.0.8-3"
+    proxy: "8.0.8-3"
+    backupAgent: "2.9.1"
+    monitoring: "2.44.1"
+```
+
+**How bundles are resolved**
+
+The provider-runtime resolves bundles in the reconciler before calling your
+`Sync()` method. Your `Sync()` code always sees fully-resolved component
+versions and does not need to handle bundle logic itself.
+
+Resolution order for each component's version:
+
+1. `ComponentSpec.Version` — explicitly set by the user on that component (wins)
+2. Version bundle — from `spec.version` or the default bundle
+3. Per-type `default: true` in the catalog — fallback if no bundle applies
+
+The reconciler operates on a **deep copy** of the Instance. The stored spec in
+etcd is never mutated, so the user's original intent is always preserved.
+
+**Rules:**
+- Exactly one bundle should have `default: true`
+- Every component name and version referenced in a bundle must exist in
+  `provider.yaml` and in the corresponding `componentTypes` catalog
+  respectively — `provider-sdk generate` validates this at build time
+- Bundle names are arbitrary strings but should follow a human-friendly
+  convention (e.g., the upstream operator's minor version)
+- You do not need to include optional components (e.g., `monitoring`) in
+  a bundle; the user can still specify their version explicitly
+
+**Adding a new bundle when a new upstream version is released**
+
+1. Add the new component versions to `componentTypes` in `versions.yaml`
+2. Add a new bundle entry under `versions:` referencing those new versions
+3. Move `default: true` to the new bundle
+4. Run `make generate` — the generator validates all bundle references and
+   emits the updated `Provider` CR spec
+
+**Accessing bundle info in your provider code**
+
+You normally do not need to interact with bundles directly in `Sync()` —
+versions are already resolved for you. However, if you need to inspect the
+resolved version of a component, read it from the Instance spec as usual:
+
+```go
+func (p *Provider) Sync(c *controller.Context) error {
+    engine := c.Instance().Spec.Components["engine"]
+    // engine.Version is already resolved from the bundle (e.g., "8.0.12-4")
+    // engine.Image is empty unless the user explicitly overrode it
+
+    spec, err := c.ProviderSpec()
+    if err != nil {
+        return err
+    }
+    // Resolve the image from the catalog using the resolved version:
+    image := controller.GetImageForVersion(spec, "engine", engine.Version)
+    // Or fall back to the default image if Version is somehow still empty:
+    image = controller.GetDefaultImageForComponent(spec, "engine")
+    // ...
+}
+```
 
 ---
 
@@ -689,6 +782,11 @@ provider-sdk generate
 
 Usually invoked via `go generate ./...` (see `gen.go`) or `make generate`.
 
+The generator also validates version bundles at build time — it ensures every
+component name and version referenced in a bundle exists in `provider.yaml` and
+the `componentTypes` catalog. An invalid bundle produces a fatal error rather
+than silently emitting a broken Provider CR.
+
 ---
 
 ## Checklist: What You Need for a Working Provider
@@ -697,6 +795,7 @@ Use this checklist to track your progress:
 
 - [ ] **Components defined** in `definition/provider.yaml`
 - [ ] **Version catalog** filled in `definition/versions.yaml`
+- [ ] **Version bundles** defined in `definition/versions.yaml` with one marked `default: true`
 - [ ] **At least one topology** in `definition/topologies/`
 - [ ] **UI schema** configured in each topology's `topology.yaml`
 - [ ] **Provider interface** implemented in `internal/provider/provider.go`:
