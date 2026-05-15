@@ -9,7 +9,7 @@ An [OpenEverest](https://github.com/openeverest) provider.
 - Go 1.25+
 - A Kubernetes cluster (k3d, kind, or remote)
 - [OpenEverest CRDs](https://github.com/openeverest/openeverest) installed
-- Your upstream operator installed and running
+- Your operator installed and running
 
 ## Quick Start
 

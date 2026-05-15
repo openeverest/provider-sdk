@@ -36,7 +36,7 @@ jobs:
           kubectl apply -f https://raw.githubusercontent.com/openeverest/openeverest/v2/config/crd/bases/core.openeverest.io_providers.yaml
           kubectl apply -f https://raw.githubusercontent.com/openeverest/openeverest/v2/config/crd/bases/core.openeverest.io_instances.yaml
 
-          # TODO: Install your upstream operator
+          # TODO: Install your operator
           # kubectl apply -f https://example.com/operator/deploy/bundle.yaml
 
           # Install Provider via Helm

@@ -13,14 +13,14 @@ package provider
 // +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
 
 // =============================================================================
-// PROVIDER-SPECIFIC RBAC — Add markers for your upstream operator's resources.
+// PROVIDER-SPECIFIC RBAC — Add markers for your operator's resources.
 // =============================================================================
 // Examples:
 //
-//   - Watch/manage upstream operator CRs:
-//   // +kubebuilder:rbac:groups=[[ .UpstreamAPIGroup ]],resources=[[ .UpstreamResource ]],verbs=get;list;watch;create;update;patch;delete
-//   // +kubebuilder:rbac:groups=[[ .UpstreamAPIGroup ]],resources=[[ .UpstreamResource ]]/status,verbs=get
-//   // +kubebuilder:rbac:groups=[[ .UpstreamAPIGroup ]],resources=[[ .UpstreamResource ]]/finalizers,verbs=update
+//   - Watch/manage operator CRs:
+//   // +kubebuilder:rbac:groups=[[ .OperatorAPIGroup ]],resources=[[ .OperatorResource ]],verbs=get;list;watch;create;update;patch;delete
+//   // +kubebuilder:rbac:groups=[[ .OperatorAPIGroup ]],resources=[[ .OperatorResource ]]/status,verbs=get
+//   // +kubebuilder:rbac:groups=[[ .OperatorAPIGroup ]],resources=[[ .OperatorResource ]]/finalizers,verbs=update
 //
 //   - Access Kubernetes core resources:
 //   // +kubebuilder:rbac:groups="",resources=secrets;configmaps,verbs=get;list;watch

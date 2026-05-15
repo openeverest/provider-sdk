@@ -39,8 +39,8 @@ func init() {
 	f := initCmd.Flags()
 	f.StringVar(&initOpts.name, "name", "", "Provider name (e.g., provider-my-database)")
 	f.StringVar(&initOpts.modulePath, "module", "", "Go module path (e.g., github.com/my-org/provider-my-database)")
-	f.StringVar(&initOpts.apiGroup, "api-group", "", "Upstream operator API group (optional, used as RBAC hint)")
-	f.StringVar(&initOpts.resource, "resource", "", "Upstream operator resource, plural (optional, used as RBAC hint)")
+	f.StringVar(&initOpts.apiGroup, "api-group", "", "Operator API group (optional, used as RBAC hint)")
+	f.StringVar(&initOpts.resource, "resource", "", "Operator resource, plural (optional, used as RBAC hint)")
 	f.StringVarP(&initOpts.outputDir, "output-dir", "o", "", "Output directory (default: ./<name>)")
 	f.BoolVar(&initOpts.nonInteractive, "non-interactive", false, "Fail instead of prompting for missing values")
 
@@ -102,8 +102,8 @@ func runInit(_ *cobra.Command, _ []string) error {
 	cfg := &scaffold.Config{
 		ProviderName:     initOpts.name,
 		ModulePath:       initOpts.modulePath,
-		UpstreamAPIGroup: initOpts.apiGroup,
-		UpstreamResource: initOpts.resource,
+		OperatorAPIGroup: initOpts.apiGroup,
+		OperatorResource: initOpts.resource,
 	}
 	cfg.DeriveDefaults()
 
@@ -147,7 +147,7 @@ func runInit(_ *cobra.Command, _ []string) error {
 	fmt.Println("Next steps:")
 	fmt.Printf("  1. cd %s\n", initOpts.outputDir)
 	fmt.Println("  2. Read definition/PROVIDER_DEVELOPMENT.md for a complete development guide")
-	fmt.Println("  3. Add your upstream operator dependency: go get <operator-module>@latest")
+	fmt.Println("  3. Add your operator dependency: go get <operator-module>@latest")
 	fmt.Println("  4. Run: go mod tidy")
 	fmt.Println()
 	fmt.Println("  Define your provider:")

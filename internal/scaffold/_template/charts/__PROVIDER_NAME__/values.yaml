@@ -117,7 +117,7 @@ leaderElection:
   # -- Enable leader election (recommended for HA deployments)
   enabled: true
 
-# TODO: Add values for your upstream operator subchart dependency, e.g.:
+# TODO: Add values for your operator subchart dependency, e.g.:
 # my-operator:
 #   replicaCount: 1
 #   rbac:
