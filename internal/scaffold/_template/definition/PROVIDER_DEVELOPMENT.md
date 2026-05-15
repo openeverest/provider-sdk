@@ -19,12 +19,6 @@ directory structure, the provider implementation, and common patterns.
 - [Step 3: Define Topologies](#step-3-define-topologies)
 - [Step 4: Define Custom Types](#step-4-define-custom-types)
 - [Step 5: Configure the UI Schema](#step-5-configure-the-ui-schema)
-  - [Sections](#sections)
-  - [Components (Single Fields)](#components-single-fields)
-  - [ComponentGroups (Nested Fields)](#componentgroups-nested-fields)
-  - [Validation](#validation-1)
-  - [Mode-Aware Overrides](#mode-aware-overrides)
-  - [DataSource (API-Driven Select Options)](#datasource-api-driven-select-options)
 - [Step 6: Implement the Provider Interface](#step-6-implement-the-provider-interface)
 - [Step 7: Configure RBAC](#step-7-configure-rbac)
 - [Step 8: Generate and Test](#step-8-generate-and-test)
@@ -495,11 +489,11 @@ Each component has a `uiType` that determines how it renders.
 
 | `uiType` | Description |
 |-----------|-------------|
-| `select` | Dropdown selector |
 | `number` | Numeric input |
+| `select` | Dropdown selector |
 | `text` | Text input |
 | `hidden` | Not displayed, value excluded from form and API payload |
-| `group` | Groups fields |
+| `group` | Groups components |
 
 ### Components (Single Fields)
 
@@ -509,22 +503,19 @@ A **Component** is a single form field:
 |----------|------|-------------|
 | `uiType` | string | `number`, `select`, `text`, `hidden` |
 | `path` | string | Dot-notation path in Instance spec (e.g. `spec.components.engine.replicas`) |
-| `fieldParams` | object | parameters available for each specific field |
+| `fieldParams` | object | Field configuration (see each type below) |
 | `validation` | object | Validation rules (see [Validation](#validation-1)) |
 
 #### Number Field
 
-Supported `fieldParams`:
-
-| Param | Type | Description |
-|-------|------|-------------|
-| `label` | string | Field label |
-| `defaultValue` | number | Initial value |
-| `step` | number | Increment/decrement step (e.g. `0.1`) |
-| `badge` | string | Unit label shown next to the input (e.g. `"Gi"`, `"cores"`) |
-| `badgeToApi` | bool | When `true`, appends `badge` to the value sent to the API (e.g. `4` → `"4Gi"`) |
-| `disabled` | bool | Field is non-interactive |
-| `modes` | object | Per-mode overrides (see [Mode-Aware Overrides](#mode-aware-overrides)) |
+```
+┌──────────────────────────────────┐
+│ Number of nodes                  │
+│ ┌────────────────────────┐       │
+│ │ 3                    ↕ │       │
+│ └────────────────────────┘       │
+└──────────────────────────────────┘
+```
 
 ```yaml
 numberOfNodes:
@@ -542,27 +533,28 @@ numberOfNodes:
     max: 7
 ```
 
-```
-┌──────────────────────────────────┐
-│ Number of nodes                  │
-│ ┌────────────────────────┐       │
-│ │ 3                    ↕ │       │
-│ └────────────────────────┘       │
-└──────────────────────────────────┘
-```
-
-#### Select Field
-
 Supported `fieldParams`:
 
 | Param | Type | Description |
 |-------|------|-------------|
 | `label` | string | Field label |
-| `defaultValue` | string | Pre-selected value |
-| `optionsPath` | string | Path in the Provider spec to load options from (e.g. `spec.componentTypes.mongod.versions`) |
-| `optionsPathConfig` | object | Maps object fields to label/value: `{ labelPath, valuePath }` |
+| `defaultValue` | number | Initial value |
+| `step` | number | Increment/decrement step (e.g. `0.1`) |
+| `badge` | string | Unit label shown next to the input (e.g. `"Gi"`, `"cores"`) |
+| `badgeToApi` | bool | When `true`, appends `badge` to the value sent to the API (e.g. `4` → `"4Gi"`) |
 | `disabled` | bool | Field is non-interactive |
 | `modes` | object | Per-mode overrides (see [Mode-Aware Overrides](#mode-aware-overrides)) |
+
+#### Select Field
+
+```
+┌──────────────────────────────────┐
+│ Database Version                 │
+│ ┌──────────────────────────┐     │
+│ │ 8.0.12                 ▾ │     │
+│ └──────────────────────────┘     │
+└──────────────────────────────────┘
+```
 
 ```yaml
 version:
@@ -581,29 +573,31 @@ version:
     required: true
 ```
 
-```
-┌──────────────────────────────────┐
-│ Database Version                 │
-│ ┌──────────────────────────┐     │
-│ │ 8.0.12                 ▾ │     │
-│ └──────────────────────────┘     │
-└──────────────────────────────────┘
-```
-
-#### Text Field
-
 Supported `fieldParams`:
 
 | Param | Type | Description |
 |-------|------|-------------|
 | `label` | string | Field label |
-| `defaultValue` | string | Initial value |
-| `placeholder` | string | Placeholder text shown when empty |
-| `multiline` | bool | Renders a textarea instead of a single-line input |
-| `minRows` | number | Minimum visible rows (when `multiline: true`) |
-| `maxRows` | number | Maximum visible rows before scrolling |
+| `defaultValue` | string | Pre-selected value |
+| `options` | array | Inline options: `[{ label, value }]` |
+| `optionsPath` | string | Path in the Provider spec to load options from |
+| `optionsPathConfig` | object | Maps object fields to label/value: `{ labelPath, valuePath }` |
+| `displayEmpty` | bool | Adds an empty "None" option for optional fields |
 | `disabled` | bool | Field is non-interactive |
 | `modes` | object | Per-mode overrides (see [Mode-Aware Overrides](#mode-aware-overrides)) |
+
+#### Text Field
+
+```
+┌──────────────────────────────────┐
+│ Configuration                    │
+│ ┌────────────────────────────┐   │
+│ │ operationProfiling:        │   │
+│ │   mode: slowOp             │   │
+│ │                            │   │
+│ └────────────────────────────┘   │
+└──────────────────────────────────┘
+```
 
 ```yaml
 configuration:
@@ -619,16 +613,18 @@ configuration:
     maxRows: 8
 ```
 
-```
-┌──────────────────────────────────┐
-│ Configuration                    │
-│ ┌────────────────────────────┐   │
-│ │ operationProfiling:        │   │
-│ │   mode: slowOp             │   │
-│ │                            │   │
-│ └────────────────────────────┘   │
-└──────────────────────────────────┘
-```
+Supported `fieldParams`:
+
+| Param | Type | Description |
+|-------|------|-------------|
+| `label` | string | Field label |
+| `defaultValue` | string | Initial value |
+| `placeholder` | string | Placeholder text shown when empty |
+| `multiline` | bool | Renders a textarea instead of a single-line input |
+| `minRows` | number | Minimum visible rows (when `multiline: true`) |
+| `maxRows` | number | Maximum visible rows before scrolling |
+| `disabled` | bool | Field is non-interactive |
+| `modes` | object | Per-mode overrides (see [Mode-Aware Overrides](#mode-aware-overrides)) |
 
 #### Hidden Field
 
@@ -714,7 +710,7 @@ resources:
 └─────────────────────────────────────────────┘
 ```
 
-### Path vs ID
+### Path and ID References
 
 Each component must have either `path` or `id` (not both):
 
