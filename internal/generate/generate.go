@@ -58,6 +58,14 @@ func Run(opts Options) error {
 		return fmt.Errorf("assembling definition files: %w", err)
 	}
 
+	// 1b. Assemble BackupClasses, collecting any additional type references
+	//     into the same TypeRefs set so a single ResolveSchemas pass picks
+	//     them up alongside topology and component schemas.
+	backupClasses, err := AssembleBackupClasses(opts.DefinitionDir, cfg.TypeRefs)
+	if err != nil {
+		return fmt.Errorf("assembling backup classes: %w", err)
+	}
+
 	// Auto-detect chart dir if not specified.
 	if opts.ChartDir == "" {
 		detected, err := detectChartDir()
@@ -108,6 +116,15 @@ func Run(opts Options) error {
 	}
 
 	fmt.Fprintf(os.Stderr, "Generated: %s\n", outputFile)
+
+	// 5. Emit BackupClass manifests, one per definition/backupclasses/<name>/.
+	if len(backupClasses) > 0 {
+		bcOutDir := filepath.Join(opts.ChartDir, "generated", "backupclasses")
+		if err := writeBackupClassManifests(bcOutDir, backupClasses, schemas); err != nil {
+			return fmt.Errorf("writing backup class manifests: %w", err)
+		}
+	}
+
 	return nil
 }
 
