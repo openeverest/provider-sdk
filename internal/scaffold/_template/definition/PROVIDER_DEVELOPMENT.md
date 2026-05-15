@@ -1068,8 +1068,8 @@ func (p *Provider) Status(c *controller.Context) (controller.Status, error) {
     case "ready":
         details, err := buildConnectionDetails(c, psmdb)
 		    if err != nil {
-			    return controller.Failed("Failed to build connection details: " + err.Error()), nil
-        }
+			    return controller.Failed("Build connection details: " + err.Error()), nil
+		    }
 
 		    return controller.ReadyWithConnectionDetails(details), nil
     case "error":
