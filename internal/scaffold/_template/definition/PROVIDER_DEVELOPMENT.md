@@ -1059,9 +1059,9 @@ Read the operator resource status and translate it to an Instance status.
 
 ```go
 func (p *Provider) Status(c *controller.Context) (controller.Status, error) {
-    upstream := &operatorv1.MyDatabase{}
-    if err := c.Get(upstream, c.Name()); err != nil {
-        return controller.Provisioning("Waiting for upstream resource"), nil
+    operator := &operatorv1.MyDatabase{}
+    if err := c.Get(operator, c.Name()); err != nil {
+        return controller.Provisioning("Waiting for operator resource"), nil
     }
 
     switch operator.Status.State {
