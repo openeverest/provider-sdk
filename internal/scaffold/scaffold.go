@@ -52,14 +52,14 @@ type Config struct {
 	// ModulePath is the Go module path (e.g., "github.com/openeverest/provider-percona-server-mongodb").
 	ModulePath string
 
-	// UpstreamAPIGroup is the API group of the upstream operator CRDs (e.g., "psmdb.percona.com").
+	// OperatorAPIGroup is the API group of the operator CRDs (e.g., "psmdb.percona.com").
 	// Optional: used as a hint in RBAC marker comments.
-	UpstreamAPIGroup string
+	OperatorAPIGroup string
 
-	// UpstreamResource is the plural name of the upstream operator's primary resource
+	// OperatorResource is the plural name of the operator's primary resource
 	// (e.g., "perconaservermongodbs").
 	// Optional: used as a hint in RBAC marker comments.
-	UpstreamResource string
+	OperatorResource string
 
 	// ComponentType is the primary component type name (e.g., "mongod").
 	ComponentType string
@@ -90,7 +90,7 @@ func (c *Config) Validate() error {
 	if c.ModulePath == "" {
 		missing = append(missing, "ModulePath")
 	}
-	// ComponentType, TopologyName, UpstreamAPIGroup and UpstreamResource are optional.
+	// ComponentType, TopologyName, OperatorAPIGroup and OperatorResource are optional.
 	if len(missing) > 0 {
 		return fmt.Errorf("missing required fields: %s", strings.Join(missing, ", "))
 	}
@@ -112,11 +112,11 @@ func (c *Config) DeriveDefaults() {
 			c.TopologyTypeName = toPascalCase(c.TopologyName)
 		}
 	}
-	if c.UpstreamAPIGroup == "" {
-		c.UpstreamAPIGroup = "<upstream-api-group>"
+	if c.OperatorAPIGroup == "" {
+		c.OperatorAPIGroup = "<operator-api-group>"
 	}
-	if c.UpstreamResource == "" {
-		c.UpstreamResource = "<upstream-resources>"
+	if c.OperatorResource == "" {
+		c.OperatorResource = "<operator-resources>"
 	}
 }
 

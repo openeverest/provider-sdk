@@ -4,7 +4,7 @@
 # Prerequisites:
 #   1. OpenEverest CRDs installed
 #   2. Provider CR applied (provider.yaml)
-#   3. Upstream operator running
+#   3. Operator running
 #   4. Provider controller running
 apiVersion: core.openeverest.io/v1alpha1
 kind: Instance

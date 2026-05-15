@@ -27,7 +27,7 @@ definition/
 | File | Purpose | When to edit |
 |------|---------|--------------|
 | `provider.yaml` | Names the provider and maps logical component names to types. | When adding/removing a component. |
-| `versions.yaml` | Lists available versions and container images per component type. | When adding upstream releases. |
+| `versions.yaml` | Lists available versions and container images per component type. | When adding operator releases. |
 | `types.go` | Shared Go types used across the provider. | When adding provider-wide types. |
 | `components/types.go` | Go structs for component custom specs. | When a component needs custom config. |
 | `topologies/<name>/topology.yaml` | Defines a deployment topology and its UI rendering. | When adding a topology or changing its UI. |

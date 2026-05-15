@@ -6,7 +6,7 @@ import (
 
 	"github.com/openeverest/openeverest/v2/provider-runtime/controller"
 
-	// TODO: Import your upstream operator's API types package, e.g.:
+	// TODO: Import your operator's API types package, e.g.:
 	// operatorv1 "github.com/example/my-operator/api/v1"
 
 	"[[ .ModulePath ]]/internal/common"
@@ -26,11 +26,11 @@ func New() *Provider {
 		BaseProvider: controller.BaseProvider{
 			ProviderName: common.ProviderName,
 			SchemeFuncs:  []func(*runtime.Scheme) error{
-				// TODO: Register your upstream operator's scheme, e.g.:
+				// TODO: Register your operator's scheme, e.g.:
 				// operatorv1.SchemeBuilder.AddToScheme,
 			},
 			WatchConfigs: []controller.WatchConfig{
-				// TODO: Watch your upstream operator's primary resource, e.g.:
+				// TODO: Watch your operator's primary resource, e.g.:
 				// controller.WatchOwned(&operatorv1.MyDatabase{}),
 			},
 		},
@@ -42,8 +42,8 @@ func New() *Provider {
 // Add your provider-specific validation logic here.
 // Return an error if the spec is invalid.
 //
-// +kubebuilder:rbac:groups=[[ .UpstreamAPIGroup ]],resources=[[ .UpstreamResource ]],verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=[[ .UpstreamAPIGroup ]],resources=[[ .UpstreamResource ]]/status,verbs=get
+// +kubebuilder:rbac:groups=[[ .OperatorAPIGroup ]],resources=[[ .OperatorResource ]],verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=[[ .OperatorAPIGroup ]],resources=[[ .OperatorResource ]]/status,verbs=get
 func (p *Provider) Validate(c *controller.Context) error {
 	l := log.FromContext(c.Context())
 	l.Info("Validating instance", "name", c.Name())
@@ -58,7 +58,7 @@ func (p *Provider) Validate(c *controller.Context) error {
 
 // Sync ensures all required resources exist and are configured correctly.
 //
-// This is the main reconciliation logic. Create or update your upstream
+// This is the main reconciliation logic. Create or update your operator
 // operator's custom resource(s) based on the Instance spec.
 func (p *Provider) Sync(c *controller.Context) error {
 	l := log.FromContext(c.Context())
@@ -66,8 +66,8 @@ func (p *Provider) Sync(c *controller.Context) error {
 
 	// TODO: Implement sync logic.
 	// Typical pattern:
-	//   1. Build the upstream CR spec from the Instance spec
-	//   2. Use c.Apply() to create/update the upstream resource
+	//   1. Build the operator CR spec from the Instance spec
+	//   2. Use c.Apply() to create/update the operator resource
 	//
 	// Example:
 	//   cr := &operatorv1.MyDatabase{
@@ -83,7 +83,7 @@ func (p *Provider) Sync(c *controller.Context) error {
 
 // Status computes the current status of the database instance.
 //
-// Query the upstream operator's resource(s) and translate their status
+// Query the operator's resource(s) and translate their status
 // into the provider-runtime's Status type.
 func (p *Provider) Status(c *controller.Context) (controller.Status, error) {
 	l := log.FromContext(c.Context())
@@ -91,7 +91,7 @@ func (p *Provider) Status(c *controller.Context) (controller.Status, error) {
 
 	// TODO: Implement status logic.
 	// Typical pattern:
-	//   1. Get the upstream CR using c.Get()
+	//   1. Get the operator CR using c.Get()
 	//   2. Translate its status to a controller.Status
 	//
 	// Example:

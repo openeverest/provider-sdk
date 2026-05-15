@@ -153,7 +153,7 @@ func addTypeToVersionsYAML(cfg *AddComponentConfig) error {
 		"definition/versions.yaml",
 		versions,
 		"# Component type version catalog.\n"+
-			"# Add new versions here when upstream releases are available.\n"+
+			"# Add new versions here when operator releases are available.\n"+
 			"# Mark exactly one version per type as `default: true`.\n",
 	)
 }

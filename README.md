@@ -38,8 +38,8 @@ provider-sdk init
 | `--module` | Go module path (e.g., `github.com/my-org/provider-my-database`) | — (required) |
 | `--component-type` | Primary component type name (e.g., `mydb`) | — (required) |
 | `--topology` | Initial topology name | `standalone` |
-| `--api-group` | Upstream operator API group (optional, used as RBAC hint) | — |
-| `--resource` | Upstream operator resource, plural (optional, used as RBAC hint) | — |
+| `--api-group` | Operator API group (optional, used as RBAC hint) | — |
+| `--resource` | Operator resource, plural (optional, used as RBAC hint) | — |
 | `--output-dir`, `-o` | Output directory | `./<name>` |
 | `--non-interactive` | Fail instead of prompting for missing values | `false` |
 
@@ -91,7 +91,7 @@ cd provider-my-database
 # 1. Read the development guide
 cat definition/PROVIDER_DEVELOPMENT.md
 
-# 2. Add your upstream operator Go dependency
+# 2. Add your operator Go dependency
 go get your-operator-module@latest
 go mod tidy
 

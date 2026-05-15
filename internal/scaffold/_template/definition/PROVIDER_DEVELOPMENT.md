@@ -29,9 +29,9 @@ directory structure, the provider implementation, and common patterns.
 ## Conceptual Model
 
 An OpenEverest **Provider** bridges the gap between the platform's generic
-**Instance** abstraction and a specific upstream database operator. The provider
+**Instance** abstraction and a specific database operator. The provider
 defines *what* can be deployed (components, versions, topologies) and *how* to
-translate Instance specs into upstream operator resources.
+translate Instance specs into operator resources.
 
 ### Key Concepts
 
@@ -54,9 +54,9 @@ Provider Runtime receives the Instance
         ▼
 Your Provider implementation:
   1. Validate() - validates the Instance spec
-  2. Sync()     - creates/updates upstream operator CRs
-  3. Status()   - reads upstream status → Instance status
-  4. Cleanup()  - deletes upstream resources on Instance deletion
+  2. Sync()     - creates/updates operator CRs
+  3. Status()   - reads operator status → Instance status
+  4. Cleanup()  - deletes operator resources on Instance deletion
 ```
 
 ### Component Names vs Component Types
@@ -192,7 +192,7 @@ componentTypes:
 - Each component type must have at least one version
 - Exactly one version per type must be marked `default: true`
 - Images should be fully qualified (registry/repository:tag)
-- Add new versions when upstream releases are available
+- Add new versions when operator releases are available
 
 ### Version Bundles
 
@@ -243,11 +243,11 @@ etcd is never mutated, so the user's original intent is always preserved.
   `provider.yaml` and in the corresponding `componentTypes` catalog
   respectively — `provider-sdk generate` validates this at build time
 - Bundle names are arbitrary strings but should follow a human-friendly
-  convention (e.g., the upstream operator's minor version)
+  convention (e.g., the operator's minor version)
 - You do not need to include optional components (e.g., `monitoring`) in
   a bundle; the user can still specify their version explicitly
 
-**Adding a new bundle when a new upstream version is released**
+**Adding a new bundle when a new operator version is released**
 
 1. Add the new component versions to `componentTypes` in `versions.yaml`
 2. Add a new bundle entry under `versions:` referencing those new versions
@@ -1033,19 +1033,19 @@ func (p *Provider) Validate(c *controller.Context) error {
 
 ### Sync
 
-Create or update upstream operator resources. This is called on every
+Create or update operator resources. This is called on every
 reconciliation.
 
 ```go
 func (p *Provider) Sync(c *controller.Context) error {
-    // Build the upstream CR from the Instance spec
-    upstream := &operatorv1.MyDatabase{
+    // Build the operator CR from the Instance spec
+    operator := &operatorv1.MyDatabase{
         ObjectMeta: c.ObjectMeta(c.Name()),  // Sets ownership
-        Spec:       buildUpstreamSpec(c),
+        Spec:       buildOperatorSpec(c),
     }
 
     // Apply creates or updates the resource
-    if err := c.Apply(upstream); err != nil {
+    if err := c.Apply(operator); err != nil {
         return err
     }
 
@@ -1055,7 +1055,7 @@ func (p *Provider) Sync(c *controller.Context) error {
 
 ### Status
 
-Read the upstream resource status and translate it to an Instance status.
+Read the operator resource status and translate it to an Instance status.
 
 ```go
 func (p *Provider) Status(c *controller.Context) (controller.Status, error) {
@@ -1064,7 +1064,7 @@ func (p *Provider) Status(c *controller.Context) (controller.Status, error) {
         return controller.Provisioning("Waiting for upstream resource"), nil
     }
 
-    switch upstream.Status.State {
+    switch operator.Status.State {
     case "ready":
         details, err := buildConnectionDetails(c, psmdb)
 		    if err != nil {
@@ -1073,7 +1073,7 @@ func (p *Provider) Status(c *controller.Context) (controller.Status, error) {
 
 		    return controller.ReadyWithConnectionDetails(details), nil
     case "error":
-        return controller.Failed(upstream.Status.Message), nil
+        return controller.Failed(operator.Status.Message), nil
     default:
         return controller.Provisioning("Cluster is being created"), nil
     }
@@ -1082,14 +1082,14 @@ func (p *Provider) Status(c *controller.Context) (controller.Status, error) {
 
 ### Cleanup
 
-Handle deletion. Delete upstream resources when the Instance is deleted.
+Handle deletion. Delete operator resources when the Instance is deleted.
 
 ```go
 func (p *Provider) Cleanup(c *controller.Context) error {
-    upstream := &operatorv1.MyDatabase{
+    operator := &operatorv1.MyDatabase{
         ObjectMeta: c.ObjectMeta(c.Name()),
     }
-    return c.Delete(upstream)
+    return c.Delete(operator)
 }
 ```
 
@@ -1103,10 +1103,10 @@ func New() *Provider {
         BaseProvider: controller.BaseProvider{
             ProviderName: common.ProviderName,
             SchemeFuncs: []func(*runtime.Scheme) error{
-                operatorv1.SchemeBuilder.AddToScheme,  // Register upstream types
+                operatorv1.SchemeBuilder.AddToScheme,  // Register operator types
             },
             WatchConfigs: []controller.WatchConfig{
-                controller.WatchOwned(&operatorv1.MyDatabase{}),  // Watch upstream CRs
+                controller.WatchOwned(&operatorv1.MyDatabase{}),  // Watch operator CRs
             },
         },
     }
@@ -1158,10 +1158,10 @@ The scaffold includes base RBAC for the provider runtime:
 
 ### Adding Provider-Specific RBAC
 
-Add markers for your upstream operator's resources:
+Add markers for your operator's resources:
 
 ```go
-// Upstream operator primary resource
+// Operator primary resource
 // +kubebuilder:rbac:groups=psmdb.percona.com,resources=perconaservermongodbs,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=psmdb.percona.com,resources=perconaservermongodbs/status,verbs=get
 // +kubebuilder:rbac:groups=psmdb.percona.com,resources=perconaservermongodbs/finalizers,verbs=update
@@ -1173,7 +1173,7 @@ Add markers for your upstream operator's resources:
 ```
 
 **Common resources to consider:**
-- Upstream operator CRDs (main resource, backups, restores)
+- Operator CRDs (main resource, backups, restores)
 - Secrets (connection strings, credentials)
 - ConfigMaps (operator config)
 - Services (database endpoints)
@@ -1204,10 +1204,10 @@ This runs:
 # Create a local cluster
 make k3d-cluster-up
 
-# Install prerequisites (OpenEverest CRDs, upstream operator)
+# Install prerequisites (OpenEverest CRDs, operator)
 kubectl apply -f https://raw.githubusercontent.com/openeverest/openeverest/v2/config/crd/bases/core.openeverest.io_providers.yaml
 kubectl apply -f https://raw.githubusercontent.com/openeverest/openeverest/v2/config/crd/bases/core.openeverest.io_instances.yaml
-# Install your upstream operator...
+# Install your operator...
 
 # Deploy the provider with Helm
 make helm-install
@@ -1303,12 +1303,12 @@ Use this checklist to track your progress:
 - [ ] **UI schema** configured in each topology's `topology.yaml`
 - [ ] **Provider interface** implemented in `internal/provider/provider.go`:
   - [ ] `Validate()` — validates Instance spec
-  - [ ] `Sync()` — creates/updates upstream resources
-  - [ ] `Status()` — translates upstream status
+  - [ ] `Sync()` — creates/updates operator resources
+  - [ ] `Status()` — translates operator status
   - [ ] `Cleanup()` — handles deletion
-- [ ] **Upstream operator scheme** registered in `SchemeFuncs`
-- [ ] **Watch configs** set for upstream resources
-- [ ] **RBAC markers** added for all upstream resources
+- [ ] **Operator scheme** registered in `SchemeFuncs`
+- [ ] **Watch configs** set for operator resources
+- [ ] **RBAC markers** added for all operator resources
 - [ ] **Component constants** in `internal/common/spec.go`
 - [ ] **Custom types** (if needed) in `definition/components/types.go`
 - [ ] **Topology config types** (if needed) in `definition/topologies/*/types.go`
