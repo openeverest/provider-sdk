@@ -19,8 +19,7 @@ go run github.com/openeverest/provider-sdk@latest init
 ```bash
 provider-sdk init \
   --name provider-my-database \
-  --module github.com/my-org/provider-my-database \
-  --component-type mydb
+  --module github.com/my-org/provider-my-database
 ```
 
 Or run interactively (you will be prompted for each value):

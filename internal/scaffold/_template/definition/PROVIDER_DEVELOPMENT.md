@@ -19,6 +19,12 @@ directory structure, the provider implementation, and common patterns.
 - [Step 3: Define Topologies](#step-3-define-topologies)
 - [Step 4: Define Custom Types](#step-4-define-custom-types)
 - [Step 5: Configure the UI Schema](#step-5-configure-the-ui-schema)
+  - [Sections](#sections)
+  - [Components (Single Fields)](#components-single-fields)
+  - [ComponentGroups (Nested Fields)](#componentgroups-nested-fields)
+  - [Validation](#validation-1)
+  - [Mode-Aware Overrides](#mode-aware-overrides)
+  - [DataSource (API-Driven Select Options)](#datasource-api-driven-select-options)
 - [Step 6: Implement the Provider Interface](#step-6-implement-the-provider-interface)
 - [Step 7: Configure RBAC](#step-7-configure-rbac)
 - [Step 8: Generate and Test](#step-8-generate-and-test)
@@ -445,61 +451,557 @@ type GlobalConfig struct{}
 The UI schema in each `topology.yaml` tells the OpenEverest frontend how to
 render the Instance creation/edit form.
 
-### UI Types
+### Sections
 
-| `uiType` | Description | Common `fieldParams` |
-|-----------|-------------|---------------------|
-| `select` | Dropdown selector | `label` |
-| `number` | Numeric input | `label`, `defaultValue` |
-| `text` | Text input | `label`, `placeholder` |
-| `toggle` | Boolean toggle | `label` |
-| `group` | Groups multiple fields | `groupType: line` or `column` |
+Sections are logical groupings (typically form steps). Each section has:
 
-### Path References
+| Property | Type | Description |
+|----------|------|-------------|
+| `label` | string | Display name |
+| `description` | string | Section description |
+| `components` | object | Component or ComponentGroup definitions |
+| `componentsOrder` | array | Optional display order of components |
 
-The `path` field references a location in the Instance CR spec:
+```yaml
+resources:
+  label: Basic Info
+  description: Provider the basic information for your DB.
+  components:
+    version: { ... }
+  componentsOrder:
+    - version
+```
+
+Sections render as steps in a multi-step form:
 
 ```
-spec.components.<componentName>.version      → Component version
-spec.components.<componentName>.replicas     → Replica count
-spec.components.<componentName>.resources.requests.cpu    → CPU request
-spec.components.<componentName>.resources.requests.memory → Memory request
-spec.components.<componentName>.storage.size → Storage size
-spec.topology.config.<field>                 → Custom topology config field
+  ① Basic Info       ② Resources        ③ Advanced
+  ─────●─────────────────○─────────────────○──────
+ ┌──────────────────────────────────────────────┐
+ │ Basic Info                                   │
+ │ Provide the basic information for your DB.   │
+ │                                              │
+ │  ┌────────────────────────────────────────┐  │
+ │  │ Database Version       [8.0.12     ▾]  │  │
+ │  └────────────────────────────────────────┘  │
+ │                                              │
+ │                              [ Next → ]      │
+ └──────────────────────────────────────────────┘
+```
+
+### UI Types
+
+Each component has a `uiType` that determines how it renders.
+
+| `uiType` | Description |
+|-----------|-------------|
+| `select` | Dropdown selector |
+| `number` | Numeric input |
+| `text` | Text input |
+| `hidden` | Not displayed, value excluded from form and API payload |
+| `group` | Groups fields |
+
+### Components (Single Fields)
+
+A **Component** is a single form field:
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `uiType` | string | `number`, `select`, `text`, `hidden` |
+| `path` | string | Dot-notation path in Instance spec (e.g. `spec.components.engine.replicas`) |
+| `fieldParams` | object | parameters available for each specific field |
+| `validation` | object | Validation rules (see [Validation](#validation-1)) |
+
+#### Number Field
+
+Supported `fieldParams`:
+
+| Param | Type | Description |
+|-------|------|-------------|
+| `label` | string | Field label |
+| `defaultValue` | number | Initial value |
+| `step` | number | Increment/decrement step (e.g. `0.1`) |
+| `badge` | string | Unit label shown next to the input (e.g. `"Gi"`, `"cores"`) |
+| `badgeToApi` | bool | When `true`, appends `badge` to the value sent to the API (e.g. `4` → `"4Gi"`) |
+| `disabled` | bool | Field is non-interactive |
+| `modes` | object | Per-mode overrides (see [Mode-Aware Overrides](#mode-aware-overrides)) |
+
+```yaml
+numberOfNodes:
+  uiType: number
+  path: spec.components.engine.replicas
+  fieldParams:
+    label: Number of nodes
+    defaultValue: 3
+    step: 1
+    modes:
+      edit:
+        disabled: true
+  validation:
+    min: 1
+    max: 7
+```
+
+```
+┌──────────────────────────────────┐
+│ Number of nodes                  │
+│ ┌────────────────────────┐       │
+│ │ 3                    ↕ │       │
+│ └────────────────────────┘       │
+└──────────────────────────────────┘
+```
+
+#### Select Field
+
+Supported `fieldParams`:
+
+| Param | Type | Description |
+|-------|------|-------------|
+| `label` | string | Field label |
+| `defaultValue` | string | Pre-selected value |
+| `optionsPath` | string | Path in the Provider spec to load options from (e.g. `spec.componentTypes.mongod.versions`) |
+| `optionsPathConfig` | object | Maps object fields to label/value: `{ labelPath, valuePath }` |
+| `disabled` | bool | Field is non-interactive |
+| `modes` | object | Per-mode overrides (see [Mode-Aware Overrides](#mode-aware-overrides)) |
+
+```yaml
+version:
+  uiType: select
+  path: spec.engine.version
+  fieldParams:
+    label: Database Version
+    optionsPath: spec.versions
+    optionsPathConfig:
+      labelPath: "name"
+      valuePath: "name"
+    modes:
+      edit:
+        disabled: true
+  validation:
+    required: true
+```
+
+```
+┌──────────────────────────────────┐
+│ Database Version                 │
+│ ┌──────────────────────────┐     │
+│ │ 8.0.12                 ▾ │     │
+│ └──────────────────────────┘     │
+└──────────────────────────────────┘
+```
+
+#### Text Field
+
+Supported `fieldParams`:
+
+| Param | Type | Description |
+|-------|------|-------------|
+| `label` | string | Field label |
+| `defaultValue` | string | Initial value |
+| `placeholder` | string | Placeholder text shown when empty |
+| `multiline` | bool | Renders a textarea instead of a single-line input |
+| `minRows` | number | Minimum visible rows (when `multiline: true`) |
+| `maxRows` | number | Maximum visible rows before scrolling |
+| `disabled` | bool | Field is non-interactive |
+| `modes` | object | Per-mode overrides (see [Mode-Aware Overrides](#mode-aware-overrides)) |
+
+```yaml
+configuration:
+  uiType: text
+  path: spec.components.engine.configuration
+  fieldParams:
+    label: Configuration
+    placeholder: |
+      operationProfiling:
+        mode: slowOps
+    multiline: true
+    minRows: 3
+    maxRows: 8
+```
+
+```
+┌──────────────────────────────────┐
+│ Configuration                    │
+│ ┌────────────────────────────┐   │
+│ │ operationProfiling:        │   │
+│ │   mode: slowOp             │   │
+│ │                            │   │
+│ └────────────────────────────┘   │
+└──────────────────────────────────┘
+```
+
+#### Hidden Field
+
+```yaml
+internalId:
+  uiType: hidden
+  path: spec.internalId
+```
+
+Not rendered. Value excluded from the form and API payload.
+
+### ComponentGroups (Nested Fields)
+
+Set `uiType: group` to group multiple components together.
+
+Supported properties:
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `uiType` | string | Must be `group` |
+| `groupType` | string | `line` (horizontal layout) or `accordion` (collapsible) |
+| `label` | string | Group label (displayed differently per `groupType`) |
+| `description` | string | Group description |
+| `components` | object | Nested components or groups |
+| `componentsOrder` | array | Optional display order |
+
+**Line group** — renders children horizontally:
+
+```yaml
+resources:
+  label: "Resources"
+  uiType: group
+  groupType: line
+  components:
+    cpu:
+      uiType: number
+      path: spec.components.engine.resources.limits.cpu
+      fieldParams:
+        label: CPU
+        defaultValue: 1
+    memory:
+      uiType: number
+      path: spec.components.engine.resources.limits.memory
+      fieldParams:
+        label: Memory
+        defaultValue: 4
+        badge: "Gi"
+        badgeToApi: true
+  componentsOrder:
+    - cpu
+    - memory
+```
+
+```
+┌─ Resources ─────────────────────────────┐
+│  ┌──────────────┐  ┌──────────────┐     │
+│  │ CPU          │  │ Memory       │     │
+│  │ ┌────────┐   │  │ ┌────────┐   │     │
+│  │ │ 1    ↕ │   │  │ │ 4    ↕ │Gi │     │
+│  │ └────────┘   │  │ └────────┘   │     │
+│  └──────────────┘  └──────────────┘     │
+└─────────────────────────────────────────┘
+```
+
+**Accordion group** — renders as a collapsible panel:
+
+```
+┌─ ▶ Advanced Settings ───────────────────────┐
+└─────────────────────────────────────────────┘
+
+┌─ ▼ Advanced Settings ───────────────────────┐
+│                                             │
+│  Storage class                              │
+│  ┌───────────────────────────────────┐      │
+│  │ local-path                      ▾ │      │
+│  └───────────────────────────────────┘      │
+│                                             │
+│  Configuration                              │
+│  ┌───────────────────────────────────┐      │
+│  │ operationProfiling:               │      │
+│  │   mode: slowOp                    │      │
+│  └───────────────────────────────────┘      │
+└─────────────────────────────────────────────┘
+```
+
+### Path vs ID
+
+Each component must have either `path` or `id` (not both):
+
+- **`path`** — dot-notation location in the Instance spec. The value is included in the API payload.
+- **`id`** — custom identifier for fields that should **not** be submitted but are needed for validation or conditional rendering.
+
+```yaml
+# path — value is stored in the Instance spec
+nodes:
+  uiType: number
+  path: spec.components.engine.replicas
+  fieldParams:
+    label: Number of nodes
+
+# id — value is NOT submitted, used only for UI logic
+confirmDeletion:
+  uiType: text
+  id: confirmDeletion
+  fieldParams:
+    label: Type the database name to confirm
+  validation:
+    celExpressions:
+      - celExpr: "confirmDeletion == metadata.name"
+        message: Name does not match
+```
+
+Common `path` examples:
+
+```
+spec.components.<name>.resources.limits.cpu  → CPU limit
+spec.components.<name>.storage.size          → Storage size
 ```
 
 ### Validation
 
+Add a `validation` object to any component. All rules are optional and
+composable:
+
+| Rule | Type | Description |
+|------|------|-------------|
+| `required` | bool | Field must have a value |
+| `min` / `max` | number | Numeric bounds |
+| `int` | bool | Must be an integer |
+| `regex` | object | `pattern` + optional `message` |
+| `celExpressions` | array | Cross-field rules using CEL |
+
 ```yaml
 validation:
-  min: 1
-  max: 7
   required: true
+  min: 1
+  int: true
+  celExpressions:
+    - celExpr: "spec.components.engine.replicas % 2 == 1"
+      message: "The number of nodes must be odd"
 ```
 
-### Sections
+CEL expressions can reference any field by its `path` and `id`.
+In edit mode, `original.<path>` gives the persisted value for
+comparison.
 
-Sections group related UI elements. Use `sectionsOrder` to control display order:
+### Mode-Aware Overrides
+
+Override component behavior per mode (`new`, `edit`, `restore`, `import`).
+
+**fieldParams-level** — presentation overrides:
 
 ```yaml
+fieldParams:
+  label: Database name
+  modes:
+    edit:
+      disabled: true
+```
+
+**validation-level** — per-mode validation rules:
+
+```yaml
+validation:
+  required: true
+  min: 1
+  modes:
+    edit:
+      celExpressions:
+        - celExpr: "spec.sharding.shards >= original.spec.sharding.shards"
+          message: Number of shards cannot be decreased
+```
+
+Mode-specific scalar rules **replace** base rules. Mode-specific
+`celExpressions` are **appended** to base expressions.
+
+### DataSource (API-Driven Select Options)
+
+Use `dataSource` instead of inline `options` when a select field's choices come
+from the OpenEverest API at runtime:
+
+```yaml
+storageClass:
+  uiType: select
+  dataSource:
+    provider: storageClasses
+  path: spec.engine.storage.class
+  fieldParams:
+    label: Storage class
+```
+
+Available providers: `storageClasses`, `monitoringConfigs`. The field
+auto-selects the first option, shows loading/error states, and renders an
+empty-state fallback when the provider supports one. Everything else
+(`validation`, `modes`, `fieldParams`) works identically to a regular select.
+
+### Example
+
+The YAML below produces a form that renders like this:
+
+```
+ ── Step 1: Database Version ──────────────────────────
+ Provide the information about the database version
+ you want to use.
+┌────────────────────────────────────────────────────┐
+│ Database Version                                   │
+│ ┌────────────────────────────────────────────────┐ │
+│ │ 8.0.12                                       ▾ │ │
+│ └────────────────────────────────────────────────┘ │
+└────────────────────────────────────────────────────┘
+
+ ── Step 2: Resources ─────────────────────────────────
+ Configure the resources your new database will
+ have access to.
+┌────────────────────────────────────────────────────┐
+│ Number of nodes                                    │
+│ ┌────────────┐                                     │
+│ │ 3        ↕ │                                     │
+│ └────────────┘                                     │
+│                                                    │
+│  ┌────────────┐  ┌────────────┐  ┌────────────┐    │
+│  │ CPU        │  │ Memory     │  │ Disk       │    │
+│  │ ┌──────┐   │  │ ┌──────┐   │  │ ┌──────┐   │    │
+│  │ │ 1  ↕ │   │  │ │ 4  ↕ │Gi │  │ │ 25 ↕ │Gi │    │
+│  │ └──────┘   │  │ └──────┘   │  │ └──────┘   │    │
+│  └────────────┘  └────────────┘  └────────────┘    │
+└────────────────────────────────────────────────────┘
+
+ ── Step 3: Advanced configuration ────────────────────
+ Configure advanced settings for your database.
+┌────────────────────────────────────────────────────┐
+│ Storage class                                      │
+│ ┌────────────────────────────────────────────────┐ │
+│ │ local-path                                   ▾ │ │
+│ └────────────────────────────────────────────────┘ │
+│                                                    │
+│ Engine configuration                               │
+│ ┌────────────────────────────────────────────────┐ │
+│ │ operationProfiling:                            │ │
+│ │   mode: slowOps                                │ │
+│ │                                                │ │
+│ └────────────────────────────────────────────────┘ │
+└────────────────────────────────────────────────────┘
+```
+
+```yaml
+# definition/topologies/replicaSet/topology.yaml
 ui:
   sections:
-    basicInfo:
-      label: Basic Information
-      description: ...
-      components: ...
+    databaseVersion:
+      label: "Database Version"
+      description: "Provide the information about the database version you want to use."
+      components:
+        version:
+          uiType: select
+          path: spec.version
+          fieldParams:
+            label: "Database Version"
+            optionsPath: spec.versions
+            optionsPathConfig:
+              labelPath: "name"
+              valuePath: "name"
+            modes:
+              edit:
+                disabled: true
+          validation:
+            required: true
     resources:
-      label: Resources
-      description: ...
-      components: ...
+      label: "Resources"
+      description: "Configure the resources your new database will have access to."
+      components:
+        nodes:
+          uiType: group
+          components:
+            numberOfnodes:
+              path: "spec.components.engine.replicas"
+              uiType: number
+              fieldParams:
+                label: "Number of nodes"
+                defaultValue: 3
+              validation:
+                required: true
+                min: 1
+                int: true
+                celExpressions:
+                  - celExpr: "spec.components.engine.replicas % 2 == 1"
+                    message: "The number of nodes must be odd"
+                modes:
+                  edit:
+                    celExpressions:
+                      - celExpr: "!(spec.components.engine.replicas == 1 && original.spec.components.engine.replicas > 1)"
+                        message: "Cannot scale down to a single node"
+            resources:
+              uiType: group
+              groupType: line
+              components:
+                cpu:
+                  path: "spec.components.engine.resources.limits.cpu"
+                  uiType: number
+                  fieldParams:
+                    label: "CPU"
+                    defaultValue: 1
+                    step: 1
+                  validation:
+                    min: 0.6
+                    required: true
+                memory:
+                  path: "spec.components.engine.resources.limits.memory"
+                  uiType: number
+                  fieldParams:
+                    label: "Memory"
+                    defaultValue: 4
+                    step: 0.1
+                    badge: "Gi"
+                    badgeToApi: true
+                  validation:
+                    min: 0.512
+                    required: true
+                disk:
+                  path: "spec.components.engine.storage.size"
+                  uiType: number
+                  fieldParams:
+                    label: "Disk"
+                    defaultValue: 25
+                    badge: "Gi"
+                    badgeToApi: true
+                  validation:
+                    min: 1
+                    int: true
+                    required: true
+                    modes:
+                      edit:
+                        celExpressions:
+                          - celExpr: "spec.components.engine.storage.size >= original.spec.components.engine.storage.size"
+                            message: "Disk size cannot be decreased"
+          componentsOrder:
+            - numberOfnodes
+            - resources
     advanced:
-      label: Advanced Settings
-      description: ...
-      components: ...
+      label: "Advanced configuration"
+      description: "Configure advanced settings for your database"
+      components:
+        storageClass:
+          uiType: select
+          path: spec.components.engine.storage.storageClass
+          fieldParams:
+            label: "Storage class"
+            modes:
+              edit:
+                disabled: true
+          validation:
+            required: true
+          dataSource:
+            provider: storageClasses
+        configuration:
+          uiType: text
+          path: spec.components.engine.configuration
+          fieldParams:
+            label: "Engine configuration"
+            placeholder: |2
+              operationProfiling:
+                mode: slowOps
+                slowOpThresholdMs: 200
+            multiline: true
+            minRows: 3
+            maxRows: 8
+      componentsOrder:
+        - storageClass
+        - configuration
   sectionsOrder:
-  - basicInfo
-  - resources
-  - advanced
+    - databaseVersion
+    - resources
+    - advanced
 ```
 
 ---
@@ -563,16 +1065,21 @@ Read the upstream resource status and translate it to an Instance status.
 func (p *Provider) Status(c *controller.Context) (controller.Status, error) {
     upstream := &operatorv1.MyDatabase{}
     if err := c.Get(upstream, c.Name()); err != nil {
-        return controller.Creating("Waiting for upstream resource"), nil
+        return controller.Provisioning("Waiting for upstream resource"), nil
     }
 
     switch upstream.Status.State {
     case "ready":
-        return controller.Running(), nil
+        details, err := buildConnectionDetails(c, psmdb)
+		    if err != nil {
+			    return controller.Failed("Failed to build connection details: " + err.Error()), nil
+        }
+
+		    return controller.ReadyWithConnectionDetails(details), nil
     case "error":
         return controller.Failed(upstream.Status.Message), nil
     default:
-        return controller.Creating("Cluster is being created"), nil
+        return controller.Provisioning("Cluster is being created"), nil
     }
 }
 ```
