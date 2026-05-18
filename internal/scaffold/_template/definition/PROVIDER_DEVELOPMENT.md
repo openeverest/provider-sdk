@@ -1066,10 +1066,9 @@ func (p *Provider) Status(c *controller.Context) (controller.Status, error) {
 
     switch operator.Status.State {
     case "ready":
-        details, err := buildConnectionDetails(c, psmdb)
-		    if err != nil {
-			    return controller.Failed("Build connection details: " + err.Error()), nil
-		    }
+        details := controller.ConnectionDetails{
+          // TODO: Set connection details.
+        }
 
 		    return controller.ReadyWithConnectionDetails(details), nil
     case "error":
@@ -1250,9 +1249,7 @@ Scaffold a new provider project.
 ```bash
 provider-sdk init \
   --name provider-my-database \
-  --module github.com/my-org/provider-my-database \
-  --component-type mydb \
-  --topology standalone
+  --module github.com/my-org/provider-my-database
 ```
 
 ### `provider-sdk add component`

@@ -96,15 +96,19 @@ func (p *Provider) Status(c *controller.Context) (controller.Status, error) {
 	//
 	// Example:
 	//   cr := &operatorv1.MyDatabase{}
-	//   if err := c.Get(c.NamespacedName(), cr); err != nil {
+	//   if err := c.Get(cr, c.Name()); err != nil {
 	//       return controller.Status{}, err
 	//   }
 	//   if cr.Status.Ready {
-	//       return controller.Running(), nil
+	//       return controller.ReadyWithConnectionDetails(
+	//           controller.ConnectionDetails{
+	//           // Populate connection details.
+	//           },
+	//       ), nil
 	//   }
-	//   return controller.Creating("waiting for database to be ready"), nil
+	//   return controller.Provisioning("waiting for database to be ready"), nil
 
-	return controller.Creating("initializing"), nil
+	return controller.Provisioning("initializing"), nil
 }
 
 // Cleanup handles deletion of provider-managed resources.
