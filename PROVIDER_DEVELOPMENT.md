@@ -1145,6 +1145,24 @@ func New() *Provider {
 }
 ```
 
+### Adding Watches
+
+When you add a new resource to `WatchConfigs`, add the corresponding RBAC markers:
+
+```go
+// In provider.go
+WatchConfigs: []controller.WatchConfig{
+    controller.WatchOwned(&operatorv1.MyDatabase{}),
+    controller.WatchOwned(&operatorv1.MyBackup{}),  // new watch
+},
+
+// In rbac.go (or provider.go)
+// +kubebuilder:rbac:groups=mydb.example.com,resources=mybackups,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=mydb.example.com,resources=mybackups/status,verbs=get
+```
+
+Then run `make generate` to update the RBAC manifests.
+
 ### Helper Patterns
 
 **Getting component specs:**
@@ -1218,6 +1236,22 @@ After adding markers, run `make generate` to regenerate RBAC manifests.
 
 ## Step 9: Generate and Test
 
+### Make Targets
+
+| Target                  | Description                                                |
+|-------------------------|------------------------------------------------------------|
+| `make run`              | Run the provider locally                                   |
+| `make generate`         | Run all code generation (RBAC + Helm sync + provider spec) |
+| `make manifests`        | Generate RBAC from kubebuilder markers                     |
+| `make build`            | Build the provider binary                                  |
+| `make docker-build`     | Build the container image                                  |
+| `make helm-install`     | Deploy with Helm                                           |
+| `make helm-template`    | Render Helm templates locally (dry-run)                    |
+| `make test`             | Run unit tests                                             |
+| `make test-integration` | Run kuttl integration tests                                |
+| `make verify`           | Check generated files are up-to-date (CI)                  |
+| `make lint`             | Run golangci-lint                                          |
+
 ### Code Generation
 
 ```bash
@@ -1269,6 +1303,19 @@ Edit test files in `test/integration/` to add test cases for your provider.
 ```bash
 # Verify generated files are up-to-date
 make verify
+```
+
+### Deployment with Helm
+
+```bash
+# Install
+helm install <provider-name> charts/<provider-name>/ --create-namespace
+
+# Upgrade
+helm upgrade <provider-name> charts/<provider-name>/
+
+# Uninstall
+helm uninstall <provider-name>
 ```
 
 ---
