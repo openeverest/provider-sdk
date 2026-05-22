@@ -146,7 +146,7 @@ func runInit(_ *cobra.Command, _ []string) error {
 	fmt.Println()
 	fmt.Println("Next steps:")
 	fmt.Printf("  1. cd %s\n", initOpts.outputDir)
-	fmt.Println("  2. Read definition/PROVIDER_DEVELOPMENT.md for a complete development guide")
+	fmt.Println("  2. Read github.com/openeverest/provider-sdk/blob/main/PROVIDER_DEVELOPMENT.md for a complete development guide")
 	fmt.Println("  3. Add your operator dependency: go get <operator-module>@latest")
 	fmt.Println("  4. Run: go mod tidy")
 	fmt.Println()

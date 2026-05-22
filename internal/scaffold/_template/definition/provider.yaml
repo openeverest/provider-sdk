@@ -3,7 +3,7 @@
 # Component names are the logical roles used in topologies (e.g. engine, proxy).
 #
 # Run `provider-sdk add component` to add components interactively.
-# For more details, see definition/PROVIDER_DEVELOPMENT.md.
+# For more details, see github.com/openeverest/provider-sdk/blob/main/PROVIDER_DEVELOPMENT.md.
 
 name: [[ .ProviderName ]]
 

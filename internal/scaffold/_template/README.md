@@ -2,11 +2,11 @@
 
 An [OpenEverest](https://github.com/openeverest) provider.
 
-> **New to provider development?** See `definition/PROVIDER_DEVELOPMENT.md` for a complete guide.
+> **New to provider development?** See `github.com/openeverest/provider-sdk/blob/main/PROVIDER_DEVELOPMENT.md` for a complete guide.
 
 ## Prerequisites
 
-- Go 1.25+
+- Go 1.26+
 - A Kubernetes cluster (k3d, kind, or remote)
 - [OpenEverest CRDs](https://github.com/openeverest/openeverest) installed
 - Your operator installed and running
@@ -43,7 +43,7 @@ definition/
   components/
     types.go               # Component custom spec types
   topologies/
-    standalone/
+    <topology>/
       topology.yaml        # Topology config + UI schema
       types.go             # Topology-specific config types
 config/
@@ -53,54 +53,34 @@ charts/[[ .ProviderName ]]/     # Helm chart for deployment
   generated/
     rbac-rules.yaml        # Generated RBAC rules (do not edit manually)
     provider-spec.yaml     # Generated Provider CR spec (do not edit manually)
+  templates/               # Helm templates
+examples/
+  instance-example.yaml    # Example Instance CR
+  instance-simple.yaml     # Minimal Instance CR
+dev/
+  k3d_config.yaml          # Local k3d cluster config
+hack/                      # Helper scripts
+gen.go                     # go:generate entry point
 Makefile                   # Build, generate, and deploy targets
+Dockerfile
 ```
 
-### Key Make Targets
+### Make Targets
 
-| Target             | Description                                              |
-|--------------------|----------------------------------------------------------|
-| `make run`         | Run the provider locally                                 |
-| `make generate`    | Run all code generation (RBAC + Helm sync + provider.yaml) |
-| `make manifests`   | Generate RBAC from kubebuilder markers                   |
-| `make generate` | Run all code generation (RBAC + Helm sync + provider spec) |
-| `make build`       | Build the provider binary                                |
-| `make docker-build`| Build the container image                                |
-| `make helm-install`| Deploy with Helm                                         |
-| `make helm-template`| Render Helm templates locally (dry-run)                 |
-| `make test`        | Run unit tests                                           |
-| `make test-integration` | Run kuttl integration tests                         |
-| `make verify`      | Check generated files are up-to-date (CI)                |
-| `make lint`        | Run golangci-lint                                        |
+| Target                  | Description                                                |
+|-------------------------|-------------------------------------------------------------|
+| `make generate`         | Run all code generation (RBAC + Helm sync + provider spec) |
+| `make run`              | Run the provider locally                                   |
+| `make build`            | Build the provider binary                                  |
+| `make docker-build`     | Build the container image                                  |
+| `make helm-install`     | Deploy with Helm                                           |
+| `make helm-template`    | Render Helm templates locally (dry-run)                    |
+| `make test`             | Run unit tests                                             |
+| `make test-integration` | Run kuttl integration tests                                |
+| `make verify`           | Check generated files are up-to-date (CI)                  |
+| `make lint`             | Run golangci-lint                                          |
 
-### RBAC Workflow
-
-RBAC permissions are declared using [kubebuilder markers](https://book.kubebuilder.io/reference/markers/rbac) in Go source files (primarily `internal/provider/rbac.go`).
-
-1. Add `+kubebuilder:rbac` markers for any new resources your provider needs
-2. Run `make generate`
-3. This regenerates `config/rbac/role.yaml` and syncs rules into the Helm chart
-4. Commit the changes
-
-Base RBAC for the provider-runtime (Instances, Providers, leases, events) is pre-configured in `rbac.go`.
-
-### Adding Watches
-
-When you add a new resource to `WatchConfigs` in your provider, add the corresponding RBAC markers:
-
-```go
-// In provider.go
-WatchConfigs: []controller.WatchConfig{
-    controller.WatchOwned(&operatorv1.MyDatabase{}),
-    controller.WatchOwned(&operatorv1.MyBackup{}),  // new watch
-},
-
-// In rbac.go (or provider.go)
-// +kubebuilder:rbac:groups=mydb.example.com,resources=mybackups,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=mydb.example.com,resources=mybackups/status,verbs=get
-```
-
-Then run `make generate` to update the RBAC manifests.
+> For development patterns (RBAC, watches, code generation), see [PROVIDER_DEVELOPMENT.md](https://github.com/openeverest/provider-sdk/blob/main/PROVIDER_DEVELOPMENT.md).
 
 ## Deployment
 

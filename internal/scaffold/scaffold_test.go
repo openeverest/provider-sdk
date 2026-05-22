@@ -123,7 +123,6 @@ func TestScaffold(t *testing.T) {
 		"definition/versions.yaml",
 		"definition/types.go",
 		"definition/README.md",
-		"definition/PROVIDER_DEVELOPMENT.md",
 		"definition/components/types.go",
 	} {
 		if _, err := os.Stat(filepath.Join(dest, defFile)); err != nil {

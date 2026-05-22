@@ -4,7 +4,7 @@ This directory contains all the files you edit when creating or maintaining an
 OpenEverest provider. Everything related to the provider's **identity**,
 **versions**, **topologies**, **UI**, and **custom schemas** lives here.
 
-> **For a complete development guide, see [PROVIDER_DEVELOPMENT.md](PROVIDER_DEVELOPMENT.md).**
+> **For a complete development guide, see [PROVIDER_DEVELOPMENT.md](github.com/openeverest/provider-sdk/blob/main/PROVIDER_DEVELOPMENT.md).**
 
 ## Directory Layout
 
@@ -13,7 +13,6 @@ definition/
 ├── provider.yaml                    # Provider name + component→type mapping
 ├── versions.yaml                    # Component types and their version/image catalog
 ├── types.go                         # Shared types (TopologyType, GlobalConfig)
-├── PROVIDER_DEVELOPMENT.md          # Complete provider development guide
 ├── components/
 │   └── types.go                     # Component custom spec types
 └── topologies/
