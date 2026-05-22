@@ -12,16 +12,17 @@ directory structure, the provider implementation, and common patterns.
 
 - [Conceptual Model](#conceptual-model)
 - [Project Structure Overview](#project-structure-overview)
-- [Step 1: Define Components](#step-1-define-components)
-- [Step 2: Define Versions](#step-2-define-versions)
+- [Step 1: Initialize the Provider Project](#step-1-initialize-the-provider-project)
+- [Step 2: Define Components](#step-2-define-components)
+- [Step 3: Define Versions](#step-3-define-versions)
   - [Component Version Catalog](#component-version-catalog)
   - [Version Bundles](#version-bundles)
-- [Step 3: Define Topologies](#step-3-define-topologies)
-- [Step 4: Define Custom Types](#step-4-define-custom-types)
-- [Step 5: Configure the UI Schema](#step-5-configure-the-ui-schema)
-- [Step 6: Implement the Provider Interface](#step-6-implement-the-provider-interface)
-- [Step 7: Configure RBAC](#step-7-configure-rbac)
-- [Step 8: Generate and Test](#step-8-generate-and-test)
+- [Step 4: Define Topologies](#step-4-define-topologies)
+- [Step 5: Define Custom Types](#step-5-define-custom-types)
+- [Step 6: Configure the UI Schema](#step-6-configure-the-ui-schema)
+- [Step 7: Implement the Provider Interface](#step-7-implement-the-provider-interface)
+- [Step 8: Configure RBAC](#step-8-configure-rbac)
+- [Step 9: Generate and Test](#step-9-generate-and-test)
 - [Provider SDK CLI Reference](#provider-sdk-cli-reference)
 
 ---
@@ -104,7 +105,39 @@ charts/<provider-name>/              # ← GENERATED (mostly)
 
 ---
 
-## Step 1: Define Components
+## Step 1: Initialize the Provider Project
+
+Before defining components, topologies, or implementing the provider interface,
+scaffold a new provider project using the `provider-sdk init` command.
+
+### Using the CLI
+
+```bash
+provider-sdk init \
+  --name provider-my-database \
+  --module github.com/my-org/provider-my-database
+```
+
+Or run interactively — you will be prompted for each value:
+
+```bash
+provider-sdk init
+```
+
+### Flags
+
+| Flag | Description | Default |
+|------|-------------|---------|
+| `--name` | Provider name (e.g., `provider-my-database`) | — (required) |
+| `--module` | Go module path (e.g., `github.com/my-org/provider-my-database`) | — (required) |
+| `--api-group` | Operator API group (optional, used as RBAC hint) | — |
+| `--resource` | Operator resource, plural (optional, used as RBAC hint) | — |
+| `--output-dir`, `-o` | Output directory | `./<name>` |
+| `--non-interactive` | Fail instead of prompting for missing values | `false` |
+
+---
+
+## Step 2: Define Components
 
 Components are the building blocks of your provider. Each component represents
 a logical part of the database deployment.
@@ -155,7 +188,7 @@ The `provider-sdk add component` command updates all four files automatically.
 
 ---
 
-## Step 2: Define Versions
+## Step 3: Define Versions
 
 All version information lives in `definition/versions.yaml`. It has two
 related sections: the **component version catalog** and **version bundles**.
@@ -281,7 +314,7 @@ func (p *Provider) Sync(c *controller.Context) error {
 
 ---
 
-## Step 3: Define Topologies
+## Step 4: Define Topologies
 
 Topologies define deployment architectures — which components are used together
 and how they're configured.
@@ -393,7 +426,7 @@ func (p *Provider) Sync(c *controller.Context) error {
 
 ---
 
-## Step 4: Define Custom Types
+## Step 5: Define Custom Types
 
 Custom types allow you to extend the Instance spec with provider-specific fields.
 
@@ -440,7 +473,7 @@ type GlobalConfig struct{}
 
 ---
 
-## Step 5: Configure the UI Schema
+## Step 6: Configure the UI Schema
 
 The UI schema in each `topology.yaml` tells the OpenEverest frontend how to
 render the Instance creation/edit form.
@@ -1002,7 +1035,7 @@ ui:
 
 ---
 
-## Step 6: Implement the Provider Interface
+## Step 7: Implement the Provider Interface
 
 The core of your provider is in `internal/provider/provider.go`. You must
 implement four methods:
@@ -1142,7 +1175,7 @@ if c.TryDecodeTopologyConfig(&cfg) {
 
 ---
 
-## Step 7: Configure RBAC
+## Step 8: Configure RBAC
 
 RBAC permissions are declared using
 [kubebuilder markers](https://book.kubebuilder.io/reference/markers/rbac)
@@ -1183,7 +1216,7 @@ After adding markers, run `make generate` to regenerate RBAC manifests.
 
 ---
 
-## Step 8: Generate and Test
+## Step 9: Generate and Test
 
 ### Code Generation
 

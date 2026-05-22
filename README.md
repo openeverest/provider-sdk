@@ -28,21 +28,6 @@ Or run interactively (you will be prompted for each value):
 provider-sdk init
 ```
 
-## Commands
-
-### `init` — Scaffold a New Provider
-
-| Flag | Description | Default |
-|------|-------------|---------|
-| `--name` | Provider name (e.g., `provider-my-database`) | — (required) |
-| `--module` | Go module path (e.g., `github.com/my-org/provider-my-database`) | — (required) |
-| `--component-type` | Primary component type name (e.g., `mydb`) | — (required) |
-| `--topology` | Initial topology name | `standalone` |
-| `--api-group` | Operator API group (optional, used as RBAC hint) | — |
-| `--resource` | Operator resource, plural (optional, used as RBAC hint) | — |
-| `--output-dir`, `-o` | Output directory | `./<name>` |
-| `--non-interactive` | Fail instead of prompting for missing values | `false` |
-
 ## Generated Structure
 
 ```
@@ -85,7 +70,7 @@ provider-my-database/
 
 ## After Scaffolding
 
-Read [PROVIDER_DEVELOPMENT.md](github.com/openeverest/provider-sdk/blob/main/PROVIDER_DEVELOPMENT.md).
+Read [PROVIDER_DEVELOPMENT.md](PROVIDER_DEVELOPMENT.md).
 
 ```bash
 cd provider-my-database
@@ -120,18 +105,25 @@ provider-sdk/
 │   ├── generate.go                 # generate subcommand
 │   ├── add.go                      # add parent command
 │   ├── add_component.go            # add component subcommand
-│   └── add_topology.go             # add topology subcommand
+│   ├── add_topology.go             # add topology subcommand
+│   └── add_backupclass.go          # add backupclass subcommand
 ├── internal/
 │   ├── scaffold/                   # Scaffolding engine + embedded template
 │   │   ├── scaffold.go
 │   │   ├── scaffold_test.go
 │   │   ├── add_component.go
 │   │   ├── add_topology.go
+│   │   ├── add_backupclass.go
 │   │   └── _template/             # Template files (embedded in binary)
-│   └── generate/                   # Provider CR spec generator
-│       ├── generate.go
-│       ├── assemble.go
-│       └── schema.go
+│   ├── generate/                   # Provider CR spec generator
+│   │   ├── generate.go
+│   │   ├── assemble.go
+│   │   ├── backupclasses.go
+│   │   └── schema.go
+│   └── tui/                        # Terminal UI helpers
+│       ├── multiselect.go
+│       └── prompt.go
+├── pkg/util/
 ├── go.mod
 └── go.sum
 ```
