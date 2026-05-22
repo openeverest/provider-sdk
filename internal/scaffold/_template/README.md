@@ -2,7 +2,7 @@
 
 An [OpenEverest](https://github.com/openeverest) provider.
 
-> **New to provider development?** See `definition/PROVIDER_DEVELOPMENT.md` for a complete guide.
+> **New to provider development?** See `github.com/openeverest/provider-sdk/blob/main/PROVIDER_DEVELOPMENT.md` for a complete guide.
 
 ## Prerequisites
 

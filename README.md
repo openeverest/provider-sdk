@@ -47,6 +47,7 @@ provider-sdk init
 
 ```
 provider-my-database/
+├── PROVIDER_DEVELOPMENT.md           # Complete development guide
 ├── cmd/provider/main.go              # Entry point
 ├── internal/
 │   ├── provider/
@@ -58,7 +59,6 @@ provider-my-database/
 │   ├── provider.yaml                 # Provider name + component→type mapping
 │   ├── versions.yaml                 # Component type version/image catalog
 │   ├── types.go                      # Shared Go types
-│   ├── PROVIDER_DEVELOPMENT.md       # Complete development guide
 │   ├── components/
 │   │   └── types.go                  # Component custom spec types
 │   └── topologies/
@@ -85,28 +85,27 @@ provider-my-database/
 
 ## After Scaffolding
 
+Read [PROVIDER_DEVELOPMENT.md](github.com/openeverest/provider-sdk/blob/main/PROVIDER_DEVELOPMENT.md).
+
 ```bash
 cd provider-my-database
 
-# 1. Read the development guide
-cat definition/PROVIDER_DEVELOPMENT.md
-
-# 2. Add your operator Go dependency
+# 1. Add your operator Go dependency
 go get your-operator-module@latest
 go mod tidy
 
-# 3. Add components and topologies
+# 2. Add components and topologies
 provider-sdk add component --name mydb --type mydb
 provider-sdk add topology --name standalone
 
-# 4. Configure versions in definition/versions.yaml
-# 5. Implement provider logic in internal/provider/provider.go
-# 6. Add RBAC markers in internal/provider/rbac.go
+# 3. Configure versions in definition/versions.yaml
+# 4. Implement provider logic in internal/provider/provider.go
+# 5. Add RBAC markers in internal/provider/rbac.go
 
-# 7. Generate all manifests
+# 6. Generate all manifests
 make generate
 
-# 8. Run locally against a cluster
+# 7. Run locally against a cluster
 make run
 ```
 

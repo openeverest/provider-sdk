@@ -218,7 +218,8 @@ func createTopologyYAML(topoDir, topoName string, components []string) error {
 		"# config.configSchema: Reference a Go type for custom topology config fields.\n"+
 		"# ui: Rendering hints for the frontend form.\n"+
 		"#\n"+
-		"# See definition/PROVIDER_DEVELOPMENT.md for detailed guidance.\n",
+		"# See github.com/openeverest/provider-sdk/blob/main/PROVIDER_DEVELOPMENT.md\n"+
+		"# for detailed guidance.\n",
 		toPascalCase(topoName),
 	)
 
