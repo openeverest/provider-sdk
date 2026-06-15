@@ -85,12 +85,13 @@ provider-sdk add topology --name standalone
 
 # 3. Configure versions in definition/versions.yaml
 # 4. Implement provider logic in internal/provider/provider.go
-# 5. Add RBAC markers in internal/provider/rbac.go
+# 5. Optionally implement backup logic in internal/provider/backup.go
+# 6. Add RBAC markers in internal/provider/rbac.go
 
-# 6. Generate all manifests
+# 7. Generate all manifests
 make generate
 
-# 7. Run locally against a cluster
+# 8. Run locally against a cluster
 make run
 ```
 

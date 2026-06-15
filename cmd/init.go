@@ -159,9 +159,10 @@ func runInit(_ *cobra.Command, _ []string) error {
 	fmt.Println()
 	fmt.Println("  Implement and test:")
 	fmt.Println("  10. Implement provider logic in internal/provider/provider.go")
-	fmt.Println("  11. Add RBAC markers in internal/provider/rbac.go")
-	fmt.Println("  12. Run: make generate")
-	fmt.Println("  13. Test: make run")
+	fmt.Println("  11. Optionally implement backup logic in internal/provider/backup.go")
+	fmt.Println("  12. Add RBAC markers in internal/provider/rbac.go")
+	fmt.Println("  13. Run: make generate")
+	fmt.Println("  14. Test: make run")
 	fmt.Println()
 
 	return nil
