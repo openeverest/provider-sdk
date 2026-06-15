@@ -38,7 +38,7 @@ func main() {
 		opts = append(opts, reconciler.WithMetrics(metricsBindAddress))
 	}
 
-	r, err := reconciler.New(ctx, provider, opts...)
+	r, err := reconciler.New(ctx, p, opts...)
 	if err != nil {
 		l.Error(err, "unable to create reconciler")
 		os.Exit(1)
