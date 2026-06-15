@@ -2,10 +2,16 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ include "[[ .ProviderName ]].fullname" . }}
+  namespace: {{ .Release.Namespace }}
   labels:
     {{- include "[[ .ProviderName ]].labels" . | nindent 4 }}
 spec:
   replicas: {{ .Values.replicaCount }}
+  revisionHistoryLimit: {{ .Values.revisionHistoryLimit }}
+  {{- with .Values.strategy }}
+  strategy:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
   selector:
     matchLabels:
       {{- include "[[ .ProviderName ]].selectorLabels" . | nindent 6 }}
@@ -26,6 +32,11 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       serviceAccountName: {{ include "[[ .ProviderName ]].serviceAccountName" . }}
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+      {{- with .Values.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
       containers:
@@ -34,6 +45,9 @@ spec:
             {{- toYaml .Values.securityContext | nindent 12 }}
           image: {{ include "[[ .ProviderName ]].image" . }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args:
+            - --server-port={{ .Values.service.port }}
+            - --metrics-bind-address={{ .Values.service.metricsBindAddress }}
           ports:
             - name: http
               containerPort: {{ .Values.service.port }}
