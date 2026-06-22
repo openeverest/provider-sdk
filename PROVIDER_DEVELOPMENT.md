@@ -20,11 +20,12 @@ directory structure, the provider implementation, and common patterns.
 - [Step 4: Define Topologies](#step-4-define-topologies)
 - [Step 5: Define Custom Types](#step-5-define-custom-types)
 - [Step 6: Configure the UI Schema](#step-6-configure-the-ui-schema)
-- [Step 7: Implement the Provider](#step-7-implement-the-provider)
-  - [Implement the Provider Interface](#step-7-implement-the-provider-interface)
-  - [Implement the Provider Backup Interface](#step-7-implement-the-provider-interface)
-- [Step 8: Configure RBAC](#step-8-configure-rbac)
-- [Step 9: Generate and Test](#step-9-generate-and-test)
+- [Step 7: Implement the Provider Interface](#step-7-implement-the-provider)
+- [Step 8: Add Backup Support (Optional)](#step-8-add-backup-support-optional)
+  - [Define BackupClasses](#define-backupclasses)
+  - [Add Backup Implementation Files](#add-backup-implementation-files)
+- [Step 9: Configure RBAC](#step-9-configure-rbac)
+- [Step 10: Generate and Test](#step-10-generate-and-test)
 - [Provider SDK CLI Reference](#provider-sdk-cli-reference)
 
 ---
@@ -1037,14 +1038,12 @@ ui:
 
 ---
 
-## Step 7: Implement the Provider
-
-### Implement the Provider Interface
+## Step 7:  Implement the Provider Interface
 
 The core of your provider is in `internal/provider/provider.go`. You must
 implement four methods:
 
-#### Validate
+### Validate
 
 Called before Sync. Validate the Instance spec and return an error for
 invalid configurations.
@@ -1068,7 +1067,7 @@ func (p *Provider) Validate(c *controller.Context) error {
 }
 ```
 
-#### Sync
+### Sync
 
 Create or update operator resources. This is called on every
 reconciliation.
@@ -1090,7 +1089,7 @@ func (p *Provider) Sync(c *controller.Context) error {
 }
 ```
 
-#### Status
+### Status
 
 Read the operator resource status and translate it to an Instance status.
 
@@ -1116,7 +1115,7 @@ func (p *Provider) Status(c *controller.Context) (controller.Status, error) {
 }
 ```
 
-#### Cleanup
+### Cleanup
 
 Handle deletion. Delete operator resources when the Instance is deleted.
 
@@ -1129,7 +1128,7 @@ func (p *Provider) Cleanup(c *controller.Context) error {
 }
 ```
 
-#### Provider Setup
+### Provider Setup
 
 Configure your provider with schemes and watch configs:
 
@@ -1149,7 +1148,7 @@ func New() *Provider {
 }
 ```
 
-#### Adding Watches
+### Adding Watches
 
 When you add a new resource to `WatchConfigs`, add the corresponding RBAC markers:
 
@@ -1167,7 +1166,7 @@ WatchConfigs: []controller.WatchConfig{
 
 Then run `make generate` to update the RBAC manifests.
 
-#### Helper Patterns
+### Helper Patterns
 
 **Getting component specs:**
 
@@ -1193,6 +1192,114 @@ var cfg sharded.ShardedTopologyConfig
 if c.TryDecodeTopologyConfig(&cfg) {
     // Use cfg.NumShards, etc.
 }
+```
+
+## Step 8: Add Backup Support (Optional)
+
+Backup support is entirely optional. If your operator doesn't support backups,
+skip this section. Backup integration requires two parts:
+
+1. **BackupClass definitions** (describing available backup/restore configurations)
+2. **Backup implementation files** (`backup.go`, optionally `backup_mirror.go`)
+
+### Define BackupClasses
+
+BackupClasses describe the backup/restore configurations your provider supports.
+Each BackupClass maps to a specific backup method (e.g., logical dump, physical snapshot).
+
+```bash
+# Add a ProviderManaged BackupClass
+provider-sdk add backupclass --name everest-percona-psmdb-operator
+
+# Add a Job-based BackupClass
+provider-sdk add backupclass --name pg-dump --execution-mode Job
+```
+
+This creates:
+- `definition/backupclasses/<name>/class.yaml` - BackupClass metadata, limits, schema refs
+- `definition/backupclasses/<name>/ui.yaml` - UI rendering schema, grouped by modal
+- `definition/backupclasses/<name>/types.go` - Go types for backup/restore/PITR config
+
+#### Execution Modes
+
+- **ProviderManaged** (default): Your provider's `SyncBackup`/`SyncRestore` handle the lifecycle
+  - Supports PITR configuration
+  - Supports per-BackupClass limits (maxStorages, maxSchedulesPerStorage, etc.)
+  - Most operator-native backups use this mode
+
+- **Job**: OpenEverest runtime creates Kubernetes Jobs to execute backup/restore
+  - For CLI-based tools (pg_dump, mongodump, etc.)
+  - No PITR support
+  - No provider-side implementation needed (Job spec in BackupClass)
+
+#### BackupClass Structure
+
+**`class.yaml`** example:
+
+Update `class.yaml` to set `displayName`, `description`, `supportsPITR`, and `limits`
+
+```yaml
+displayName: "Percona Backup for MongoDB"
+description: "Native backup using Percona Server for MongoDB operator"
+supportedProviders:
+  - percona-server-mongodb
+executionMode: ProviderManaged
+providerManaged:
+  supportsPITR: true
+  limits:
+    maxPITREnabledStorages: 1
+    maxStorages: 1
+  pitrConfigSchema: PerconaPITRConfig
+config:
+  openAPIV3Schema: PerconaBackupConfig
+restoreConfig:
+  openAPIV3Schema: PerconaRestoreConfig
+```
+
+**`types.go`** example:
+
+```go
+package psmdbackup
+
+// PerconaBackupConfig defines backup-time configuration.
+// +kubebuilder:object:generate=true
+type PerconaBackupConfig struct {
+    // Compression enables backup compression
+    Compression bool `json:"compression,omitempty"`
+}
+
+// PerconaRestoreConfig defines restore-time configuration.
+// +kubebuilder:object:generate=true
+type PerconaRestoreConfig struct {}
+
+// PerconaPITRConfig defines per-storage PITR configuration.
+// +kubebuilder:object:generate=true
+type PerconaPITRConfig struct {}
+```
+
+### Add Backup Implementation Files
+
+Use the `provider-sdk add backup` command to scaffold backup implementation files:
+
+```bash
+# Add basic backup support
+provider-sdk add backup
+
+# Add backup support with mirroring for operator-scheduled backups
+provider-sdk add backup --include-mirror
+```
+
+This creates:
+- `internal/provider/backup.go` - Implements `SyncBackup`, `SyncRestore`, `CleanupBackup`, `CleanupRestore`
+- `internal/provider/backup_mirror.go` - (Optional) Implements `Mirror` for operator-scheduled backups
+
+#### If You Don't Need Backups
+
+If you added backup files by mistake or no longer need them:
+
+```bash
+rm internal/provider/backup.go
+rm internal/provider/backup_mirror.go  # if it exists
 ```
 
 ### Implement the Backup Interface
@@ -1444,9 +1551,11 @@ Add markers in `rbac.go`:
 // +kubebuilder:rbac:groups=backup.openeverest.io,resources=restores/status,verbs=get;update;patch
 ```
 
+Run `make generate` to update manifests.
+
 ---
 
-## Step 8: Configure RBAC
+## Step 9: Configure RBAC
 
 RBAC permissions are declared using
 [kubebuilder markers](https://book.kubebuilder.io/reference/markers/rbac)
@@ -1487,7 +1596,7 @@ After adding markers, run `make generate` to regenerate RBAC manifests.
 
 ---
 
-## Step 9: Generate and Test
+## Step 10: Generate and Test
 
 ### Make Targets
 

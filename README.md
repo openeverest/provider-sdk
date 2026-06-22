@@ -85,13 +85,18 @@ provider-sdk add topology --name standalone
 
 # 3. Configure versions in definition/versions.yaml
 # 4. Implement provider logic in internal/provider/provider.go
-# 5. Optionally implement backup logic in internal/provider/backup.go
-# 6. Add RBAC markers in internal/provider/rbac.go
+# 5. Optionally add backup support (only if your operator supports backups)
+provider-sdk add backup                      # Adds backup.go
+provider-sdk add backup --include-mirror     # Adds backup.go + backup_mirror.go
+provider-sdk add backupclass --name my-backup-class
 
-# 7. Generate all manifests
+# 6. If added: implement backup logic in internal/provider/backup.go + backup_mirror.go
+# 7. Add RBAC markers in internal/provider/rbac.go
+
+# 8. Generate all manifests
 make generate
 
-# 8. Run locally against a cluster
+# 9. Run locally against a cluster
 make run
 ```
 
@@ -107,6 +112,7 @@ provider-sdk/
 │   ├── add.go                      # add parent command
 │   ├── add_component.go            # add component subcommand
 │   ├── add_topology.go             # add topology subcommand
+│   ├── add_backup.go               # add backup subcommand
 │   └── add_backupclass.go          # add backupclass subcommand
 ├── internal/
 │   ├── scaffold/                   # Scaffolding engine + embedded template
@@ -114,6 +120,7 @@ provider-sdk/
 │   │   ├── scaffold_test.go
 │   │   ├── add_component.go
 │   │   ├── add_topology.go
+│   │   ├── add_backup.go
 │   │   ├── add_backupclass.go
 │   │   └── _template/             # Template files (embedded in binary)
 │   ├── generate/                   # Provider CR spec generator
