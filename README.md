@@ -85,9 +85,8 @@ provider-sdk add topology --name standalone
 
 # 3. Configure versions in definition/versions.yaml
 # 4. Implement provider logic in internal/provider/provider.go
-# 5. Optionally add backup support (only if your operator supports backups)
+# 5. Optionally add backup and restore support (only if your operator supports backups)
 provider-sdk add backup                      # Adds backup.go
-provider-sdk add backup --include-mirror     # Adds backup.go + backup_mirror.go
 provider-sdk add backupclass --name my-backup-class
 
 # 6. If added: implement backup logic in internal/provider/backup.go + backup_mirror.go

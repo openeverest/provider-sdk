@@ -21,9 +21,9 @@ directory structure, the provider implementation, and common patterns.
 - [Step 5: Define Custom Types](#step-5-define-custom-types)
 - [Step 6: Configure the UI Schema](#step-6-configure-the-ui-schema)
 - [Step 7: Implement the Provider Interface](#step-7-implement-the-provider)
-- [Step 8: Add Backup Support (Optional)](#step-8-add-backup-support-optional)
+- [Step 8: Add Backup and Restore Support (Optional)](#step-8-add-backup-and-restore-support-optional)
   - [Define BackupClasses](#define-backupclasses)
-  - [Add Backup Implementation Files](#add-backup-implementation-files)
+  - [Add Backup and Restore Implementation Files](#add-backup-and-restore-implementation-files)
 - [Step 9: Configure RBAC](#step-9-configure-rbac)
 - [Step 10: Generate and Test](#step-10-generate-and-test)
 - [Provider SDK CLI Reference](#provider-sdk-cli-reference)
@@ -1194,7 +1194,7 @@ if c.TryDecodeTopologyConfig(&cfg) {
 }
 ```
 
-## Step 8: Add Backup Support (Optional)
+## Step 8: Add Backup and Restore Support (Optional)
 
 Backup support is entirely optional. If your operator doesn't support backups,
 skip this section. Backup integration requires two parts:
@@ -1277,7 +1277,7 @@ type PerconaRestoreConfig struct {}
 type PerconaPITRConfig struct {}
 ```
 
-### Add Backup Implementation Files
+### Add Backup and Restore Implementation Files
 
 Use the `provider-sdk add backup` command to scaffold backup implementation files:
 
