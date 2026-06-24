@@ -20,9 +20,12 @@ directory structure, the provider implementation, and common patterns.
 - [Step 4: Define Topologies](#step-4-define-topologies)
 - [Step 5: Define Custom Types](#step-5-define-custom-types)
 - [Step 6: Configure the UI Schema](#step-6-configure-the-ui-schema)
-- [Step 7: Implement the Provider Interface](#step-7-implement-the-provider-interface)
-- [Step 8: Configure RBAC](#step-8-configure-rbac)
-- [Step 9: Generate and Test](#step-9-generate-and-test)
+- [Step 7: Implement the Provider Interface](#step-7-implement-the-provider)
+- [Step 8: Add Backup and Restore Support (Optional)](#step-8-add-backup-and-restore-support-optional)
+  - [Define BackupClasses](#define-backupclasses)
+  - [Add Backup and Restore Implementation Files](#add-backup-and-restore-implementation-files)
+- [Step 9: Configure RBAC](#step-9-configure-rbac)
+- [Step 10: Generate and Test](#step-10-generate-and-test)
 - [Provider SDK CLI Reference](#provider-sdk-cli-reference)
 
 ---
@@ -1035,7 +1038,7 @@ ui:
 
 ---
 
-## Step 7: Implement the Provider Interface
+## Step 7:  Implement the Provider Interface
 
 The core of your provider is in `internal/provider/provider.go`. You must
 implement four methods:
@@ -1191,9 +1194,368 @@ if c.TryDecodeTopologyConfig(&cfg) {
 }
 ```
 
+## Step 8: Add Backup and Restore Support (Optional)
+
+Backup support is entirely optional. If your operator doesn't support backups,
+skip this section. Backup integration requires two parts:
+
+1. **BackupClass definitions** (describing available backup/restore configurations)
+2. **Backup implementation files** (`backup.go`, optionally `backup_mirror.go`)
+
+### Define BackupClasses
+
+BackupClasses describe the backup/restore configurations your provider supports.
+Each BackupClass maps to a specific backup method (e.g., logical dump, physical snapshot).
+
+```bash
+# Add a ProviderManaged BackupClass
+provider-sdk add backupclass --name everest-percona-psmdb-operator
+
+# Add a Job-based BackupClass
+provider-sdk add backupclass --name pg-dump --execution-mode Job
+```
+
+This creates:
+- `definition/backupclasses/<name>/class.yaml` - BackupClass metadata, limits, schema refs
+- `definition/backupclasses/<name>/ui.yaml` - UI rendering schema, grouped by modal
+- `definition/backupclasses/<name>/types.go` - Go types for backup/restore/PITR config
+
+#### Execution Modes
+
+- **ProviderManaged** (default): Your provider's `SyncBackup`/`SyncRestore` handle the lifecycle
+  - Supports PITR configuration
+  - Supports per-BackupClass limits (maxStorages, maxSchedulesPerStorage, etc.)
+  - Most operator-native backups use this mode
+
+- **Job**: OpenEverest runtime creates Kubernetes Jobs to execute backup/restore
+  - For CLI-based tools (pg_dump, mongodump, etc.)
+  - No PITR support
+  - No provider-side implementation needed (Job spec in BackupClass)
+
+#### BackupClass Structure
+
+**`class.yaml`** example:
+
+Update `class.yaml` to set `displayName`, `description`, `supportsPITR`, and `limits`
+
+```yaml
+displayName: "Percona Backup for MongoDB"
+description: "Native backup using Percona Server for MongoDB operator"
+supportedProviders:
+  - percona-server-mongodb
+executionMode: ProviderManaged
+providerManaged:
+  supportsPITR: true
+  limits:
+    maxPITREnabledStorages: 1
+    maxStorages: 1
+  pitrConfigSchema: PerconaPITRConfig
+config:
+  openAPIV3Schema: PerconaBackupConfig
+restoreConfig:
+  openAPIV3Schema: PerconaRestoreConfig
+```
+
+**`types.go`** example:
+
+```go
+package psmdbackup
+
+// PerconaBackupConfig defines backup-time configuration.
+// +kubebuilder:object:generate=true
+type PerconaBackupConfig struct {
+    // Compression enables backup compression
+    Compression bool `json:"compression,omitempty"`
+}
+
+// PerconaRestoreConfig defines restore-time configuration.
+// +kubebuilder:object:generate=true
+type PerconaRestoreConfig struct {}
+
+// PerconaPITRConfig defines per-storage PITR configuration.
+// +kubebuilder:object:generate=true
+type PerconaPITRConfig struct {}
+```
+
+### Add Backup and Restore Implementation Files
+
+Use the `provider-sdk add backup` command to scaffold backup implementation files:
+
+```bash
+# Add basic backup support
+provider-sdk add backup
+
+# Add backup support with mirroring for operator-scheduled backups
+provider-sdk add backup --include-mirror
+```
+
+This creates:
+- `internal/provider/backup.go` - Implements `SyncBackup`, `SyncRestore`, `CleanupBackup`, `CleanupRestore`
+- `internal/provider/backup_mirror.go` - (Optional) Implements `Mirror` for operator-scheduled backups
+
+#### If You Don't Need Backups
+
+If you added backup files by mistake or no longer need them:
+
+```bash
+rm internal/provider/backup.go
+rm internal/provider/backup_mirror.go  # if it exists
+```
+
+### Implement the Backup Interface
+
+If your operator supports backups and restores, implement the backup interfaces
+to enable OpenEverest's backup management.
+
+#### Backup Interfaces
+
+| Interface | Purpose | Required |
+|-----------|---------|----------|
+| `BackupProvider` | Sync/cleanup backup and restore CRs | Yes |
+| `BackupWatcher` | Watch operator backup resources | Yes |
+| `RestoreWatcher` | Watch operator restore resources | Yes |
+| `BackupMirror` | Mirror operator-scheduled backups into OpenEverest Backup CRs | Optional |
+
+Implement `BackupProvider`, `BackupWatcher`, and `RestoreWatcher` for basic
+backup/restore support. Add `BackupMirror` if your operator creates backups
+independently (e.g., scheduled backups) and you want them reflected in OpenEverest.
+
+#### SyncBackup
+
+Create or update the operator's backup resource, set a controller reference
+from the Backup CR to enable owner-based watches, and map operator status to OpenEverest states.
+
+```go
+func (p *Provider) SyncBackup(c *controller.Context, backup *backupv1alpha1.Backup) (controller.BackupExecutionStatus, error) {
+    ob := &operatorv1.MyDatabaseBackup{}
+    if err := c.Get(ob, c.Name()); err != nil {
+        return controller.BackupExecutionStatus{
+            State:   backupv1alpha1.BackupStatePending,
+            Message: "Waiting for backup to exist",
+        }, nil
+    }
+
+    if _, err := controllerutil.CreateOrUpdate(c.Context(), c.Client(), ob, func() error {
+        // TODO: set spec
+        return controllerutil.SetControllerReference(backup, ob, c.Client().Scheme())
+    }); err != nil {
+        return controller.BackupExecutionStatus{}, err
+    }
+
+    exec := controller.BackupExecutionStatus{
+        OperatorBackupRef: &corev1.TypedLocalObjectReference{
+            APIGroup: pointer.ToString(operatorv1.SchemeGroupVersion.Group),
+            Kind:     "MyDatabaseBackup",
+            Name:     ob.Name,
+        },
+        State: backupv1alpha1.BackupStatePending,
+    }
+
+    switch ob.Status.State {
+    case "ready":
+        exec.State = backupv1alpha1.BackupStateSucceeded
+        exec.CompletedAt = pointer.To(metav1.Now())
+    case "error":
+        exec.State = backupv1alpha1.BackupStateFailed
+        exec.Message = ob.Status.Error
+    case "running":
+        exec.State = backupv1alpha1.BackupStateRunning
+    }
+    return exec, nil
+}
+```
+
+#### SyncRestore
+
+Resolve the source Backup CR, create or update the operator's restore resource
+with a controller reference, and map operator status to OpenEverest states.
+
+```go
+func (p *Provider) SyncRestore(c *controller.Context, restore *backupv1alpha1.Restore) (controller.RestoreExecutionStatus, error) {
+    backup := &backupv1alpha1.Backup{}
+    if err := c.Get(backup, restore.Spec.DataSource.BackupName); err != nil {
+        return controller.RestoreExecutionStatus{
+            State: backupv1alpha1.RestoreStateFailed,
+            Message: fmt.Sprintf("source Backup %q not found", restore.Spec.DataSource.BackupName),
+        }, nil
+    }
+
+    or := &operatorv1.MyDatabaseRestore{ObjectMeta: metav1.ObjectMeta{Name: restore.Name, Namespace: restore.Namespace}}
+    if _, err := controllerutil.CreateOrUpdate(c.Context(), c.Client(), or, func() error {
+        // TODO: set spec
+        return controllerutil.SetControllerReference(restore, or, c.Client().Scheme())
+    }); err != nil {
+        return controller.RestoreExecutionStatus{}, err
+    }
+
+    exec := controller.RestoreExecutionStatus{
+        OperatorRestoreRef: &corev1.TypedLocalObjectReference{
+            APIGroup: pointer.ToString(operatorv1.SchemeGroupVersion.Group),
+            Kind:     "MyDatabaseRestore",
+            Name:     or.Name,
+        },
+        State: backupv1alpha1.RestoreStatePending,
+    }
+
+    switch or.Status.State {
+    case "ready":
+        exec.State = backupv1alpha1.RestoreStateSucceeded
+        exec.CompletedAt = pointer.To(metav1.Now())
+    case "error":
+        exec.State = backupv1alpha1.RestoreStateFailed
+        exec.Message = or.Status.Error
+    case "running":
+        exec.State = backupv1alpha1.RestoreStateRunning
+    }
+    return exec, nil
+}
+```
+
+#### CleanupBackup
+
+Delete the operator backup resource. For `DeletionPolicy: Retain`, remove
+storage-protection finalizers before deletion to preserve backup data. Return
+`true` only when fully deleted, `false` to requeue.
+
+```go
+func (p *Provider) CleanupBackup(c *controller.Context, backup *backupv1alpha1.Backup) (bool, error) {
+    ob := &operatorv1.MyDatabaseBackup{}
+    err := c.Get(ob, backup.Name)
+    if apierrors.IsNotFound(err) {
+        return true, nil
+    }
+    if err != nil {
+        return false, err
+    }
+
+    if backup.Spec.DeletionPolicy == backupv1alpha1.BackupDeletionPolicyRetain {
+        // TODO: remove storage protection finalizer
+    }
+
+    if ob.DeletionTimestamp.IsZero() {
+        return false, c.Delete(ob)
+    }
+    return false, nil
+}
+```
+
+#### CleanupRestore
+
+Delete the operator restore resource. Return `true` when fully deleted, `false` to requeue.
+
+```go
+func (p *Provider) CleanupRestore(c *controller.Context, restore *backupv1alpha1.Restore) (bool, error) {
+    or := &operatorv1.MyDatabaseRestore{}
+    err := c.Get(or, restore.Name)
+    if apierrors.IsNotFound(err) {
+        return true, nil
+    }
+    if err != nil {
+        return false, err
+    }
+    if or.DeletionTimestamp.IsZero() {
+        return false, c.Delete(or)
+    }
+    return false, nil
+}
+```
+
+#### BackupMirror (Optional)
+
+The runtime invokes `Mirror()` for operator backup events. Return a Backup CR
+to create it idempotently, or `nil` to skip (on-demand backups, missing Instance,
+or backups when Instance has no backup configuration).
+
+```go
+func (p *Provider) Mirror(ctx context.Context, c client.Client, obj client.Object) (*backupv1alpha1.Backup, error) {
+    ob, ok := obj.(*operatorv1.MyDatabaseBackup)
+    if !ok {
+        return nil, nil
+    }
+
+    // TODO: check backup is produced by scheduled task
+
+    inst := &corev1alpha1.Instance{}
+    err := c.Get(ctx, client.ObjectKey{Namespace: ob.Namespace, Name: ob.Spec.ClusterName}, inst)
+    if err != nil || inst.Spec.Provider != p.Name() {
+        return nil, nil
+    }
+
+    return &backupv1alpha1.Backup{
+        ObjectMeta: metav1.ObjectMeta{Name: ob.Name, Namespace: ob.Namespace},
+        Spec: backupv1alpha1.BackupSpec{
+            // TODO: set spec from from your backup
+        },
+    }, nil
+}
+
+func (p *Provider) OperatorBackupType() client.Object { return &operatorv1.MyDatabaseBackup{} }
+```
+
+#### Watch Configuration
+
+Register watches so operator backup/restore status changes trigger reconciliation.
+Use `WatchOwned` for resources with controller references set by Sync methods.
+
+```go
+func (p *Provider) BackupWatches() []controller.WatchConfig {
+    return []controller.WatchConfig{
+        controller.WatchOwned(&operatorv1.MyDatabaseBackup{}),
+    }
+}
+
+func (p *Provider) RestoreWatches() []controller.WatchConfig {
+    return []controller.WatchConfig{
+        controller.WatchOwned(&operatorv1.MyDatabaseRestore{}),
+    }
+}
+```
+
+#### Provider Setup
+
+Register backup schemes and add compile-time interface checks.
+
+```go
+func New() *Provider {
+    return &Provider{
+        BaseProvider: controller.BaseProvider{
+            ProviderName: common.ProviderName,
+            SchemeFuncs: []func(*runtime.Scheme) error{
+                operatorv1.SchemeBuilder.AddToScheme,
+                backupv1alpha1.SchemeBuilder.AddToScheme,
+            },
+            WatchConfigs: []controller.WatchConfig{
+                controller.WatchOwned(&operatorv1.MyDatabase{}),
+            },
+        },
+    }
+}
+
+// Compile-time interface checks
+var _ controller.BackupProvider = (*Provider)(nil)
+var _ controller.BackupWatcher = (*Provider)(nil)
+var _ controller.RestoreWatcher = (*Provider)(nil)
+var _ controller.BackupMirror = (*Provider)(nil)  // Optional
+```
+
+#### RBAC
+
+Add markers in `rbac.go`:
+
+```go
+// +kubebuilder:rbac:groups=backup.openeverest.io,resources=backups,verbs=get;list;watch;create;update;patch
+// +kubebuilder:rbac:groups=backup.openeverest.io,resources=backups/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=backup.openeverest.io,resources=backupclasses,verbs=get;list;watch
+// +kubebuilder:rbac:groups=backup.openeverest.io,resources=backupstorages,verbs=get;list;watch
+// +kubebuilder:rbac:groups=backup.openeverest.io,resources=restores,verbs=get;list;watch;update;patch
+// +kubebuilder:rbac:groups=backup.openeverest.io,resources=restores/status,verbs=get;update;patch
+```
+
+Run `make generate` to update manifests.
+
 ---
 
-## Step 8: Configure RBAC
+## Step 9: Configure RBAC
 
 RBAC permissions are declared using
 [kubebuilder markers](https://book.kubebuilder.io/reference/markers/rbac)
@@ -1234,7 +1596,7 @@ After adding markers, run `make generate` to regenerate RBAC manifests.
 
 ---
 
-## Step 9: Generate and Test
+## Step 10: Generate and Test
 
 ### Make Targets
 

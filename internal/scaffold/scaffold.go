@@ -175,6 +175,12 @@ func Scaffold(cfg *Config, outputDir string) error {
 			return nil
 		}
 
+		// Skip backup files - they should be added via 'provider-sdk add backup'.
+		if strings.HasSuffix(path, "internal/provider/backup.go") ||
+			strings.HasSuffix(path, "internal/provider/backup_mirror.go") {
+			return nil
+		}
+
 		// Strip the "testdata/template" prefix to get the relative path.
 		relPath := strings.TrimPrefix(path, templateRoot)
 		if relPath == "" || relPath == "/" {
