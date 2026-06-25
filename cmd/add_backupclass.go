@@ -53,7 +53,7 @@ Run from the provider project root directory.
 
 Examples:
   # Add a ProviderManaged BackupClass
-  provider-sdk add backupclass --name everest-percona-psmdb-operator
+  provider-sdk add backupclass --name psmdb
 
   # Add a Job-based BackupClass
   provider-sdk add backupclass --name pg-dump --execution-mode Job`,
@@ -66,7 +66,7 @@ func runAddBackupClass(_ *cobra.Command, _ []string) error {
 	fmt.Println()
 
 	if err := promptTUI(&addBackupClassOpts.name,
-		"BackupClass name", "everest-percona-psmdb-operator", "", true); err != nil {
+		"BackupClass name", "psmdb", "", true); err != nil {
 		return err
 	}
 
