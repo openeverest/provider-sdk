@@ -24,6 +24,12 @@ import (
 type AddBackupConfig struct {
 	// IncludeMirror determines whether to also add backup_mirror.go
 	IncludeMirror bool
+
+	// BackupCreated reports whether backup.go was created in this run.
+	BackupCreated bool
+
+	// MirrorCreated reports whether backup_mirror.go was created in this run.
+	MirrorCreated bool
 }
 
 // AddBackup adds backup implementation files to an existing provider project.
@@ -38,12 +44,18 @@ func AddBackup(cfg *AddBackupConfig) error {
 	// Check if backup.go already exists.
 	backupFile := filepath.Join(providerDir, "backup.go")
 	if _, err := os.Stat(backupFile); err == nil {
-		return fmt.Errorf("backup.go already exists at %s", backupFile)
-	}
-
-	// Create backup.go from template.
-	if err := createBackupFile(backupFile); err != nil {
-		return fmt.Errorf("creating backup.go: %w", err)
+		// For --include-mirror, allow running even when backup.go already exists.
+		if !cfg.IncludeMirror {
+			return fmt.Errorf("backup.go already exists at %s", backupFile)
+		}
+	} else if !os.IsNotExist(err) {
+		return fmt.Errorf("checking backup.go: %w", err)
+	} else {
+		// Create backup.go from template when it does not exist.
+		if err := createBackupFile(backupFile); err != nil {
+			return fmt.Errorf("creating backup.go: %w", err)
+		}
+		cfg.BackupCreated = true
 	}
 
 	// Optionally create backup_mirror.go.
@@ -51,10 +63,13 @@ func AddBackup(cfg *AddBackupConfig) error {
 		mirrorFile := filepath.Join(providerDir, "backup_mirror.go")
 		if _, err := os.Stat(mirrorFile); err == nil {
 			return fmt.Errorf("backup_mirror.go already exists at %s", mirrorFile)
+		} else if !os.IsNotExist(err) {
+			return fmt.Errorf("checking backup_mirror.go: %w", err)
 		}
 		if err := createBackupMirrorFile(mirrorFile); err != nil {
 			return fmt.Errorf("creating backup_mirror.go: %w", err)
 		}
+		cfg.MirrorCreated = true
 	}
 
 	return nil
