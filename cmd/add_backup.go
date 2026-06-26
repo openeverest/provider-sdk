@@ -76,15 +76,26 @@ func runAddBackup(_ *cobra.Command, _ []string) error {
 	fmt.Println("=== Backup support added successfully! ===")
 	fmt.Println()
 	fmt.Println("Created files:")
-	fmt.Println("  - internal/provider/backup.go")
-	if cfg.IncludeMirror {
+	if cfg.BackupCreated {
+		fmt.Println("  - internal/provider/backup.go")
+	}
+	if cfg.MirrorCreated {
 		fmt.Println("  - internal/provider/backup_mirror.go")
+	}
+	if cfg.IncludeMirror && !cfg.BackupCreated {
+		fmt.Println()
+		fmt.Println("Skipped existing files:")
+		fmt.Println("  - internal/provider/backup.go")
 	}
 	fmt.Println()
 	fmt.Println("Next steps:")
-	fmt.Println("  1. Implement backup logic in internal/provider/backup.go")
-	if cfg.IncludeMirror {
-		fmt.Println("  2. Implement Mirror logic in internal/provider/backup_mirror.go")
+	step := 1
+	if cfg.BackupCreated {
+		fmt.Printf("  %d. Implement backup logic in internal/provider/backup.go\n", step)
+		step++
+	}
+	if cfg.MirrorCreated {
+		fmt.Printf("  %d. Implement Mirror logic in internal/provider/backup_mirror.go\n", step)
 	}
 	fmt.Println()
 
