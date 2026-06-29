@@ -1,0 +1,29 @@
+# BackupStorage CR (+ credentials Secret) pointing at the in-cluster MinIO.
+#
+# Rendered by dev/Tiltfile when ENABLE_MINIO=true. The __NAMESPACE__ token is
+# replaced with the provider namespace at apply time.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: minio-credentials
+  namespace: __NAMESPACE__
+type: Opaque
+data:
+  # minioadmin / minioadmin
+  AWS_ACCESS_KEY_ID: bWluaW9hZG1pbg==
+  AWS_SECRET_ACCESS_KEY: bWluaW9hZG1pbg==
+---
+apiVersion: backup.openeverest.io/v1alpha1
+kind: BackupStorage
+metadata:
+  name: minio-s3
+  namespace: __NAMESPACE__
+spec:
+  type: s3
+  s3:
+    bucket: backups
+    region: us-east-1
+    endpointURL: http://minio.minio.svc.cluster.local:9000
+    forcePathStyle: true
+    verifyTLS: false
+    credentialsSecretName: minio-credentials

@@ -1,0 +1,211 @@
+# Tiltfile for developing [[ .ProviderName ]].
+#
+# Installs the latest released OpenEverest v2 core, then builds and deploys this
+# provider with live-reload. You do NOT need a local checkout of the core.
+#
+# Usage:
+#   make dev-up            # create the k3d cluster and run `tilt up`
+#   tilt up -f dev/Tiltfile
+#
+# See dev/README.md for configuration and for developing against a core built
+# from source (INSTALL_OPENEVEREST=false).
+
+# ===========================
+# Utilities
+# ===========================
+def str2bool(v):
+    return str(v).lower() in ("yes", "true", "t", "1")
+
+# ===========================
+# Configuration (.env)
+# ===========================
+load('ext://dotenv', 'dotenv')
+local_env_file = '{0}/.env'.format(config.main_dir)
+if os.path.exists(local_env_file):
+    print('Loading local .env file={0}'.format(local_env_file))
+    dotenv(fn=local_env_file)
+
+# Whether to install the released OpenEverest core. Set to false when you run
+# the core from source in a separate Tilt instance.
+install_openeverest = str2bool(os.getenv('INSTALL_OPENEVEREST', 'true'))
+
+# Released OpenEverest core version to install. Empty means latest.
+openeverest_version = os.getenv('OPENEVEREST_VERSION', '')
+
+# Helm repository that hosts the OpenEverest core chart.
+openeverest_helm_repo = os.getenv(
+    'OPENEVEREST_HELM_REPO', 'https://openeverest.github.io/helm-charts/')
+
+# Namespaces.
+everest_namespace = os.getenv('EVEREST_NAMESPACE', 'everest-system')
+provider_namespace = os.getenv('PROVIDER_NAMESPACE', 'default')
+
+# Whether to deploy MinIO + a BackupStorage CR for testing backups/restores.
+enable_minio = str2bool(os.getenv('ENABLE_MINIO', 'false'))
+
+# Go build environment for the provider binary.
+provider_build_env = os.getenv('PROVIDER_BUILD_ENV', 'CGO_ENABLED=0 GOOS=linux')
+
+# Initial admin password for the Everest UI/API.
+ui_admin_password = os.getenv('UI_ADMIN_PASSWORD', 'admin')
+
+# ===========================
+# Paths
+# ===========================
+provider_dir = os.path.realpath('{0}/..'.format(config.main_dir))
+chart_dir = '{0}/charts/[[ .ProviderName ]]'.format(provider_dir)
+print('Using provider dir: {0}'.format(provider_dir))
+print('Using provider chart dir: {0}'.format(chart_dir))
+
+# ===========================
+# External cluster / registry
+# ===========================
+k8s_context = os.getenv('K8S_CONTEXT', '')
+if k8s_context:
+    print('Using Kubernetes context: {0}'.format(k8s_context))
+    allow_k8s_contexts(k8s_context)
+
+docker_registry_url = os.getenv('DOCKER_REGISTRY_URL', '')
+if docker_registry_url:
+    print('Using Docker registry URL: {0}'.format(docker_registry_url))
+    default_registry(docker_registry_url)
+
+# ===========================
+# Extensions
+# ===========================
+load('ext://helm_resource', 'helm_resource', 'helm_repo')
+load('ext://restart_process', 'docker_build_with_restart')
+
+# ===========================
+# OpenEverest core (released)
+# ===========================
+# Installed with a real `helm upgrade --install` (via the helm_resource
+# extension) so that the core CRDs bundled in the chart are applied correctly.
+if install_openeverest:
+    helm_repo(
+        'openeverest-repo',
+        openeverest_helm_repo,
+        labels=['openeverest'],
+    )
+
+    core_flags = [
+        '--create-namespace',
+        '--set', 'server.initialAdminPassword={0}'.format(ui_admin_password),
+        '--set', 'telemetry=false',
+        '--set', 'upgrade.preflightChecks=false',
+        # Keep the dev install lean: skip the monitoring stack.
+        '--set', 'kube-state-metrics.enabled=false',
+        '--set', 'monitoring.enabled=false',
+        '--set', 'createMonitoringResources=false',
+    ]
+    if openeverest_version:
+        core_flags = core_flags + ['--version', openeverest_version]
+
+    helm_resource(
+        'openeverest',
+        'openeverest-repo/openeverest',
+        release_name='everest',
+        namespace=everest_namespace,
+        flags=core_flags,
+        port_forwards=[port_forward(8080, 8080, 'Everest UI/API')],
+        resource_deps=['openeverest-repo'],
+        labels=['openeverest'],
+    )
+
+# ===========================
+# Provider: generate + build
+# ===========================
+local_resource(
+    'provider-generate',
+    'make -C {0} generate'.format(provider_dir),
+    deps=['{0}/definition'.format(provider_dir)],
+    labels=['provider'],
+)
+
+local_resource(
+    'provider-build',
+    'cd {0} && {1} go build -o bin/provider ./cmd/provider/'.format(
+        provider_dir, provider_build_env),
+    deps=[
+        '{0}/go.mod'.format(provider_dir),
+        '{0}/go.sum'.format(provider_dir),
+        '{0}/cmd'.format(provider_dir),
+        '{0}/internal'.format(provider_dir),
+        '{0}/definition'.format(provider_dir),
+    ],
+    ignore=['{0}/**/*_test.go'.format(provider_dir)],
+    resource_deps=['provider-generate'],
+    labels=['provider'],
+)
+
+# ===========================
+# Provider: image (live update)
+# ===========================
+provider_image = 'ghcr.io/openeverest/[[ .ProviderName ]]:tilt-dev'
+docker_build_with_restart(
+    provider_image,
+    context=provider_dir,
+    dockerfile='{0}/dev/provider.Dockerfile'.format(provider_dir),
+    target='dev',
+    entrypoint=['/home/provider/provider'],
+    only=['bin/provider'],
+    live_update=[
+        sync('{0}/bin/provider'.format(provider_dir), '/home/provider/provider'),
+    ],
+)
+
+# ===========================
+# Provider: Helm chart
+# ===========================
+# Deployed with a real `helm upgrade --install` (via the helm_resource
+# extension). Tilt injects the locally built image into the chart's
+# image.repository/image.tag values and live-updates the running pod. Using
+# helm_resource also guarantees the Provider CR is applied only after the core
+# CRDs exist.
+provider_resource_deps = ['provider-build']
+if install_openeverest:
+    provider_resource_deps = provider_resource_deps + ['openeverest']
+
+helm_resource(
+    '[[ .ProviderName ]]',
+    chart_dir,
+    namespace=provider_namespace,
+    flags=[
+        '--create-namespace',
+        '--set', 'image.pullPolicy=IfNotPresent',
+        '--set', 'securityContext.readOnlyRootFilesystem=false',
+    ],
+    image_deps=[provider_image],
+    image_keys=[('image.repository', 'image.tag')],
+    resource_deps=provider_resource_deps,
+    labels=['provider'],
+)
+
+# ===========================
+# Backup storage (MinIO) — optional
+# ===========================
+if enable_minio:
+    k8s_yaml('{0}/dev/resources/minio.yaml'.format(config.main_dir))
+    k8s_resource(
+        workload='minio',
+        objects=['minio:namespace'],
+        port_forwards=[port_forward(9090, 9090, 'MinIO Console')],
+        labels=['backup-storage'],
+    )
+
+    # Render the BackupStorage CR (+ credentials Secret) into the provider
+    # namespace so the provider can be tested against it.
+    backupstorage_yaml = read_file('{0}/dev/resources/backupstorage.yaml'.format(
+        config.main_dir))
+    backupstorage_yaml = backupstorage_yaml.replace(
+        '__NAMESPACE__', provider_namespace)
+    k8s_yaml(blob(backupstorage_yaml))
+    k8s_resource(
+        objects=[
+            'minio-credentials:secret:{0}'.format(provider_namespace),
+            'minio-s3:backupstorage:{0}'.format(provider_namespace),
+        ],
+        new_name='backup-storage',
+        resource_deps=['[[ .ProviderName ]]'],
+        labels=['backup-storage'],
+    )
