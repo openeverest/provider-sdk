@@ -104,7 +104,15 @@ charts/<provider-name>/              # ← GENERATED (mostly)
     provider-spec.yaml               # Generated from definition/ by `provider-sdk generate`
     rbac-rules.yaml                  # Generated from rbac.go by `make manifests`
   templates/                         # Helm chart templates (edit if needed)
+
+dev/                                 # ← LOCAL DEV (Tilt)
+  Tiltfile                           # Provider dev workflow (installs core + builds provider)
+  .env.example                       # Tilt configuration template
+  k3d_config.yaml                    # Local k3d cluster definition
+  provider.Dockerfile                # `dev` image target used by Tilt live-update
+  resources/                         # MinIO + BackupStorage manifests (optional)
 ```
+
 
 ---
 
@@ -1613,6 +1621,9 @@ After adding markers, run `make generate` to regenerate RBAC manifests.
 | `make test-integration` | Run kuttl integration tests                                |
 | `make verify`           | Check generated files are up-to-date (CI)                  |
 | `make lint`             | Run golangci-lint                                          |
+| `make dev-up`           | Create a k3d cluster and start the Tilt dev environment    |
+| `make dev-down`         | Stop Tilt (keeps the cluster)                              |
+| `make dev-destroy`      | Stop Tilt and delete the k3d cluster                       |
 
 ### Code Generation
 
@@ -1625,6 +1636,68 @@ This runs:
 1. `controller-gen` → `config/rbac/role.yaml` (from kubebuilder markers)
 2. `helm-sync-rbac` → `charts/.../generated/rbac-rules.yaml`
 3. `go generate` → `charts/.../generated/provider-spec.yaml` (from definition/)
+
+### Rapid Iteration with Tilt (recommended)
+
+The scaffolded project ships with a [Tilt](https://tilt.dev/) setup under
+`dev/` that gives you a full provider development loop with live reload. It
+installs the latest released OpenEverest core (server + controller + CRDs) and
+then builds and deploys your provider — you do **not** need a local checkout of
+the core.
+
+Prerequisites: Docker, kubectl, Helm, [k3d](https://k3d.io/), and
+[Tilt](https://docs.tilt.dev/install.html).
+
+```bash
+# (Optional) configure the environment
+cp dev/.env.example dev/.env
+
+# Create the local cluster and start Tilt
+make dev-up
+```
+
+Tilt opens its dashboard at <http://localhost:10350>. Once everything is green:
+
+- The Everest UI/API is available at <http://localhost:8080>
+  (default credentials: `admin` / `admin`).
+- Apply an example Instance to exercise the provider:
+
+  ```bash
+  kubectl apply -f examples/instance-example.yaml
+  kubectl get instances -w
+  ```
+
+Editing any provider Go code triggers a fast rebuild and live-updates the
+running pod without recreating it.
+
+Tear down with `make dev-down` (keeps the cluster) or `make dev-destroy`
+(also deletes the cluster).
+
+**Configuration** is done via `dev/.env` (see `dev/.env.example`). Common
+options:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `INSTALL_OPENEVEREST` | `true` | Install the released OpenEverest core. |
+| `OPENEVEREST_VERSION` | _(latest)_ | Pin a specific core chart version. |
+| `PROVIDER_NAMESPACE` | `default` | Namespace for the provider + DB operator. |
+| `ENABLE_MINIO` | `false` | Deploy MinIO + a `BackupStorage` CR for backups. |
+
+> **Note:** While OpenEverest v2 is in pre-release, the Helm repository only
+> publishes pre-release tags (e.g. `2.0.0-dev.1`). Helm's "latest" resolution
+> skips pre-releases, so you must set `OPENEVEREST_VERSION` explicitly until
+> v2.0.0 is generally available.
+
+**Developing against a core you build from source:** run the core's own Tilt
+instance, then start the provider Tilt instance on a different port with
+`INSTALL_OPENEVEREST=false`:
+
+```bash
+INSTALL_OPENEVEREST=false tilt up -f dev/Tiltfile --port 10351
+```
+
+The two instances manage disjoint Kubernetes objects, so they run side by side
+without conflicting. See `dev/README.md` in your generated project for details.
 
 ### Local Testing
 

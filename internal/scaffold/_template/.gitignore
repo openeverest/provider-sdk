@@ -21,6 +21,9 @@ cover.out
 *.swo
 *~
 
+# env file
+.env
+
 # OS
 .DS_Store
 Thumbs.db
