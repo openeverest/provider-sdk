@@ -17,6 +17,13 @@ def str2bool(v):
     return str(v).lower() in ("yes", "true", "t", "1")
 
 # ===========================
+# Settings
+# ===========================
+# The OpenEverest core chart installs CRDs and multiple workloads; 30s (the
+# default) is not enough if container images are not cached on cold start.
+update_settings(k8s_upsert_timeout_secs=120)
+
+# ===========================
 # Configuration (.env)
 # ===========================
 load('ext://dotenv', 'dotenv')
