@@ -20,12 +20,13 @@ directory structure, the provider implementation, and common patterns.
 - [Step 4: Define Topologies](#step-4-define-topologies)
 - [Step 5: Define Custom Types](#step-5-define-custom-types)
 - [Step 6: Configure the UI Schema](#step-6-configure-the-ui-schema)
-- [Step 7: Implement the Provider Interface](#step-7-implement-the-provider)
+- [Step 7: Implement the Provider Interface](#step-7-implement-the-provider-interface)
 - [Step 8: Add Backup and Restore Support (Optional)](#step-8-add-backup-and-restore-support-optional)
   - [Define BackupClasses](#define-backupclasses)
   - [Add Backup and Restore Implementation Files](#add-backup-and-restore-implementation-files)
 - [Step 9: Configure RBAC](#step-9-configure-rbac)
 - [Step 10: Generate and Test](#step-10-generate-and-test)
+- [Step 11: Define Presets (Optional)](#step-11-define-presets-optional)
 - [Provider SDK CLI Reference](#provider-sdk-cli-reference)
 
 ---
@@ -1046,7 +1047,7 @@ ui:
 
 ---
 
-## Step 7:  Implement the Provider Interface
+## Step 7: Implement the Provider Interface
 
 The core of your provider is in `internal/provider/provider.go`. You must
 implement four methods:
@@ -1755,6 +1756,91 @@ helm uninstall <provider-name>
 
 ---
 
+## Step 11: Define Presets (Optional)
+
+Presets are `InstancePreset` CRs that ship with your provider's Helm chart,
+giving users ready-made configurations they can select when creating an Instance
+instead of filling in every field manually. Each preset is rendered from
+`charts/<provider-name>/templates/presets.yaml` using entries in `values.yaml`.
+
+### How Presets Work
+
+Presets are defined in `charts/<provider-name>/values.yaml` under the `presets:` key
+and deployed as `InstancePreset` Kubernetes resources when the Helm chart is installed.
+The final resource name is `<preset.name>-<shortName>` (e.g., `standalone-psmdb`).
+
+```
+values.yaml presets:   →   presets.yaml template   →   InstancePreset CR
+  name: standalone              (Helm render)           standalone-psmdb
+  enabled: true
+  spec: ...
+```
+
+### Defining Presets
+
+Edit `charts/<provider-name>/values.yaml` and populate the `presets:` array:
+
+```yaml
+# charts/<provider-name>/values.yaml
+presets:
+  - name: standalone
+    enabled: true
+    spec:
+      provider: my-provider
+      version: "8.0.12"
+      topology:
+        type: standalone
+      components:
+        engine:
+          replicas: 1
+          resources:
+            limits:
+              cpu: "1"
+              memory: 2Gi
+          storage:
+            size: 25Gi
+```
+
+The `spec` field is the full `InstancePresetSpec` — the same structure as
+`Instance.spec`. Any field valid in an Instance spec can appear here.
+
+### Preset Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `name` | string | Preset name prefix — combined with `shortName` to form the resource name |
+| `enabled` | bool | Set to `false` to exclude this preset from the rendered chart |
+| `spec` | object | Full `InstancePresetSpec` (provider, version, topology, components, etc.) |
+
+### Resulting Resource Name
+
+The `InstancePreset` name is `<preset.name>-<provider.shortName>`:
+
+```yaml
+# values.yaml
+provider:
+  shortName: psmdb
+presets:
+  - name: standalone    # → InstancePreset name: standalone-psmdb
+```
+
+The `shortName` is set during `provider-sdk init` via `--short-name` and defaults
+to the provider name without the `provider-` prefix (e.g., `provider-my-database`
+→ `my-database`).
+
+### Disabling a Preset
+
+Set `enabled: false` to prevent the preset from being deployed without removing
+its definition from `values.yaml`:
+
+```yaml
+presets:
+  - name: standalone
+    enabled: false   # Not rendered
+```
+
+---
+
 ## Provider SDK CLI Reference
 
 ### `provider-sdk init`
@@ -1826,3 +1912,4 @@ Use this checklist to track your progress:
 - [ ] **Topology config types** (if needed) in `definition/topologies/*/types.go`
 - [ ] **`make generate`** runs without errors
 - [ ] **Integration tests** pass
+- [ ] **Presets** defined in `charts/<provider-name>/values.yaml` (optional, but recommended)
