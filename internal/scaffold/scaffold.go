@@ -49,10 +49,10 @@ type Config struct {
 	// ProviderName is the name of the provider (e.g., "provider-percona-server-mongodb").
 	ProviderName string
 
-	// ProviderShortname is a short identifier for the provider (e.g., "psmdb" for "percona-server-mongodb").
-	// Used in resource names, labels, and other contexts where a concise identifier is needed.
+	// ProviderShortName is a short identifier for the provider (e.g., "psmdb" for "percona-server-mongodb").
+	// Used in resource names where a short concise provider identifier is needed.
 	// If empty, it is derived from ProviderName by removing the "provider-" prefix.
-	ProviderShortname string
+	ProviderShortName string
 
 	// ModulePath is the Go module path (e.g., "github.com/openeverest/provider-percona-server-mongodb").
 	ModulePath string
@@ -107,8 +107,8 @@ func (c *Config) DeriveDefaults() {
 	if c.GoPackage == "" {
 		c.GoPackage = strings.ToLower(strings.ReplaceAll(c.ProviderName, "-", ""))
 	}
-	if c.ProviderShortname == "" {
-		c.ProviderShortname = deriveShortname(c.ProviderName)
+	if c.ProviderShortName == "" {
+		c.ProviderShortName = strings.TrimPrefix(c.ProviderName, "provider-")
 	}
 	// TopologyName intentionally left empty when not provided — the topology
 	// template directory is skipped during scaffolding in that case.
@@ -141,23 +141,6 @@ func toPascalCase(s string) string {
 		}
 	}
 	return strings.Join(parts, "")
-}
-
-// deriveShortname derives a short identifier from a provider name by removing
-// the "provider-" prefix if present, otherwise using the full name.
-// Examples:
-//   "provider-percona-server-mongodb" → "percona-server-mongodb"
-//   "percona-server-mongodb" → "percona-server-mongodb"
-//   "provider-postgresql" → "postgresql"
-//   "my-database" → "my-database"
-func deriveShortname(providerName string) string {
-	if providerName == "" {
-		return ""
-	}
-
-	// Remove "provider-" prefix if present
-	shortname := strings.TrimPrefix(providerName, "provider-")
-	return shortname
 }
 
 // pathReplacer returns a Replacer that substitutes provider-name placeholder

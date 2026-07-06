@@ -4,7 +4,7 @@
 apiVersion: core.openeverest.io/v1alpha1
 kind: InstancePreset
 metadata:
-  name: {{ $preset.name }}-{{ include "[[ .ProviderName ]].shortname" $ }}
+  name: {{ $preset.name }}-{{ $.Values.provider.shortName }}
   labels:
     {{- include "[[ .ProviderName ]].labels" $ | nindent 4 }}
     app.kubernetes.io/component: preset

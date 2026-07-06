@@ -64,8 +64,8 @@ Create the name of the service account to use
 {{/*
 Provider short name
 */}}
-{{- define "[[ .ProviderName ]].shortname" -}}
-{{- .Values.provider.shortname -}}
+{{- define "[[ .ProviderName ]].shortName" -}}
+{{- .Values.provider.shortName -}}
 {{- end }}
 
 {{/*

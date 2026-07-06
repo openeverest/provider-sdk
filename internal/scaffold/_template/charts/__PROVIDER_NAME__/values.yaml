@@ -101,15 +101,14 @@ provider:
   # -- The name to register for the Provider custom resource
   name: [[ .ProviderName ]]
   # -- Short identifier for the provider, used in resource names and labels
-  # This appears in preset names (e.g., 'replicaset-<shortname>') and can be
-  # used in other contexts where a concise provider identifier is needed.
-  shortname: [[ .ProviderShortname ]]
+  # This appears in preset names (e.g., 'replicaset-<shortName>') and can be
+  # used in other contexts where a short concise provider identifier is needed.
+  shortName: [[ .ProviderShortName ]]
 
 # -- Default instance presets configuration
 # Each preset must have 'name', 'enabled', and 'spec' fields.
 # The 'spec' field contains the full InstancePresetSpec.
-# Note: The provider shortname will be automatically added to each preset name.
-# To add new presets, use: provider-sdk add preset --name <name> --topology <type>
+# Note: The provider shortName will be automatically added to each preset name.
 presets: []
   # Example preset structure:
   # - name: standalone
