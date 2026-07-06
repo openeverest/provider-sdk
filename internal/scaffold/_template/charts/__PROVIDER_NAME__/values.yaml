@@ -100,6 +100,34 @@ affinity: {}
 provider:
   # -- The name to register for the Provider custom resource
   name: [[ .ProviderName ]]
+  # -- Short identifier for the provider, used in resource names and labels
+  # This appears in preset names (e.g., 'replicaset-<shortname>') and can be
+  # used in other contexts where a concise provider identifier is needed.
+  shortname: [[ .ProviderShortname ]]
+
+# -- Default instance presets configuration
+# Each preset must have 'name', 'enabled', and 'spec' fields.
+# The 'spec' field contains the full InstancePresetSpec.
+# Note: The provider shortname will be automatically added to each preset name.
+# To add new presets, use: provider-sdk add preset --name <name> --topology <type>
+presets: []
+  # Example preset structure:
+  # - name: standalone
+  #   enabled: true
+  #   spec:
+  #     provider: [[ .ProviderName ]]
+  #     version: 1.0.0
+  #     topology:
+  #       type: standalone
+  #     components:
+  #       engine:
+  #         replicas: 1
+  #         resources:
+  #           limits:
+  #             cpu: "1"
+  #             memory: 2Gi
+  #         storage:
+  #           size: 10Gi
 
 # -- Additional environment variables to set on the provider container
 extraEnv: []
