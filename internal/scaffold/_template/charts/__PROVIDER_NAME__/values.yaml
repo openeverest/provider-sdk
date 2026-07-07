@@ -100,8 +100,8 @@ affinity: {}
 provider:
   # -- The name to register for the Provider custom resource
   name: [[ .ProviderName ]]
-  # -- Short identifier for the provider, used in resource names and labels
-  # This appears in preset names (e.g., 'replicaset-<shortName>') and can be
+  # -- Short identifier for the provider, used in resource names
+  # This appears in preset names (e.g., '<shortName>-replicaset') and can be
   # used in other contexts where a short concise provider identifier is needed.
   shortName: [[ .ProviderShortName ]]
 
