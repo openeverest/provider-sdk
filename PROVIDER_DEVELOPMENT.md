@@ -1758,7 +1758,7 @@ helm uninstall <provider-name>
 
 ## Step 11: Define Presets (Optional)
 
-Presets are `InstancePreset` CRs that ship with your provider's Helm chart,
+Presets are cluster-scoped `InstancePreset` CRs that ship with your provider's Helm chart,
 giving users ready-made configurations they can select when creating an Instance
 instead of filling in every field manually. Each preset is rendered from
 `charts/<provider-name>/templates/presets.yaml` using entries in `values.yaml`.
@@ -1767,7 +1767,7 @@ instead of filling in every field manually. Each preset is rendered from
 
 Presets are defined in `charts/<provider-name>/values.yaml` under the `presets:` key
 and deployed as `InstancePreset` Kubernetes resources when the Helm chart is installed.
-The final resource name is `<preset.name>-<shortName>` (e.g., `standalone-psmdb`).
+The final resource name is `<shortName>-<preset.name>` (e.g., `psmdb-standalone`).
 
 ```
 values.yaml presets:   →   presets.yaml template   →   InstancePreset CR
@@ -1777,6 +1777,12 @@ values.yaml presets:   →   presets.yaml template   →   InstancePreset CR
 ```
 
 ### Defining Presets
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `name` | string | Preset name prefix — combined with `shortName` to form the resource name |
+| `enabled` | bool | Set to `false` to exclude this preset from the rendered chart |
+| `spec` | object | `InstancePresetSpec` (provider, version, topology, components, etc.) |
 
 Edit `charts/<provider-name>/values.yaml` and populate the `presets:` array:
 
@@ -1802,42 +1808,110 @@ presets:
 ```
 
 The `spec` field is the full `InstancePresetSpec` — the same structure as
-`Instance.spec`. Any field valid in an Instance spec can appear here.
+`Instance.spec`. 
 
-### Preset Fields
+**Important distinction:**
+- **Cluster-scoped resources** (like `storageClass`) CAN be set directly in the preset
+- **Namespace-scoped resources** (like secret names, ConfigMap names) MUST be left empty and will be resolved from annotated defaults in the target namespace when the preset is applied
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `name` | string | Preset name prefix — combined with `shortName` to form the resource name |
-| `enabled` | bool | Set to `false` to exclude this preset from the rendered chart |
-| `spec` | object | Full `InstancePresetSpec` (provider, version, topology, components, etc.) |
-
-### Resulting Resource Name
-
-The `InstancePreset` name is `<preset.name>-<provider.shortName>`:
+**Example preset spec:**
 
 ```yaml
-# values.yaml
-provider:
-  shortName: psmdb
+# charts/<provider-name>/values.yaml
 presets:
-  - name: standalone    # → InstancePreset name: standalone-psmdb
+  - name: production
+    enabled: true
+    spec:
+      provider: my-provider
+      version: "8.0.12"
+      topology:
+        type: replicaSet
+      components:
+        engine:
+          replicas: 3
+          resources:
+            limits:
+              cpu: "2"
+              memory: 8Gi
+          storage:
+            size: 100Gi
+            storageClass: "fast-ssd"  # Cluster-scoped - CAN be set in preset
+          configuration:
+            secretRef:
+              name: ""                # Namespace-scoped - MUST be empty
 ```
 
-The `shortName` is set during `provider-sdk init` via `--short-name` and defaults
-to the provider name without the `provider-` prefix (e.g., `provider-my-database`
-→ `my-database`).
+### Setting Default Annotations for Resources
 
-### Disabling a Preset
+When a preset is applied to create an Instance, empty resource references (like secret names,
+ConfigMap names, or StorageClass names) are resolved from resources annotated as defaults.
 
-Set `enabled: false` to prevent the preset from being deployed without removing
-its definition from `values.yaml`:
+**Namespace-scoped resources** (Secret, ConfigMap) use the annotation format:
+`openeverest.io/is-default-components-{component-name}: "true"`
+
+**Cluster-scoped resources** (StorageClass) use the standard Kubernetes annotation:
+`storageclass.kubernetes.io/is-default-class: "true"`
+
+**Example: Annotating a default Secret**
+
+```bash
+kubectl annotate Secret db-credentials \
+  openeverest.io/is-default-components-engine="true" \
+  --namespace prod \
+  --overwrite
+```
+
+Or in a YAML manifest:
 
 ```yaml
-presets:
-  - name: standalone
-    enabled: false   # Not rendered
+apiVersion: v1
+kind: Secret
+metadata:
+  name: db-credentials
+  namespace: prod
+  annotations:
+    openeverest.io/is-default-components-engine: "true"
+type: Opaque
+data:
+  username: YWRtaW4=
+  password: cGFzc3dvcmQ=
 ```
+
+**Example: Annotating a default StorageClass**
+
+StorageClass is a cluster-scoped resource that uses the standard Kubernetes annotation:
+
+```bash
+kubectl annotate StorageClass fast-ssd \
+  storageclass.kubernetes.io/is-default-class="true" \
+  --overwrite
+```
+
+Or in a YAML manifest:
+
+```yaml
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: fast-ssd
+  annotations:
+    storageclass.kubernetes.io/is-default-class: "true"
+provisioner: kubernetes.io/aws-ebs
+parameters:
+  type: gp3
+  iops: "3000"
+  throughput: "125"
+```
+
+**Resolution behavior:**
+- When creating an Instance from a preset in a specific namespace, the API
+  automatically discovers and fills in annotated defaults for empty field
+- For namespace-scoped resources (Secret, ConfigMap), defaults are resolved per namespace
+- For cluster-scoped resources (StorageClass), defaults are resolved cluster-wide using
+  the standard Kubernetes annotation
+- If multiple resources have the default annotation, the most recently created one is used
+- If no default is found, the field remains empty and validation may fail (depending
+  on whether the field is required)
 
 ---
 
