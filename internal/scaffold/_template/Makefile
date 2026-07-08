@@ -99,12 +99,16 @@ docker-push: ## Push docker image.
 
 ##@ Helm
 
+.PHONY: helm-deps
+helm-deps: ## Download/update Helm chart dependencies.
+	helm dependency build $(CHART_DIR)
+
 .PHONY: helm-install
-helm-install: ## Install the provider using Helm.
+helm-install: helm-deps ## Install the provider using Helm.
 	helm install [[ .ProviderName ]] $(CHART_DIR) --create-namespace
 
 .PHONY: helm-upgrade
-helm-upgrade: ## Upgrade the provider using Helm.
+helm-upgrade: helm-deps ## Upgrade the provider using Helm.
 	helm upgrade [[ .ProviderName ]] $(CHART_DIR)
 
 .PHONY: helm-uninstall
@@ -112,7 +116,7 @@ helm-uninstall: ## Uninstall the provider using Helm.
 	helm uninstall [[ .ProviderName ]]
 
 .PHONY: helm-template
-helm-template: ## Render Helm chart templates locally (dry-run).
+helm-template: helm-deps ## Render Helm chart templates locally (dry-run).
 	helm template [[ .ProviderName ]] $(CHART_DIR)
 
 ##@ Testing
