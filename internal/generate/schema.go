@@ -17,8 +17,10 @@ package generate
 import (
 	"encoding/json"
 	"fmt"
+	"go/ast"
 	"go/types"
 	"reflect"
+	"strconv"
 	"strings"
 
 	"golang.org/x/tools/go/packages"
@@ -40,9 +42,11 @@ func ResolveSchemas(pkgPatterns []string, typeNames []string) (map[string]any, e
 		return nil, fmt.Errorf("failed to load type packages: %w", err)
 	}
 
+	docMap := buildDocMap(pkgs)
+
 	schemas := make(map[string]any, len(typeNames))
 	for _, name := range typeNames {
-		schema, err := typeSchemaFromPackages(pkgs, name)
+		schema, err := typeSchemaFromPackages(pkgs, docMap, name)
 		if err != nil {
 			return nil, fmt.Errorf("failed to generate schema for type %q: %w", name, err)
 		}
@@ -51,11 +55,41 @@ func ResolveSchemas(pkgPatterns []string, typeNames []string) (map[string]any, e
 	return schemas, nil
 }
 
+// buildDocMap walks the syntax trees of loaded packages and maps type fields to their doc comments.
+func buildDocMap(pkgs []*packages.Package) map[*types.Var]string {
+	docMap := make(map[*types.Var]string)
+	for _, pkg := range pkgs {
+		for _, file := range pkg.Syntax {
+			ast.Inspect(file, func(n ast.Node) bool {
+				switch t := n.(type) {
+				case *ast.StructType:
+					if t.Fields != nil {
+						for _, f := range t.Fields.List {
+							if f.Doc != nil {
+								doc := f.Doc.Text()
+								for _, name := range f.Names {
+									if obj, ok := pkg.TypesInfo.Defs[name]; ok {
+										if v, ok := obj.(*types.Var); ok {
+											docMap[v] = doc
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+				return true
+			})
+		}
+	}
+	return docMap
+}
+
 // loadPackages loads one or more Go packages for type inspection using go/packages.
 // Each pkgPattern can be a relative path (e.g., "./definition/...") or a full import path.
 func loadPackages(pkgPatterns []string) ([]*packages.Package, error) {
 	cfg := &packages.Config{
-		Mode: packages.NeedName | packages.NeedTypes | packages.NeedImports,
+		Mode: packages.NeedName | packages.NeedTypes | packages.NeedImports | packages.NeedSyntax | packages.NeedTypesInfo,
 	}
 	var result []*packages.Package
 	for _, pattern := range pkgPatterns {
@@ -83,11 +117,11 @@ func loadPackages(pkgPatterns []string) ([]*packages.Package, error) {
 // typeSchemaFromPackages searches the given packages in order for typeName and
 // generates an OpenAPI JSON schema from the first match found.
 // Returns a map[string]any suitable for YAML marshaling.
-func typeSchemaFromPackages(pkgs []*packages.Package, typeName string) (any, error) {
+func typeSchemaFromPackages(pkgs []*packages.Package, docMap map[*types.Var]string, typeName string) (any, error) {
 	for _, pkg := range pkgs {
 		obj := pkg.Types.Scope().Lookup(typeName)
 		if obj != nil {
-			schema := goTypeToSchema(obj.Type())
+			schema := goTypeToSchema(obj.Type(), docMap)
 			// Convert to map[string]any via JSON round-trip for clean YAML output.
 			jsonBytes, err := json.Marshal(schema)
 			if err != nil {
@@ -115,27 +149,70 @@ type openAPISchema struct {
 	Items                *openAPISchema            `json:"items,omitempty"`
 	AdditionalProperties *openAPISchema            `json:"additionalProperties,omitempty"`
 	Description          string                    `json:"description,omitempty"`
+	Minimum              *float64                  `json:"minimum,omitempty"`
+	Maximum              *float64                  `json:"maximum,omitempty"`
+	Default              any                       `json:"default,omitempty"`
+}
+
+func parseKubebuilderDirectives(doc string, schema *openAPISchema) {
+	lines := strings.Split(doc, "\n")
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if !strings.HasPrefix(line, "+kubebuilder:") {
+			continue
+		}
+		parts := strings.SplitN(line, ":", 3)
+		if len(parts) >= 2 {
+			if parts[1] == "validation" && len(parts) == 3 {
+				kv := strings.SplitN(parts[2], "=", 2)
+				if len(kv) == 2 {
+					key, val := kv[0], kv[1]
+					switch key {
+					case "Minimum":
+						if v, err := strconv.ParseFloat(val, 64); err == nil {
+							schema.Minimum = &v
+						}
+					case "Maximum":
+						if v, err := strconv.ParseFloat(val, 64); err == nil {
+							schema.Maximum = &v
+						}
+					}
+				}
+			} else if strings.HasPrefix(parts[1], "default=") {
+				kv := strings.SplitN(parts[1], "=", 2)
+				if len(kv) == 2 {
+					val := kv[1]
+					var defaultVal any
+					if err := json.Unmarshal([]byte(val), &defaultVal); err == nil {
+						schema.Default = defaultVal
+					} else {
+						schema.Default = val
+					}
+				}
+			}
+		}
+	}
 }
 
 // goTypeToSchema converts a go/types.Type into an OpenAPI schema.
-func goTypeToSchema(t types.Type) *openAPISchema {
+func goTypeToSchema(t types.Type, docMap map[*types.Var]string) *openAPISchema {
 	switch u := t.Underlying().(type) {
 	case *types.Struct:
-		return structToSchema(u)
+		return structToSchema(u, docMap)
 	case *types.Basic:
 		return basicToSchema(u)
 	case *types.Slice:
 		return &openAPISchema{
 			Type:  "array",
-			Items: goTypeToSchema(u.Elem()),
+			Items: goTypeToSchema(u.Elem(), docMap),
 		}
 	case *types.Map:
 		return &openAPISchema{
 			Type:                 "object",
-			AdditionalProperties: goTypeToSchema(u.Elem()),
+			AdditionalProperties: goTypeToSchema(u.Elem(), docMap),
 		}
 	case *types.Pointer:
-		return goTypeToSchema(u.Elem())
+		return goTypeToSchema(u.Elem(), docMap)
 	case *types.Interface:
 		// interface{} / any → no type constraint.
 		return &openAPISchema{}
@@ -145,7 +222,7 @@ func goTypeToSchema(t types.Type) *openAPISchema {
 }
 
 // structToSchema converts a go/types.Struct into an OpenAPI object schema.
-func structToSchema(s *types.Struct) *openAPISchema {
+func structToSchema(s *types.Struct, docMap map[*types.Var]string) *openAPISchema {
 	schema := &openAPISchema{Type: "object"}
 	if s.NumFields() == 0 {
 		return schema
@@ -162,7 +239,11 @@ func structToSchema(s *types.Struct) *openAPISchema {
 		if name == "-" {
 			continue
 		}
-		fieldSchema := goTypeToSchema(field.Type())
+		fieldSchema := goTypeToSchema(field.Type(), docMap)
+
+		if doc, ok := docMap[field]; ok {
+			parseKubebuilderDirectives(doc, fieldSchema)
+		}
 
 		// Apply description from struct tag if present.
 		st := reflect.StructTag(tag)
