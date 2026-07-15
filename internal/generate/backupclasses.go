@@ -105,6 +105,11 @@ func collectBackupClassTypeRefs(class map[string]any, typeRefs map[string]bool) 
 			typeRefs[s] = true
 		}
 	}
+	if cfg, ok := class["importConfig"].(map[string]any); ok {
+		if s, ok := cfg["openAPIV3Schema"].(string); ok && s != "" {
+			typeRefs[s] = true
+		}
+	}
 	if pm, ok := class["providerManaged"].(map[string]any); ok {
 		if s, ok := pm["pitrConfigSchema"].(string); ok && s != "" {
 			typeRefs[s] = true
@@ -135,7 +140,7 @@ func resolveBackupClassRefs(class map[string]any, schemas map[string]any) map[st
 	out := make(map[string]any, len(class))
 	for k, v := range class {
 		switch k {
-		case "config", "restoreConfig":
+		case "config", "restoreConfig", "importConfig":
 			out[k] = resolveOpenAPIRef(v, schemas)
 		case "providerManaged":
 			out[k] = resolveProviderManagedRefs(v, schemas)
