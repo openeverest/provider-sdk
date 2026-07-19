@@ -55,6 +55,7 @@ provider-my-database/
 ├── charts/provider-my-database/      # Helm chart
 │   ├── Chart.yaml
 │   ├── values.yaml
+│   ├── Makefile                      # Chart version/image stamping + deps
 │   ├── generated/
 │   │   ├── provider-spec.yaml        # Generated from definition/
 │   │   └── rbac-rules.yaml           # Generated from RBAC markers
@@ -62,7 +63,7 @@ provider-my-database/
 ├── test/integration/                 # kuttl integration tests
 ├── dev/k3d_config.yaml               # Local k3d cluster config
 ├── examples/                         # Example Instance CRs
-├── .github/workflows/                # CI pipelines
+├── .github/workflows/                # CI/CD: build, test, publish, release, oci-release
 ├── Makefile
 ├── Dockerfile
 └── go.mod

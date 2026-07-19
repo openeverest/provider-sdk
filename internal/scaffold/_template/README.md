@@ -4,6 +4,35 @@ An [OpenEverest](https://github.com/openeverest) provider.
 
 > **New to provider development?** See `github.com/openeverest/provider-sdk/blob/main/PROVIDER_DEVELOPMENT.md` for a complete guide.
 
+## Installation
+
+The provider chart is published as an OCI artifact to the GitHub Container
+Registry on every release.
+
+```bash
+helm install [[ .ProviderName ]] \
+  oci://ghcr.io/openeverest/charts/[[ .ProviderName ]] \
+  --version 0.1.0 \
+  --create-namespace
+```
+
+Upgrade to a newer chart version:
+
+```bash
+helm upgrade [[ .ProviderName ]] \
+  oci://ghcr.io/openeverest/charts/[[ .ProviderName ]] \
+  --version 0.1.0
+```
+
+Uninstall:
+
+```bash
+helm uninstall [[ .ProviderName ]]
+```
+
+> Browse available versions on the
+> [chart package page](https://github.com/openeverest/[[ .ProviderName ]]/pkgs/container/charts%2F[[ .ProviderName ]]).
+
 ## Prerequisites
 
 - Go 1.26+
@@ -50,10 +79,18 @@ config/
   rbac/
     role.yaml              # Generated ClusterRole (do not edit manually)
 charts/[[ .ProviderName ]]/     # Helm chart for deployment
+  Makefile                 # Chart version/image stamping + dependency resolution
   generated/
     rbac-rules.yaml        # Generated RBAC rules (do not edit manually)
     provider-spec.yaml     # Generated Provider CR spec (do not edit manually)
   templates/               # Helm templates
+.github/
+  workflows/
+    build.yaml             # CI build
+    test.yaml              # CI integration tests
+    publish.yaml           # Dev image + dev chart on push to main
+    release.yaml           # Manual release: images, chart, git tag, README stamp
+    oci-release.yaml       # Push Helm chart as OCI artifact on tag
 examples/
   instance-example.yaml    # Example Instance CR
   instance-simple.yaml     # Minimal Instance CR
