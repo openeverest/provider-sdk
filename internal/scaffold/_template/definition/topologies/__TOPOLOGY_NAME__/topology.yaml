@@ -2,7 +2,7 @@
 # This file defines both the structural topology and its UI rendering.
 
 # Topology configuration: which components are used and their defaults.
-# Reference a Go type from the types.go via configSchema if the
+# Reference a Go type from the types.go via parametersSchema if the
 # topology has custom configuration fields.
 config:
   components:

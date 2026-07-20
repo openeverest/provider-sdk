@@ -84,13 +84,13 @@ different roles.
 definition/                          # ← YOU EDIT THESE
   provider.yaml                      # Provider name + component→type mapping
   versions.yaml                      # Component type version/image catalog
-  types.go                           # Shared Go types (TopologyType, GlobalConfig)
+  types.go                           # Shared Go types (e.g. TopologyType)
   components/
-    types.go                         # Component custom spec types (CustomSpec structs)
+    types.go                         # Component parameter types (Parameters structs)
   topologies/
     <topology-name>/
       topology.yaml                  # Topology config + UI schema
-      types.go                       # Topology-specific config types
+      types.go                       # Topology-specific parameter types
 
 internal/                            # ← YOU IMPLEMENT THESE
   provider/
@@ -192,7 +192,7 @@ When you add a component (via CLI or manually), these files need to be in sync:
 |------|-------------|
 | `definition/provider.yaml` | Component entry under `components:` |
 | `definition/versions.yaml` | Component type entry if new type |
-| `definition/components/types.go` | `CustomSpec` struct if component needs custom config |
+| `definition/components/types.go` | `Parameters` struct if component accepts parameters |
 | `internal/common/spec.go` | Constants for component name and type |
 
 The `provider-sdk add component` command updates all four files automatically.
@@ -346,8 +346,8 @@ Each topology lives in `definition/topologies/<name>/topology.yaml`:
 ```yaml
 # config section: defines the topology structure
 config:
-  # Optional: reference a Go type for custom topology config
-  configSchema: ShardedTopologyConfig
+  # Optional: reference a Go type for topology parameters
+  parametersSchema: ShardedTopologyParameters
 
   # List which components this topology uses
   components:
@@ -398,16 +398,16 @@ ui:
 | `optional: true` | Component can be enabled/disabled by the user |
 | `{}` | Required component with no special defaults |
 
-### Topology Config Types
+### Topology Parameter Types
 
-If a topology needs custom configuration beyond component specs (e.g., number
+If a topology needs parameters beyond component specs (e.g., number
 of shards), create a Go type:
 
 ```go
 // In definition/topologies/sharded/types.go
 package sharded
 
-type ShardedTopologyConfig struct {
+type ShardedTopologyParameters struct {
     NumShards int32 `json:"numShards,omitempty"`
 }
 ```
@@ -416,20 +416,20 @@ Then reference it in topology.yaml:
 
 ```yaml
 config:
-  configSchema: ShardedTopologyConfig
+  parametersSchema: ShardedTopologyParameters
 ```
 
 The `provider-sdk generate` command converts the Go struct to an OpenAPI schema
 and embeds it in the Provider CR.
 
-**Accessing topology config in your provider:**
+**Accessing topology parameters in your provider:**
 
 ```go
 func (p *Provider) Sync(c *controller.Context) error {
-    var cfg sharded.ShardedTopologyConfig
-    if c.TryDecodeTopologyConfig(&cfg) {
-        numShards := cfg.NumShards
-        // Use the topology config...
+    var params sharded.ShardedTopologyParameters
+    if c.TryDecodeTopologyParameters(&params) {
+        numShards := params.NumShards
+        // Use the topology parameters...
     }
     // ...
 }
@@ -441,16 +441,16 @@ func (p *Provider) Sync(c *controller.Context) error {
 
 Custom types allow you to extend the Instance spec with provider-specific fields.
 
-### Component Custom Specs
+### Component Parameters
 
 If a component needs fields beyond the standard `replicas`, `resources`, `storage`,
-and `version`, define a `CustomSpec` struct:
+and `version`, define a `Parameters` struct:
 
 ```go
 // In definition/components/types.go
 package components
 
-type MongodCustomSpec struct {
+type MongodParameters struct {
     // WiredTigerCacheSizeGB sets the WiredTiger cache size.
     WiredTigerCacheSizeGB float64 `json:"wiredTigerCacheSizeGB,omitempty"`
 }
@@ -462,7 +462,7 @@ Then reference it in `provider.yaml`:
 components:
   engine:
     type: mongod
-    customSpecSchema: MongodCustomSpec
+    parametersSchema: MongodParameters
 ```
 
 ### Shared Types
@@ -478,8 +478,6 @@ const (
     TopologyTypeReplicaSet TopologyType = "replicaSet"
     TopologyTypeSharded    TopologyType = "sharded"
 )
-
-type GlobalConfig struct{}
 ```
 
 ---
@@ -1193,12 +1191,12 @@ if err != nil {
 image := controller.GetDefaultImageForComponent(spec, "engine")
 ```
 
-**Decoding topology config:**
+**Decoding topology parameters:**
 
 ```go
-var cfg sharded.ShardedTopologyConfig
-if c.TryDecodeTopologyConfig(&cfg) {
-    // Use cfg.NumShards, etc.
+var params sharded.ShardedTopologyParameters
+if c.TryDecodeTopologyParameters(&params) {
+    // Use params.NumShards, etc.
 }
 ```
 
@@ -1257,11 +1255,12 @@ providerManaged:
   limits:
     maxPITREnabledStorages: 1
     maxStorages: 1
-  pitrConfigSchema: PerconaPITRConfig
-config:
-  openAPIV3Schema: PerconaBackupConfig
-restoreConfig:
-  openAPIV3Schema: PerconaRestoreConfig
+  pitrParametersSchema:
+    openAPIV3Schema: PerconaPITRParameters
+parametersSchema:
+  openAPIV3Schema: PerconaBackupParameters
+restoreParametersSchema:
+  openAPIV3Schema: PerconaRestoreParameters
 ```
 
 **`types.go`** example:
@@ -1269,20 +1268,20 @@ restoreConfig:
 ```go
 package psmdbackup
 
-// PerconaBackupConfig defines backup-time configuration.
+// PerconaBackupParameters defines backup-time parameters.
 // +kubebuilder:object:generate=true
-type PerconaBackupConfig struct {
+type PerconaBackupParameters struct {
     // Compression enables backup compression
     Compression bool `json:"compression,omitempty"`
 }
 
-// PerconaRestoreConfig defines restore-time configuration.
+// PerconaRestoreParameters defines restore-time parameters.
 // +kubebuilder:object:generate=true
-type PerconaRestoreConfig struct {}
+type PerconaRestoreParameters struct {}
 
-// PerconaPITRConfig defines per-storage PITR configuration.
+// PerconaPITRParameters defines per-storage PITR parameters.
 // +kubebuilder:object:generate=true
-type PerconaPITRConfig struct {}
+type PerconaPITRParameters struct {}
 ```
 
 ### Add Backup and Restore Implementation Files

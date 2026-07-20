@@ -12,7 +12,7 @@ OpenEverest provider. Everything related to the provider's **identity**,
 definition/
 ├── provider.yaml                    # Provider name + component→type mapping
 ├── versions.yaml                    # Component types and their version/image catalog
-├── types.go                         # Shared types (TopologyType, GlobalConfig)
+├── types.go                         # Shared types (e.g. TopologyType)
 ├── components/
 │   └── types.go                     # Component custom spec types
 └── topologies/

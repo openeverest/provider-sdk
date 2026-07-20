@@ -9,8 +9,8 @@ name: [[ .ProviderName ]]
 
 # Components map logical component names to their type.
 # The type must match a key in versions.yaml's componentTypes.
-# Add customSpecSchema to reference a Go type from components/types.go
-# when a component needs custom configuration fields.
+# Add parametersSchema to reference a Go type from components/types.go
+# when a component accepts parameters.
 #
 # Example:
 #   engine:
