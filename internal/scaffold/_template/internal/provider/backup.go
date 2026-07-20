@@ -47,10 +47,10 @@ func (p *Provider) SyncBackup(c *controller.Context, backup *backupv1alpha1.Back
 	//   }
 	//
 	//   exec := controller.BackupExecutionStatus{
-	//       OperatorBackupRef: &corev1.TypedLocalObjectReference{
-	//           APIGroup: pointer.ToString(operatorv1.SchemeGroupVersion.Group),
-	//           Kind:     "MyDatabaseBackup",
-	//           Name:     ob.Name,
+	//       OperatorBackupRef: &common.TypedObjectRef{
+	//           Group: operatorv1.SchemeGroupVersion.Group,
+	//           Kind:  "MyDatabaseBackup",
+	//           Name:  ob.Name,
 	//       },
 	//       State: backupv1alpha1.BackupStatePending,
 	//   }
@@ -89,10 +89,10 @@ func (p *Provider) SyncRestore(c *controller.Context, restore *backupv1alpha1.Re
 	//
 	// Example:
 	//   backup := &backupv1alpha1.Backup{}
-	//   if err := c.Get(backup, restore.Spec.DataSource.BackupName); err != nil {
+	//   if err := c.Get(backup, restore.Spec.DataSource.Backup.BackupRef.Name); err != nil {
 	//       return controller.RestoreExecutionStatus{
 	//           State:   backupv1alpha1.RestoreStateFailed,
-	//           Message: fmt.Sprintf("source Backup %q not found", restore.Spec.DataSource.BackupName),
+	//           Message: fmt.Sprintf("source Backup %q not found", restore.Spec.DataSource.Backup.BackupRef.Name),
 	//       }, nil
 	//   }
 	//
@@ -107,10 +107,10 @@ func (p *Provider) SyncRestore(c *controller.Context, restore *backupv1alpha1.Re
 	//   }
 	//
 	//   exec := controller.RestoreExecutionStatus{
-	//       OperatorRestoreRef: &corev1.TypedLocalObjectReference{
-	//           APIGroup: pointer.ToString(operatorv1.SchemeGroupVersion.Group),
-	//           Kind:     "MyDatabaseRestore",
-	//           Name:     or.Name,
+	//       OperatorRestoreRef: &common.TypedObjectRef{
+	//           Group: operatorv1.SchemeGroupVersion.Group,
+	//           Kind:  "MyDatabaseRestore",
+	//           Name:  or.Name,
 	//       },
 	//       State: backupv1alpha1.RestoreStatePending,
 	//   }

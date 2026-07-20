@@ -11,7 +11,8 @@ kind: Instance
 metadata:
   name: example-instance
 spec:
-  provider: [[ .ProviderName ]]
+  providerRef:
+    name: [[ .ProviderName ]]
   components:
     engine:
       type: [[ .ComponentType ]]
