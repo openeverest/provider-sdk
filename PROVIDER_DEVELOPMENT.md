@@ -646,7 +646,7 @@ Supported `fieldParams`:
 ```yaml
 configuration:
   uiType: text
-  path: spec.components.engine.configuration
+  path: spec.components.engine.config
   fieldParams:
     label: Configuration
     placeholder: |
@@ -1025,7 +1025,7 @@ ui:
             provider: storageClasses
         configuration:
           uiType: text
-          path: spec.components.engine.configuration
+          path: spec.components.engine.config
           fieldParams:
             label: "Engine configuration"
             placeholder: |2
@@ -1351,10 +1351,10 @@ func (p *Provider) SyncBackup(c *controller.Context, backup *backupv1alpha1.Back
     }
 
     exec := controller.BackupExecutionStatus{
-        OperatorBackupRef: &corev1.TypedLocalObjectReference{
-            APIGroup: pointer.ToString(operatorv1.SchemeGroupVersion.Group),
-            Kind:     "MyDatabaseBackup",
-            Name:     ob.Name,
+        OperatorBackupRef: &common.TypedObjectRef{
+            Group: operatorv1.SchemeGroupVersion.Group,
+            Kind:  "MyDatabaseBackup",
+            Name:  ob.Name,
         },
         State: backupv1alpha1.BackupStatePending,
     }
@@ -1397,10 +1397,10 @@ func (p *Provider) SyncRestore(c *controller.Context, restore *backupv1alpha1.Re
     }
 
     exec := controller.RestoreExecutionStatus{
-        OperatorRestoreRef: &corev1.TypedLocalObjectReference{
-            APIGroup: pointer.ToString(operatorv1.SchemeGroupVersion.Group),
-            Kind:     "MyDatabaseRestore",
-            Name:     or.Name,
+        OperatorRestoreRef: &common.TypedObjectRef{
+            Group: operatorv1.SchemeGroupVersion.Group,
+            Kind:  "MyDatabaseRestore",
+            Name:  or.Name,
         },
         State: backupv1alpha1.RestoreStatePending,
     }
@@ -1485,7 +1485,7 @@ func (p *Provider) Mirror(ctx context.Context, c client.Client, obj client.Objec
 
     inst := &corev1alpha1.Instance{}
     err := c.Get(ctx, client.ObjectKey{Namespace: ob.Namespace, Name: ob.Spec.ClusterName}, inst)
-    if err != nil || inst.Spec.Provider != p.Name() {
+    if err != nil || inst.Spec.ProviderRef.Name != p.Name() {
         return nil, nil
     }
 

@@ -26,4 +26,5 @@ spec:
     endpointURL: http://minio.minio.svc.cluster.local:9000
     forcePathStyle: true
     verifyTLS: false
-    credentialsSecretName: minio-credentials
+    credentialsSecretRef:
+      name: minio-credentials

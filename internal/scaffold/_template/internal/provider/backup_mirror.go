@@ -47,7 +47,7 @@ func (p *Provider) Mirror(ctx context.Context, c client.Client, obj client.Objec
 	//
 	//   inst := &corev1alpha1.Instance{}
 	//   err := c.Get(ctx, client.ObjectKey{Namespace: ob.Namespace, Name: ob.Spec.ClusterName}, inst)
-	//   if err != nil || inst.Spec.Provider != p.Name() {
+	//   if err != nil || inst.Spec.ProviderRef.Name != p.Name() {
 	//       return nil, nil
 	//   }
 	//
