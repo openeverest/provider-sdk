@@ -170,17 +170,18 @@ func buildSpecMap(cfg *AssembledConfig, schemas map[string]any) map[string]any {
 		spec["versions"] = cfg.Versions
 	}
 
-	// Components — resolve customSpecSchema references.
+	// Components — resolve parametersSchema references, wrapping the resolved
+	// schema in the ParametersSchema envelope ({openAPIV3Schema: ...}).
 	if cfg.Components != nil {
 		comps := make(map[string]any)
 		for name, compRaw := range cfg.Components {
 			if comp, ok := compRaw.(map[string]any); ok {
 				resolved := make(map[string]any)
 				for k, v := range comp {
-					if k == "customSpecSchema" {
+					if k == "parametersSchema" {
 						if typeName, ok := v.(string); ok && schemas != nil {
 							if schema, ok := schemas[typeName]; ok {
-								resolved[k] = schema
+								resolved[k] = map[string]any{"openAPIV3Schema": schema}
 							}
 						}
 					} else {
@@ -195,17 +196,18 @@ func buildSpecMap(cfg *AssembledConfig, schemas map[string]any) map[string]any {
 		spec["components"] = comps
 	}
 
-	// Topologies — resolve configSchema references.
+	// Topologies — resolve parametersSchema references, wrapping the resolved
+	// schema in the ParametersSchema envelope ({openAPIV3Schema: ...}).
 	if cfg.Topologies != nil {
 		topos := make(map[string]any)
 		for name, topoRaw := range cfg.Topologies {
 			if topo, ok := topoRaw.(map[string]any); ok {
 				resolved := make(map[string]any)
 				for k, v := range topo {
-					if k == "configSchema" {
+					if k == "parametersSchema" {
 						if typeName, ok := v.(string); ok && schemas != nil {
 							if schema, ok := schemas[typeName]; ok {
-								resolved[k] = schema
+								resolved[k] = map[string]any{"openAPIV3Schema": schema}
 							}
 						}
 					} else {
@@ -220,10 +222,10 @@ func buildSpecMap(cfg *AssembledConfig, schemas map[string]any) map[string]any {
 		spec["topologies"] = topos
 	}
 
-	// Global config schema.
-	if cfg.GlobalConfigSchema != "" && schemas != nil {
-		if schema, ok := schemas[cfg.GlobalConfigSchema]; ok {
-			spec["globalConfigSchema"] = schema
+	// Provider-level parameters schema.
+	if cfg.ParametersSchema != "" && schemas != nil {
+		if schema, ok := schemas[cfg.ParametersSchema]; ok {
+			spec["parametersSchema"] = map[string]any{"openAPIV3Schema": schema}
 		}
 	}
 

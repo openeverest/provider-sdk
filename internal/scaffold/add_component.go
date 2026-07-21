@@ -158,7 +158,7 @@ func addTypeToVersionsYAML(cfg *AddComponentConfig) error {
 	)
 }
 
-// addComponentTypeStruct appends a CustomSpec struct to definition/components/types.go.
+// addComponentTypeStruct appends a Parameters struct to definition/components/types.go.
 func addComponentTypeStruct(cfg *AddComponentConfig) error {
 	path := "definition/components/types.go"
 	data, err := os.ReadFile(path)
@@ -167,7 +167,7 @@ func addComponentTypeStruct(cfg *AddComponentConfig) error {
 	}
 
 	content := string(data)
-	structName := toExportedName(cfg.ComponentType) + "CustomSpec"
+	structName := toExportedName(cfg.ComponentType) + "Parameters"
 
 	// Check if struct already exists.
 	if strings.Contains(content, "type "+structName+" struct") {
@@ -177,8 +177,8 @@ func addComponentTypeStruct(cfg *AddComponentConfig) error {
 
 	// Append the new struct.
 	newStruct := fmt.Sprintf(
-		"\n// %s defines custom configuration for %s components.\n"+
-			"// Add fields here when the %s component type needs custom configuration\n"+
+		"\n// %s defines the parameters for %s components.\n"+
+			"// Add fields here when the %s component type needs parameters\n"+
 			"// beyond what the base Instance spec provides.\n"+
 			"type %s struct{}\n",
 		structName, cfg.ComponentType, cfg.ComponentType, structName,

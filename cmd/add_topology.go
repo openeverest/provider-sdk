@@ -118,8 +118,8 @@ func runAddTopology(_ *cobra.Command, _ []string) error {
 	fmt.Println("  2. Mark optional components with 'optional: true'")
 	fmt.Println("  3. Set default values under 'defaults:' for each component")
 	fmt.Println("  4. Configure the UI schema sections for the frontend form")
-	fmt.Println("  5. Add fields to the TopologyConfig struct in types.go if needed")
-	fmt.Println("  6. Reference the config type via 'configSchema:' in topology.yaml")
+	fmt.Println("  5. Add fields to the TopologyParameters struct in types.go if needed")
+	fmt.Println("  6. Reference the parameters type via 'parametersSchema:' in topology.yaml")
 	fmt.Println("  7. Run: make generate")
 	fmt.Println()
 
