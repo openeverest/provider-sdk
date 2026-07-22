@@ -29,7 +29,7 @@ type AddBackupClassConfig struct {
 	// definition/backupclasses/.
 	Name string
 	// ExecutionMode selects between "ProviderManaged" (default) and "Job".
-	// Only ProviderManaged classes carry providerManaged.limits / pitrConfigSchema
+	// Only ProviderManaged classes carry providerManaged.limits / pitrParametersSchema
 	// stubs in the generated class.yaml.
 	ExecutionMode string
 }
@@ -92,19 +92,19 @@ func readProviderName() (string, error) {
 }
 
 func createBackupClassYAML(bcDir string, cfg *AddBackupClassConfig, providerName string) error {
-	configTypeName := toPascalCase(cfg.Name) + "BackupConfig"
-	restoreTypeName := toPascalCase(cfg.Name) + "RestoreConfig"
-	pitrTypeName := toPascalCase(cfg.Name) + "PITRConfig"
+	configTypeName := toPascalCase(cfg.Name) + "BackupParameters"
+	restoreTypeName := toPascalCase(cfg.Name) + "RestoreParameters"
+	pitrTypeName := toPascalCase(cfg.Name) + "PITRParameters"
 
 	class := map[string]any{
 		"displayName":        toPascalCase(cfg.Name) + " Backup Class",
 		"description":        "TODO: describe what this BackupClass does.",
 		"supportedProviders": []any{providerName},
 		"executionMode":      cfg.ExecutionMode,
-		"config": map[string]any{
+		"parametersSchema": map[string]any{
 			"openAPIV3Schema": configTypeName,
 		},
-		"restoreConfig": map[string]any{
+		"restoreParametersSchema": map[string]any{
 			"openAPIV3Schema": restoreTypeName,
 		},
 	}
@@ -114,8 +114,10 @@ func createBackupClassYAML(bcDir string, cfg *AddBackupClassConfig, providerName
 			"supportsPITR": false,
 			// Limits are commented hints in the YAML header; leave the map
 			// minimal so developers opt into specific caps by uncommenting.
-			"limits":           map[string]any{},
-			"pitrConfigSchema": pitrTypeName,
+			"limits": map[string]any{},
+			"pitrParametersSchema": map[string]any{
+				"openAPIV3Schema": pitrTypeName,
+			},
 		}
 	}
 
@@ -129,10 +131,11 @@ func createBackupClassYAML(bcDir string, cfg *AddBackupClassConfig, providerName
 #   providerManaged.supportsPITR: advertise PITR capability to Restore validation.
 #   providerManaged.limits: caps the runtime enforces against Instance.spec.backup.
 #     maxStorages, maxPITREnabledStorages, maxSchedulesPerStorage — unset means unlimited.
-#   providerManaged.pitrConfigSchema: Go type name (in this package) describing
-#     per-storage PITR custom config. Resolved to an OpenAPI schema at generation time.
-#   config.openAPIV3Schema / restoreConfig.openAPIV3Schema: Go type names
-#     describing backup-time and restore-time custom config respectively.
+#   providerManaged.pitrParametersSchema.openAPIV3Schema: Go type name (in this
+#     package) describing per-storage PITR parameters. Resolved to an OpenAPI
+#     schema at generation time.
+#   parametersSchema.openAPIV3Schema / restoreParametersSchema.openAPIV3Schema:
+#     Go type names describing backup-time and restore-time parameters respectively.
 #
 # Co-located files:
 #   ui.yaml  — free-form UI rendering hints, inlined verbatim under spec.uiSchema.
@@ -165,18 +168,18 @@ func createBackupClassUIYAML(bcDir string, _ *AddBackupClassConfig) error {
 # Inlined verbatim under spec.uiSchema in the generated manifest; treated as
 # opaque by the runtime. The recommended shape groups fields by the modal
 # that renders them:
-#   backup  — on-demand backup modal (fields backed by config.openAPIV3Schema).
-#   pitr    — per-storage PITR sub-form (fields backed by providerManaged.pitrConfigSchema).
-#   restore — restore modal (fields backed by restoreConfig.openAPIV3Schema).
+#   backup  — on-demand backup modal (fields backed by parametersSchema.openAPIV3Schema).
+#   pitr    — per-storage PITR sub-form (fields backed by providerManaged.pitrParametersSchema).
+#   restore — restore modal (fields backed by restoreParametersSchema.openAPIV3Schema).
 `
 	return writeYAMLWithHeader(filepath.Join(bcDir, "ui.yaml"), ui, header)
 }
 
 func createBackupClassTypes(bcDir string, cfg *AddBackupClassConfig) error {
 	pkgName := toGoIdent(cfg.Name)
-	cfgType := toPascalCase(cfg.Name) + "BackupConfig"
-	restoreType := toPascalCase(cfg.Name) + "RestoreConfig"
-	pitrType := toPascalCase(cfg.Name) + "PITRConfig"
+	cfgType := toPascalCase(cfg.Name) + "BackupParameters"
+	restoreType := toPascalCase(cfg.Name) + "RestoreParameters"
+	pitrType := toPascalCase(cfg.Name) + "PITRParameters"
 
 	content := fmt.Sprintf(`// Package %s contains the schema-bearing Go types for the
 // %q BackupClass. Each struct here is converted to an OpenAPI
@@ -186,16 +189,16 @@ func createBackupClassTypes(bcDir string, cfg *AddBackupClassConfig) error {
 // +k8s:openapi-gen=true
 package %s
 
-// %s describes the configuration accepted by Backup CRs that
-// target this class (spec.config). Add fields the user can set per backup.
+// %s describes the parameters accepted by Backup CRs that
+// target this class (spec.parameters). Add fields the user can set per backup.
 type %s struct{}
 
-// %s describes the configuration accepted by Restore CRs that
-// target this class (spec.config). Add fields the user can set per restore.
+// %s describes the parameters accepted by Restore CRs that
+// target this class (spec.parameters). Add fields the user can set per restore.
 type %s struct{}
 
-// %s describes the per-storage PITR custom config exposed to
-// Instance.spec.backup.storages[].pitr.config. Add fields a provider needs
+// %s describes the per-storage PITR parameters exposed to
+// Instance.spec.backup.storages[].pitr.parameters. Add fields a provider needs
 // to fine-tune its PITR pipeline (oplog span, compression, retention, etc.).
 type %s struct{}
 `, pkgName, cfg.Name, pkgName,
