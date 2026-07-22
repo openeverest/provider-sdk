@@ -111,7 +111,7 @@ charts/<provider-name>/              # ← GENERATED (mostly)
   build.yaml                         # Build the provider on PRs
   test.yaml                          # Integration tests
   publish.yaml                       # Dev image + dev chart on every push to main
-  release.yaml                       # Manual release: images, chart, git tag, README stamp
+  release.yaml                       # Tag-driven release: prod + dev images, README stamp
   oci-release.yaml                   # Push Helm chart as an OCI artifact on tag push
 
 dev/                                 # ← LOCAL DEV (Tilt)
@@ -1794,19 +1794,26 @@ Pass the version via `VERSION`, e.g. `make release VERSION=1.2.3`.
 | Workflow            | Trigger                     | What it does                                                                 |
 |---------------------|-----------------------------|-----------------------------------------------------------------------------|
 | `publish.yaml`      | Push to `main` (or manual)  | Builds a multi-arch `-dev` image (`0.0.0-<sha>`) and uploads the dev chart   |
-| `release.yaml`      | Manual (`workflow_dispatch`)| Builds multi-arch prod + dev images, releases the chart, stamps the README, and creates the `vX.Y.Z` git tag |
+| `release.yaml`      | Tag push `v*.*.*`           | Builds multi-arch prod + dev images (with attestations) and stamps the `--version` in `README.md` |
 | `oci-release.yaml`  | Tag push `v*.*.*`           | Packages the chart and pushes it to `oci://ghcr.io/<owner>/charts/<provider-name>` |
 
 ### Cutting a Release
 
-1. Run the **Release** workflow from the Actions tab and supply a version:
-   - `X.Y.Z` for a stable release (builds prod + dev images, tags `latest`).
-   - `X.Y.Z-rc1` / `X.Y.Z-dev` (contains a `-`) for a pre-release (dev image only).
-2. The workflow builds and pushes the images, releases the Helm chart, and — for
-   stable versions — updates the `--version` in `README.md` on `main` before
-   creating the `vX.Y.Z` tag.
-3. Pushing that tag triggers `oci-release.yaml`, which publishes the chart as an
-   OCI artifact to GHCR. Users then install it with:
+Releases are fully tag-driven — pushing a `vX.Y.Z` tag runs everything, with no
+manual workflow dispatch required.
+
+1. Create and push a tag:
+   - `vX.Y.Z` for a stable release (builds prod + dev images, tags `latest`, stamps the README).
+   - `vX.Y.Z-rc1` / `vX.Y.Z-dev` (contains a `-`) for a pre-release (dev image only).
+
+   ```bash
+   git tag vX.Y.Z
+   git push origin vX.Y.Z
+   ```
+2. The tag triggers `release.yaml` (multi-arch prod + dev images, attestations,
+   and — for stable versions — a `--version` bump in `README.md` on `main`) and
+   `oci-release.yaml` (publishes the chart as an OCI artifact to GHCR) in parallel.
+3. Users then install the chart with:
 
    ```bash
    helm install <provider-name> \

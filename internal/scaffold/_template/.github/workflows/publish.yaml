@@ -84,6 +84,10 @@ jobs:
         uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5.10.0
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.description=OpenEverest [[ .ProviderName ]] (dev build)
+            org.opencontainers.image.licenses=Apache-2.0
 
       - name: Build and push by digest
         id: build
