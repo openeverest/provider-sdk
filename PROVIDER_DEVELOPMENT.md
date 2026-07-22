@@ -1616,8 +1616,8 @@ After adding markers, run `make generate` to regenerate RBAC manifests.
 | `make docker-build`     | Build the container image                                  |
 | `make helm-install`     | Deploy with Helm                                           |
 | `make helm-template`    | Render Helm templates locally (dry-run)                    |
-| `make test`             | Run unit tests                                             |
-| `make test-integration` | Run kuttl integration tests                                |
+| `make test-unit`        | Run unit tests                                             |
+| `make test-integration` | Run chainsaw integration tests                             |
 | `make verify`           | Check generated files are up-to-date (CI)                  |
 | `make lint`             | Run golangci-lint                                          |
 | `make dev-up`           | Create a k3d cluster and start the Tilt dev environment    |
@@ -1725,12 +1725,32 @@ kubectl get providers
 
 ### Integration Tests
 
+The scaffolded project ships a [chainsaw](https://kyverno.github.io/chainsaw/)
+test skeleton under `test/integration/` plus CI wiring:
+
+- `test/integration/core/` — a suite skeleton that verifies the provider
+  deployment and contains commented-out lifecycle steps (create Instance →
+  assert operator CR → simulate readiness → assert `phase: Running` → delete)
+  to enable as you implement the provider.
+- `.github/workflows/ci.yaml` — runs lint, build, unit tests, generated-file
+  verification, Helm lint, and each integration suite on every PR.
+- `.github/workflows/integration-test.yaml` — a reusable workflow that
+  provisions a k3d cluster, builds and deploys the provider and the
+  OpenEverest controller, and runs one suite via its Make target.
+
 ```bash
-# Run kuttl integration tests
+# Install chainsaw locally
+go install github.com/kyverno/chainsaw@latest
+
+# Run all suites / a single suite
 make test-integration
+make test-integration-core
 ```
 
-Edit test files in `test/integration/` to add test cases for your provider.
+See `test/integration/README.md` in your generated project for conventions
+(numbered step files, simulating the operator by patching CR statuses, adding
+new suites). For a complete real-world example, see the
+[provider-percona-server-mongodb suites](https://github.com/openeverest/provider-percona-server-mongodb/tree/main/test/integration).
 
 ### CI Verification
 

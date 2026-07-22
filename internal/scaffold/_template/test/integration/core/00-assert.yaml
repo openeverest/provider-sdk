@@ -1,0 +1,9 @@
+# The provider must be deployed and ready before the suite runs
+# (see the deploy-provider-ci Make target).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: [[ .ProviderName ]]
+  namespace: provider-system
+status:
+  readyReplicas: 1
