@@ -1,0 +1,105 @@
+---
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# Cancel in-progress runs for the same branch/PR when a new commit arrives.
+# On main we let runs queue so every commit is validated.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - uses: golangci/golangci-lint-action@v6
+        with:
+          version: v1.63.4
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      # Compile directly — `make build` runs generation which is checked by the
+      # verify job; we only want to know the code compiles here.
+      - name: Compile binary
+        run: go build -o /dev/null ./cmd/provider
+
+  test-unit:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Run unit tests
+        run: make test-unit
+
+  verify:
+    name: Verify generated files
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Check generated files are up-to-date
+        run: make verify
+
+  helm-lint:
+    name: Helm lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: azure/setup-helm@v4
+
+      - name: Lint Helm chart
+        run: helm lint charts/[[ .ProviderName ]]
+
+  # Each integration suite runs as a separate job through the reusable
+  # integration-test.yaml workflow. To add a suite, create a directory under
+  # test/integration/, add a matching test-integration-<suite> Make target,
+  # and copy this job with the new make_target.
+  test-integration-core:
+    name: Integration / core
+    needs: [lint, build, verify]
+    uses: ./.github/workflows/integration-test.yaml
+    with:
+      make_target: test-integration-core
+      suite: core
+    secrets: inherit

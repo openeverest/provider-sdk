@@ -1,0 +1,102 @@
+---
+name: 'Setup Kubernetes Tools'
+description: 'Install k3d, chainsaw, and kubectl with checksum verification'
+
+inputs:
+  tools-path:
+    description: 'Directory to install binaries into'
+    required: false
+    default: '/opt/tools/bin'
+
+  install-kubectl:
+    description: 'Install kubectl (GitHub-hosted runners ship a version; use this for a pinned one)'
+    required: false
+    default: 'false'
+  kubectl-version:
+    description: 'kubectl version (without the leading v)'
+    required: false
+    default: '1.31.0'
+
+  install-chainsaw:
+    description: 'Install chainsaw'
+    required: false
+    default: 'false'
+  chainsaw-version:
+    description: 'chainsaw version (without the leading v)'
+    required: false
+    default: '0.2.15'
+
+  install-k3d:
+    description: 'Install k3d'
+    required: false
+    default: 'false'
+  k3d-version:
+    description: 'k3d version (without the leading v)'
+    required: false
+    default: '5.8.3'
+
+runs:
+  using: composite
+  steps:
+    - name: Create tools directory
+      shell: bash
+      run: |
+        mkdir -p "${{ inputs.tools-path }}"
+        echo "${{ inputs.tools-path }}" >> "$GITHUB_PATH"
+
+    - name: Install kubectl
+      if: inputs.install-kubectl == 'true'
+      shell: bash
+      run: |
+        ARCH=$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')
+        VERSION="${{ inputs.kubectl-version }}"
+        BASE="https://dl.k8s.io/release/v${VERSION}/bin/linux/${ARCH}"
+        DEST="${{ inputs.tools-path }}/kubectl"
+
+        curl -fsSL -o "${DEST}"         "${BASE}/kubectl"
+        curl -fsSL -o "${DEST}.sha256"  "${BASE}/kubectl.sha256"
+        echo "$(cat "${DEST}.sha256")  ${DEST}" | sha256sum --check --status
+        rm "${DEST}.sha256"
+        chmod +x "${DEST}"
+
+        echo "kubectl $(kubectl version --client --short 2>/dev/null || kubectl version --client) installed"
+
+    - name: Install chainsaw
+      if: inputs.install-chainsaw == 'true'
+      shell: bash
+      run: |
+        ARCH=$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')
+        VERSION="${{ inputs.chainsaw-version }}"
+        BASE="https://github.com/kyverno/chainsaw/releases/download/v${VERSION}"
+        TARBALL="chainsaw_linux_${ARCH}.tar.gz"
+
+        curl -fsSL -o "/tmp/${TARBALL}"                "${BASE}/${TARBALL}"
+        curl -fsSL -o "/tmp/chainsaw_checksums.txt"    "${BASE}/checksums.txt"
+        grep " ${TARBALL}$" /tmp/chainsaw_checksums.txt \
+          | awk -v dest="/tmp/${TARBALL}" '{print $1 "  " dest}' \
+          | sha256sum --check --status
+        tar -xzf "/tmp/${TARBALL}" -C "${{ inputs.tools-path }}" chainsaw
+        rm "/tmp/${TARBALL}" /tmp/chainsaw_checksums.txt
+        chmod +x "${{ inputs.tools-path }}/chainsaw"
+
+        echo "chainsaw $(chainsaw version) installed"
+
+    - name: Install k3d
+      if: inputs.install-k3d == 'true'
+      shell: bash
+      run: |
+        ARCH=$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')
+        VERSION="${{ inputs.k3d-version }}"
+        BASE="https://github.com/k3d-io/k3d/releases/download/v${VERSION}"
+        BINARY="k3d-linux-${ARCH}"
+        DEST="${{ inputs.tools-path }}/k3d"
+
+        curl -fsSL -o "${DEST}"                   "${BASE}/${BINARY}"
+        curl -fsSL -o "/tmp/k3d_sha256sum.txt"    "${BASE}/checksums.txt"
+        grep "${BINARY}" /tmp/k3d_sha256sum.txt \
+          | awk -v dest="${DEST}" '{print $1 "  " dest}' \
+          | sha256sum --check --status
+        rm /tmp/k3d_sha256sum.txt
+        chmod +x "${DEST}"
+
+        k3d version

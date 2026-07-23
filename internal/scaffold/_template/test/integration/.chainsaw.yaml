@@ -1,0 +1,21 @@
+---
+# Chainsaw configuration shared by all integration test suites.
+# See https://kyverno.github.io/chainsaw/latest/configuration/ for options.
+apiVersion: chainsaw.kyverno.io/v1alpha2
+kind: Configuration
+metadata:
+  name: integration
+spec:
+  timeouts:
+    apply: 30s
+    assert: 30s
+    delete: 30s
+    error: 30s
+    exec: 60s
+    cleanup: 60s
+  cleanup:
+    skipDelete: false
+  report:
+    format: XML
+    name: chainsaw-report
+    path: /tmp
