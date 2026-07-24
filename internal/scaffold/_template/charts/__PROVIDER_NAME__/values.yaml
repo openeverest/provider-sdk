@@ -62,8 +62,10 @@ securityContext:
 service:
   # -- Service type
   type: ClusterIP
-  # -- Service port for the HTTP server (schema/validation endpoints)
+  # -- Service port for the HTTP server (validation/health endpoints)
   port: 8082
+  # -- The address the metrics endpoint binds to. Use "0" to disable.
+  metricsBindAddress: ":8081"
 
 # -- Resource limits and requests
 resources:
@@ -76,17 +78,33 @@ resources:
 
 livenessProbe:
   httpGet:
-    path: /schema
+    path: /healthz
     port: http
   initialDelaySeconds: 15
   periodSeconds: 20
 
 readinessProbe:
   httpGet:
-    path: /schema
+    path: /readyz
     port: http
   initialDelaySeconds: 5
   periodSeconds: 10
+
+# -- Deployment update strategy
+strategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxUnavailable: 25%
+    maxSurge: 25%
+
+# -- Number of old ReplicaSets to retain
+revisionHistoryLimit: 1
+
+# -- Termination grace period in seconds
+terminationGracePeriodSeconds: 10
+
+# -- Topology spread constraints for pod scheduling
+topologySpreadConstraints: []
 
 # -- Node selector for pod scheduling
 nodeSelector: {}
