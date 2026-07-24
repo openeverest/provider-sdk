@@ -49,6 +49,11 @@ type Config struct {
 	// ProviderName is the name of the provider (e.g., "provider-percona-server-mongodb").
 	ProviderName string
 
+	// ProviderShortName is a short identifier for the provider (e.g., "psmdb" for "percona-server-mongodb").
+	// Used in resource names where a short concise provider identifier is needed.
+	// If empty, it is derived from ProviderName by removing the "provider-" prefix.
+	ProviderShortName string
+
 	// ModulePath is the Go module path (e.g., "github.com/openeverest/provider-percona-server-mongodb").
 	ModulePath string
 
@@ -101,6 +106,9 @@ func (c *Config) Validate() error {
 func (c *Config) DeriveDefaults() {
 	if c.GoPackage == "" {
 		c.GoPackage = strings.ToLower(strings.ReplaceAll(c.ProviderName, "-", ""))
+	}
+	if c.ProviderShortName == "" {
+		c.ProviderShortName = strings.TrimPrefix(c.ProviderName, "provider-")
 	}
 	// TopologyName intentionally left empty when not provided — the topology
 	// template directory is skipped during scaffolding in that case.
@@ -172,6 +180,12 @@ func Scaffold(cfg *Config, outputDir string) error {
 			if d.IsDir() {
 				return fs.SkipDir
 			}
+			return nil
+		}
+
+		// Skip backup files - they should be added via 'provider-sdk add backup'.
+		if strings.HasSuffix(path, "internal/provider/backup.go") ||
+			strings.HasSuffix(path, "internal/provider/backup_mirror.go") {
 			return nil
 		}
 

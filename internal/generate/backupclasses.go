@@ -30,8 +30,9 @@ type BackupClassAssembled struct {
 	// Name is the directory name; it doubles as the BackupClass metadata.name.
 	Name string
 	// Class is the raw map parsed from class.yaml. Type-name references under
-	// known string fields (config.openAPIV3Schema, restoreConfig.openAPIV3Schema,
-	// providerManaged.pitrConfigSchema) are collected into TypeRefs.
+	// known string fields (parametersSchema.openAPIV3Schema,
+	// restoreParametersSchema.openAPIV3Schema,
+	// providerManaged.pitrParametersSchema.openAPIV3Schema) are collected into TypeRefs.
 	Class map[string]any
 	// UI is the raw map parsed from ui.yaml (or nil when absent). Inlined
 	// verbatim under spec.uiSchema in the rendered manifest.
@@ -39,9 +40,10 @@ type BackupClassAssembled struct {
 }
 
 // AssembleBackupClasses reads definition/backupclasses/*/{class.yaml,ui.yaml}
-// and returns one entry per subdirectory. Type-name references (config and
-// restoreConfig openAPIV3Schema strings, providerManaged.pitrConfigSchema
-// strings) are collected into typeRefs for later schema resolution.
+// and returns one entry per subdirectory. Type-name references (the
+// openAPIV3Schema strings of parametersSchema, restoreParametersSchema, and
+// providerManaged.pitrParametersSchema) are collected into typeRefs for later
+// schema resolution.
 //
 // Missing definition/backupclasses/ directory is not an error; it just means
 // the provider has no BackupClasses to emit.
@@ -95,19 +97,21 @@ func AssembleBackupClasses(defDir string, typeRefs map[string]bool) ([]BackupCla
 // collectBackupClassTypeRefs scans the known string fields that may carry a
 // Go type-name reference and records them so ResolveSchemas can pick them up.
 func collectBackupClassTypeRefs(class map[string]any, typeRefs map[string]bool) {
-	if cfg, ok := class["config"].(map[string]any); ok {
+	if cfg, ok := class["parametersSchema"].(map[string]any); ok {
 		if s, ok := cfg["openAPIV3Schema"].(string); ok && s != "" {
 			typeRefs[s] = true
 		}
 	}
-	if cfg, ok := class["restoreConfig"].(map[string]any); ok {
+	if cfg, ok := class["restoreParametersSchema"].(map[string]any); ok {
 		if s, ok := cfg["openAPIV3Schema"].(string); ok && s != "" {
 			typeRefs[s] = true
 		}
 	}
 	if pm, ok := class["providerManaged"].(map[string]any); ok {
-		if s, ok := pm["pitrConfigSchema"].(string); ok && s != "" {
-			typeRefs[s] = true
+		if cfg, ok := pm["pitrParametersSchema"].(map[string]any); ok {
+			if s, ok := cfg["openAPIV3Schema"].(string); ok && s != "" {
+				typeRefs[s] = true
+			}
 		}
 	}
 }
@@ -135,7 +139,7 @@ func resolveBackupClassRefs(class map[string]any, schemas map[string]any) map[st
 	out := make(map[string]any, len(class))
 	for k, v := range class {
 		switch k {
-		case "config", "restoreConfig":
+		case "parametersSchema", "restoreParametersSchema":
 			out[k] = resolveOpenAPIRef(v, schemas)
 		case "providerManaged":
 			out[k] = resolveProviderManagedRefs(v, schemas)
@@ -173,13 +177,9 @@ func resolveProviderManagedRefs(v any, schemas map[string]any) any {
 	}
 	resolved := make(map[string]any, len(m))
 	for k, val := range m {
-		if k == "pitrConfigSchema" {
-			if typeName, ok := val.(string); ok && schemas != nil {
-				if schema, ok := schemas[typeName]; ok {
-					resolved[k] = schema
-					continue
-				}
-			}
+		if k == "pitrParametersSchema" {
+			resolved[k] = resolveOpenAPIRef(val, schemas)
+			continue
 		}
 		resolved[k] = val
 	}

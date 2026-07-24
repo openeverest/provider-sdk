@@ -57,9 +57,14 @@ charts/[[ .ProviderName ]]/     # Helm chart for deployment
 examples/
   instance-example.yaml    # Example Instance CR
   instance-simple.yaml     # Minimal Instance CR
+test/
+  vars.sh                  # Pinned operator/engine versions for tests
+  integration/             # Chainsaw integration test suites (see its README.md)
 dev/
   k3d_config.yaml          # Local k3d cluster config
 hack/                      # Helper scripts
+.github/
+  workflows/               # CI: lint, build, unit + integration tests, release
 gen.go                     # go:generate entry point
 Makefile                   # Build, generate, and deploy targets
 Dockerfile
@@ -75,8 +80,8 @@ Dockerfile
 | `make docker-build`     | Build the container image                                  |
 | `make helm-install`     | Deploy with Helm                                           |
 | `make helm-template`    | Render Helm templates locally (dry-run)                    |
-| `make test`             | Run unit tests                                             |
-| `make test-integration` | Run kuttl integration tests                                |
+| `make test-unit`        | Run unit tests                                             |
+| `make test-integration` | Run chainsaw integration tests                             |
 | `make verify`           | Check generated files are up-to-date (CI)                  |
 | `make lint`             | Run golangci-lint                                          |
 
@@ -103,15 +108,29 @@ helm uninstall [[ .ProviderName ]]
 # Create a local k3d cluster
 make k3d-cluster-up
 
+# Install OpenEverest CRDs (plus your operator's CRDs — see the target's TODO)
+make install-crds
+
 # Run the provider locally against the cluster
 make run
 
-# Run integration tests
+# Run integration tests (requires chainsaw — see test/integration/README.md)
 make test-integration
 
 # Tear down the cluster
 make k3d-cluster-down
 ```
+
+### Testing
+
+- **Unit tests** — `make test-unit`.
+- **Integration tests** — chainsaw suites under `test/integration/`. The
+  scaffolded `core/` suite is a skeleton: it verifies the provider deployment
+  and includes commented-out lifecycle steps to enable as you implement the
+  provider. See [test/integration/README.md](test/integration/README.md).
+- **CI** — `.github/workflows/ci.yaml` runs lint, build, unit tests, generated
+  file verification, Helm lint, and each integration suite (via the reusable
+  `.github/workflows/integration-test.yaml` workflow) on every PR.
 
 ## License
 

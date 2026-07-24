@@ -58,7 +58,7 @@ func (p *Provider) Validate(c *controller.Context) error {
 
 // Sync ensures all required resources exist and are configured correctly.
 //
-// This is the main reconciliation logic. Create or update your operator
+// This is the main reconciliation logic. Create or update your
 // operator's custom resource(s) based on the Instance spec.
 func (p *Provider) Sync(c *controller.Context) error {
 	l := log.FromContext(c.Context())

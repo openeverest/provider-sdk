@@ -1,0 +1,94 @@
+# Minimal MinIO deployment for local backup/restore testing.
+#
+# Deployed by dev/Tiltfile when ENABLE_MINIO=true. Exposes an S3-compatible
+# endpoint at http://minio.minio.svc.cluster.local:9000 and a console on :9090.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: minio
+  labels:
+    name: minio
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: minio-data
+  namespace: minio
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: minio
+  namespace: minio
+  labels:
+    app: minio
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: minio
+  template:
+    metadata:
+      labels:
+        app: minio
+    spec:
+      initContainers:
+        - name: init-buckets
+          image: busybox
+          command:
+            - /bin/sh
+            - -c
+            - mkdir -p /data/backups
+          volumeMounts:
+            - mountPath: /data
+              name: minio-data-vol
+      containers:
+        - name: minio
+          image: quay.io/minio/minio:latest
+          args:
+            - server
+            - /data
+            - --console-address
+            - ":9090"
+          env:
+            - name: MINIO_ROOT_USER
+              value: minioadmin
+            - name: MINIO_ROOT_PASSWORD
+              value: minioadmin
+          ports:
+            - name: s3
+              containerPort: 9000
+            - name: console
+              containerPort: 9090
+          volumeMounts:
+            - mountPath: /data
+              name: minio-data-vol
+      volumes:
+        - name: minio-data-vol
+          persistentVolumeClaim:
+            claimName: minio-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: minio
+  namespace: minio
+spec:
+  type: ClusterIP
+  selector:
+    app: minio
+  ports:
+    - name: s3
+      protocol: TCP
+      port: 9000
+      targetPort: 9000
+    - name: console
+      protocol: TCP
+      port: 9090
+      targetPort: 9090

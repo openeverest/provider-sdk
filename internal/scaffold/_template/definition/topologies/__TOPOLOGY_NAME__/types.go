@@ -1,12 +1,12 @@
-// Package [[ .TopologyPackage ]] contains custom spec types for the [[ .TopologyName ]] topology.
+// Package [[ .TopologyPackage ]] contains parameter types for the [[ .TopologyName ]] topology.
 //
-// Add fields to [[ .TopologyTypeName ]]TopologyConfig and reference it via configSchema in
-// topology.yaml when this topology needs custom configuration.
+// Add fields to [[ .TopologyTypeName ]]TopologyParameters and reference it via parametersSchema in
+// topology.yaml when this topology needs parameters.
 //
 // +k8s:openapi-gen=true
 package [[ .TopologyPackage ]]
 
-// [[ .TopologyTypeName ]]TopologyConfig defines configuration for the [[ .TopologyName ]] topology.
+// [[ .TopologyTypeName ]]TopologyParameters defines the parameters for the [[ .TopologyName ]] topology.
 // Currently empty — add fields here when the [[ .TopologyName ]] topology needs
-// custom configuration beyond what the base Instance spec provides.
-type [[ .TopologyTypeName ]]TopologyConfig struct{}
+// parameters beyond what the base Instance spec provides.
+type [[ .TopologyTypeName ]]TopologyParameters struct{}

@@ -215,7 +215,7 @@ func createTopologyYAML(topoDir, topoName string, components []string) error {
 		"# This file defines both the structural topology and its UI rendering.\n"+
 		"#\n"+
 		"# config.components: Which components are used and their defaults.\n"+
-		"# config.configSchema: Reference a Go type for custom topology config fields.\n"+
+		"# config.parametersSchema: Reference a Go type for topology parameters.\n"+
 		"# ui: Rendering hints for the frontend form.\n"+
 		"#\n"+
 		"# See github.com/openeverest/provider-sdk/blob/main/PROVIDER_DEVELOPMENT.md\n"+
@@ -233,18 +233,18 @@ func createTopologyYAML(topoDir, topoName string, components []string) error {
 // createTopologyTypes generates a types.go for the topology.
 func createTopologyTypes(topoDir, topoName string) error {
 	pkgName := strings.ToLower(topoName)
-	typeName := toPascalCase(topoName) + "TopologyConfig"
+	typeName := toPascalCase(topoName) + "TopologyParameters"
 
-	content := fmt.Sprintf(`// Package %s contains custom spec types for the %s topology.
+	content := fmt.Sprintf(`// Package %s contains parameter types for the %s topology.
 //
-// Add fields to %s and reference it via configSchema in
-// topology.yaml when this topology needs custom configuration.
+// Add fields to %s and reference it via parametersSchema in
+// topology.yaml when this topology needs parameters.
 //
 // +k8s:openapi-gen=true
 package %s
 
-// %s defines configuration for the %s topology.
-// Add fields here when the %s topology needs custom configuration
+// %s defines the parameters for the %s topology.
+// Add fields here when the %s topology needs parameters
 // beyond what the base Instance spec provides.
 //
 // Example:
@@ -254,7 +254,7 @@ package %s
 //
 // Then reference it in topology.yaml:
 //   config:
-//     configSchema: %s
+//     parametersSchema: %s
 type %s struct{}
 `, pkgName, topoName, typeName, pkgName, typeName, topoName, topoName, typeName, typeName, typeName)
 

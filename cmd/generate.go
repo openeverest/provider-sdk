@@ -56,8 +56,8 @@ Usage via go:generate (in gen.go):
 The command reads definition/provider.yaml, definition/versions.yaml,
 and definition/topologies/*/topology.yaml to build the Provider CR spec.
 
-If any topology or component references a Go type via configSchema or
-customSpecSchema, the command loads the specified Go packages and performs
+If any topology or component references a Go type via parametersSchema, the
+command loads the specified Go packages and performs
 static type analysis to generate OpenAPI schemas.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return generate.Run(generate.Options{
