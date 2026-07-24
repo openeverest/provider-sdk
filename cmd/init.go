@@ -28,6 +28,7 @@ import (
 
 var initOpts struct {
 	name           string
+	shortName      string
 	modulePath     string
 	apiGroup       string
 	resource       string
@@ -38,6 +39,8 @@ var initOpts struct {
 func init() {
 	f := initCmd.Flags()
 	f.StringVar(&initOpts.name, "name", "", "Provider name (e.g., provider-my-database)")
+	f.StringVar(&initOpts.shortName, "short-name", "", "Short provider name used in resource names "+
+		"(e.g., 'psmdb' for 'percona-server-mongodb'), defaults to name without 'provider-' prefix)")
 	f.StringVar(&initOpts.modulePath, "module", "", "Go module path (e.g., github.com/my-org/provider-my-database)")
 	f.StringVar(&initOpts.apiGroup, "api-group", "", "Operator API group (optional, used as RBAC hint)")
 	f.StringVar(&initOpts.resource, "resource", "", "Operator resource, plural (optional, used as RBAC hint)")
@@ -89,6 +92,10 @@ func runInit(_ *cobra.Command, _ []string) error {
 		if err := promptTUI(&initOpts.modulePath, "Go module path", "github.com/my-org/provider-my-database", "", true); err != nil {
 			return err
 		}
+		if err := promptTUI(&initOpts.shortName, "Short provider name used in resource names "+
+			"(e.g., 'psmdb' for 'percona-server-mongodb')", "(optional, defaults to name without 'provider-' prefix)", "", false); err != nil {
+			return err
+		}
 	}
 
 	if initOpts.outputDir == "" {
@@ -100,16 +107,18 @@ func runInit(_ *cobra.Command, _ []string) error {
 	}
 
 	cfg := &scaffold.Config{
-		ProviderName:     initOpts.name,
-		ModulePath:       initOpts.modulePath,
-		OperatorAPIGroup: initOpts.apiGroup,
-		OperatorResource: initOpts.resource,
+		ProviderName:      initOpts.name,
+		ProviderShortName: initOpts.shortName,
+		ModulePath:        initOpts.modulePath,
+		OperatorAPIGroup:  initOpts.apiGroup,
+		OperatorResource:  initOpts.resource,
 	}
 	cfg.DeriveDefaults()
 
 	fmt.Println()
 	fmt.Println("=== Configuration Summary ===")
 	fmt.Printf("  Provider name:        %s\n", cfg.ProviderName)
+	fmt.Printf("  Provider short name:  %s\n", cfg.ProviderShortName)
 	fmt.Printf("  Go module path:       %s\n", cfg.ModulePath)
 	fmt.Printf("  Go package name:      %s\n", cfg.GoPackage)
 	fmt.Printf("  Output directory:     %s\n", initOpts.outputDir)
