@@ -10,7 +10,6 @@ on:
 
 permissions:
   contents: read
-  packages: write
 
 env:
   REGISTRY: ghcr.io
@@ -21,6 +20,9 @@ jobs:
     name: Package & push Helm OCI chart
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    permissions:
+      contents: write
+      packages: write
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v4
@@ -64,3 +66,35 @@ jobs:
             --password-stdin
           helm push release-artifacts/[[ .ProviderName ]]-*.tgz \
             "oci://${REGISTRY}/${{ github.repository_owner }}/charts"
+
+      - name: Generate install notes
+        env:
+          VERSION: ${{ steps.version.outputs.VERSION }}
+        run: |
+          cat > release-artifacts/notes.md <<EOF
+          ## [[ .ProviderName ]] v${VERSION}
+
+          ### Image
+          \`\`\`
+          ${REGISTRY}/${{ github.repository_owner }}/[[ .ProviderName ]]:${VERSION}
+          \`\`\`
+          Platforms: \`linux/amd64\`, \`linux/arm64\`
+
+          ### Install with Helm
+          \`\`\`bash
+          helm install [[ .ProviderName ]] \\
+            oci://${REGISTRY}/${{ github.repository_owner }}/charts/[[ .ProviderName ]] \\
+            --version ${VERSION} -n everest-system
+          \`\`\`
+          EOF
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@c95fe1489396fe8a9eb87c0abf8aa5b2ef267fda # v2.2.1
+        with:
+          name: "v${{ steps.version.outputs.VERSION }}"
+          body_path: release-artifacts/notes.md
+          append_body: true
+          generate_release_notes: true
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          files: release-artifacts/[[ .ProviderName ]]-*.tgz
+          fail_on_unmatched_files: true
