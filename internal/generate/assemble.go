@@ -33,7 +33,7 @@ type AssembledConfig struct {
 	// ComponentTypes maps component type names to their version catalogs.
 	ComponentTypes map[string]any
 
-	// Components maps logical component names to their spec (type, optional customSpecSchema).
+	// Components maps logical component names to their spec (type, optional parametersSchema).
 	Components map[string]any
 
 	// Versions maps bundle names to their VersionBundle spec.
@@ -45,11 +45,11 @@ type AssembledConfig struct {
 	// UISchema maps topology names to their UI rendering hints.
 	UISchema map[string]any
 
-	// GlobalConfigSchema is the Go type name reference for global config, if any.
-	GlobalConfigSchema string
+	// ParametersSchema is the Go type name reference for provider-level parameters, if any.
+	ParametersSchema string
 
 	// TypeRefs collects all Go type name references found during assembly
-	// (e.g., configSchema, customSpecSchema, globalConfigSchema values).
+	// (e.g., parametersSchema values on the provider, components, and topologies).
 	TypeRefs map[string]bool
 }
 
@@ -60,8 +60,8 @@ type AssembledConfig struct {
 //   - definition/versions.yaml    — component type version catalogs
 //   - definition/topologies/*/topology.yaml — topology configs and UI schemas
 //
-// Type name references (configSchema, customSpecSchema, globalConfigSchema) are
-// collected in TypeRefs for later schema resolution.
+// Type name references (parametersSchema values on the provider, components,
+// and topologies) are collected in TypeRefs for later schema resolution.
 func Assemble(defDir string) (*AssembledConfig, error) {
 	provider, err := readYAML(filepath.Join(defDir, "provider.yaml"))
 	if err != nil {
@@ -106,10 +106,10 @@ func Assemble(defDir string) (*AssembledConfig, error) {
 		}
 	}
 
-	// Global config schema reference.
-	if gcs, ok := provider["globalConfigSchema"].(string); ok && gcs != "" {
-		cfg.GlobalConfigSchema = gcs
-		cfg.TypeRefs[gcs] = true
+	// Provider-level parameters schema reference.
+	if ps, ok := provider["parametersSchema"].(string); ok && ps != "" {
+		cfg.ParametersSchema = ps
+		cfg.TypeRefs[ps] = true
 	}
 
 	// Topologies and UI schema from topology directories.
@@ -159,7 +159,7 @@ func Assemble(defDir string) (*AssembledConfig, error) {
 }
 
 // buildComponentsSpec builds the components section of the Provider CR spec.
-// It also collects type references from customSpecSchema fields.
+// It also collects type references from parametersSchema fields.
 func buildComponentsSpec(comps map[string]any, typeRefs map[string]bool) map[string]any {
 	spec := make(map[string]any)
 	for name, compRaw := range comps {
@@ -168,9 +168,9 @@ func buildComponentsSpec(comps map[string]any, typeRefs map[string]bool) map[str
 			if t, ok := compMap["type"].(string); ok {
 				comp["type"] = t
 			}
-			if schema, ok := compMap["customSpecSchema"].(string); ok && schema != "" {
+			if schema, ok := compMap["parametersSchema"].(string); ok && schema != "" {
 				typeRefs[schema] = true
-				comp["customSpecSchema"] = schema // placeholder, resolved later
+				comp["parametersSchema"] = schema // placeholder, resolved later
 			}
 		}
 		spec[name] = comp
@@ -179,15 +179,15 @@ func buildComponentsSpec(comps map[string]any, typeRefs map[string]bool) map[str
 }
 
 // buildTopologySpec builds a single topology entry for the Provider CR spec.
-// It extracts only CR-valid fields (optional, configSchema) from the topology config,
+// It extracts only CR-valid fields (optional, parametersSchema) from the topology config,
 // intentionally dropping non-CR fields like "defaults".
 func buildTopologySpec(configMap map[string]any, typeRefs map[string]bool) map[string]any {
 	result := make(map[string]any)
 
-	// Extract configSchema reference (will be resolved to OpenAPI schema later).
-	if cs, ok := configMap["configSchema"].(string); ok && cs != "" {
-		typeRefs[cs] = true
-		result["configSchema"] = cs // placeholder, resolved later
+	// Extract parametersSchema reference (will be resolved to an OpenAPI schema later).
+	if ps, ok := configMap["parametersSchema"].(string); ok && ps != "" {
+		typeRefs[ps] = true
+		result["parametersSchema"] = ps // placeholder, resolved later
 	}
 
 	// Extract components, filtering to only CR-valid fields.

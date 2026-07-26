@@ -1,0 +1,76 @@
+---
+# Core lifecycle suite — skeleton.
+#
+# Ships with a single step that verifies the provider deployment is running.
+# The commented-out steps below show the recommended lifecycle test pattern;
+# enable and adapt them once your provider implements Sync/Status.
+#
+# For a complete example, see:
+# https://github.com/openeverest/provider-percona-server-mongodb/tree/main/test/integration/core
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: core
+spec:
+  description: |
+    Lifecycle of an Instance: create, simulate operator readiness, update,
+    and delete.
+
+  # Collect diagnostics when a step fails.
+  catch:
+    - script:
+        content: kubectl -n $NAMESPACE get instance -o yaml
+    # TODO: also dump your operator-native CR, e.g.:
+    # - script:
+    #     content: kubectl -n $NAMESPACE get <operator-resource> -o yaml
+    - podLogs:
+        namespace: provider-system
+        selector: app.kubernetes.io/name=[[ .ProviderName ]]
+        tail: 100
+
+  steps:
+    - name: provider-deployed
+      try:
+        - assert:
+            file: 00-assert.yaml
+
+    # TODO: enable once your provider implements Sync().
+    # Applies an Instance and asserts the provider creates the
+    # operator-native CR with the expected spec.
+    # - name: create-instance
+    #   try:
+    #     - apply:
+    #         file: 10-create-instance.yaml
+    #     - assert:
+    #         file: 10-assert.yaml
+
+    # TODO: enable once your provider implements Status().
+    # The operator is scaled to 0 in integration tests, so simulate it
+    # marking the cluster ready by patching the operator-native CR status,
+    # then assert the Instance reports phase Running.
+    # - name: instance-ready
+    #   try:
+    #     - script:
+    #         content: |
+    #           kubectl patch <operator-resource>/test-instance --subresource status -n $NAMESPACE \
+    #             -p '{"status":{"state":"ready"}}' --type=merge
+    #     - assert:
+    #         file: 11-assert.yaml
+
+    # TODO: enable once your provider implements Cleanup().
+    # Deletes the Instance and waits for the provider to tear everything
+    # down. With the operator scaled to 0, you may need to clear finalizers
+    # on the operator-native CR (nothing processes them):
+    # - name: delete-instance
+    #   try:
+    #     - script:
+    #         content: |
+    #           kubectl -n $NAMESPACE delete instance/test-instance --wait=false
+    #           kubectl -n $NAMESPACE patch <operator-resource>/test-instance \
+    #             -p '{"metadata":{"finalizers":null}}' --type merge
+    #     - wait:
+    #         apiVersion: core.openeverest.io/v1alpha1
+    #         kind: Instance
+    #         name: test-instance
+    #         for:
+    #           deletion: {}

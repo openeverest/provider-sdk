@@ -4,7 +4,8 @@ kind: Instance
 metadata:
   name: my-database-simple
 spec:
-  provider: [[ .ProviderName ]]
+  providerRef:
+    name: [[ .ProviderName ]]
   components:
     engine:
       type: [[ .ComponentType ]]

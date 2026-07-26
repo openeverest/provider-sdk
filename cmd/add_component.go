@@ -44,7 +44,7 @@ var addComponentCmd = &cobra.Command{
 This command updates the following files:
   - definition/provider.yaml       (adds the component entry)
   - definition/versions.yaml       (adds the component type if new)
-  - definition/components/types.go (adds a CustomSpec struct)
+  - definition/components/types.go (adds a Parameters struct)
   - internal/common/spec.go        (adds name/type constants)
 
 Run from the provider project root directory.
@@ -96,7 +96,7 @@ func runAddComponent(_ *cobra.Command, _ []string) error {
 	fmt.Println()
 	fmt.Println("Next steps:")
 	fmt.Println("  1. Update definition/versions.yaml with real version/image entries")
-	fmt.Println("  2. Add fields to the CustomSpec struct in definition/components/types.go if needed")
+	fmt.Println("  2. Add fields to the Parameters struct in definition/components/types.go if needed")
 	fmt.Println("  3. Reference the component in your topology files (definition/topologies/*/topology.yaml)")
 	fmt.Println("  4. Add RBAC hints in internal/provider/rbac.go if the component needs new permissions")
 	fmt.Println("  5. Run: make generate")

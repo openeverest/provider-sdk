@@ -60,7 +60,7 @@ provider-my-database/
 │   │   ├── provider-spec.yaml        # Generated from definition/
 │   │   └── rbac-rules.yaml           # Generated from RBAC markers
 │   └── templates/
-├── test/integration/                 # kuttl integration tests
+├── test/integration/                 # chainsaw integration test skeleton
 ├── dev/k3d_config.yaml               # Local k3d cluster config
 ├── examples/                         # Example Instance CRs
 ├── .github/workflows/                # CI/CD: build, test, publish, release, oci-release

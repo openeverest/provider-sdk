@@ -1,0 +1,9 @@
+# Expected outcome of the instance-ready step: once the operator-native CR
+# reports ready, the provider's Status() must surface phase Running on the
+# Instance.
+apiVersion: core.openeverest.io/v1alpha1
+kind: Instance
+metadata:
+  name: test-instance
+status:
+  phase: Running

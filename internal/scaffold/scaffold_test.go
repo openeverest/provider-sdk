@@ -292,8 +292,8 @@ func TestScaffoldCustomTopologyName(t *testing.T) {
 	if !strings.Contains(string(typesContent), "package replicaset") {
 		t.Error("topology types.go does not contain correct package name 'replicaset'")
 	}
-	if !strings.Contains(string(typesContent), "ReplicaSetTopologyConfig") {
-		t.Error("topology types.go does not contain correct type name 'ReplicaSetTopologyConfig'")
+	if !strings.Contains(string(typesContent), "ReplicaSetTopologyParameters") {
+		t.Error("topology types.go does not contain correct type name 'ReplicaSetTopologyParameters'")
 	}
 
 	// Verify provider-spec.yaml exists in chart (content is a placeholder).
