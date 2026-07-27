@@ -66,6 +66,18 @@ func Run(opts Options) error {
 		return fmt.Errorf("assembling backup classes: %w", err)
 	}
 
+	// 1c. Assemble Secrets, collecting type references for schema resolution.
+	secrets, err := AssembleSecrets(opts.DefinitionDir, cfg.TypeRefs)
+	if err != nil {
+		return fmt.Errorf("assembling secrets: %w", err)
+	}
+
+	// 1d. Assemble ConfigMaps, collecting type references for schema resolution.
+	configMaps, err := AssembleConfigMaps(opts.DefinitionDir, cfg.TypeRefs)
+	if err != nil {
+		return fmt.Errorf("assembling configmaps: %w", err)
+	}
+
 	// Auto-detect chart dir if not specified.
 	if opts.ChartDir == "" {
 		detected, err := detectChartDir()
@@ -90,7 +102,7 @@ func Run(opts Options) error {
 	}
 
 	// 3. Build the Provider CR spec map with schemas injected.
-	specMap := buildSpecMap(cfg, schemas)
+	specMap := buildSpecMap(cfg, schemas, secrets, configMaps)
 
 	// 4. Write to chart generated directory.
 	outputDir := filepath.Join(opts.ChartDir, "generated")
@@ -159,7 +171,7 @@ func detectChartDir() (string, error) {
 
 // buildSpecMap constructs the Provider CR spec as a map, with type references
 // replaced by their resolved OpenAPI schemas.
-func buildSpecMap(cfg *AssembledConfig, schemas map[string]any) map[string]any {
+func buildSpecMap(cfg *AssembledConfig, schemas map[string]any, secrets []SecretDefinitionAssembled, configMaps []ConfigMapDefinitionAssembled) map[string]any {
 	spec := make(map[string]any)
 
 	if cfg.ComponentTypes != nil {
@@ -231,6 +243,16 @@ func buildSpecMap(cfg *AssembledConfig, schemas map[string]any) map[string]any {
 
 	if cfg.UISchema != nil {
 		spec["uiSchema"] = cfg.UISchema
+	}
+
+	// Secrets — build from assembled secret definitions.
+	if secretsSpec := buildSecretsSpec(secrets, schemas); secretsSpec != nil {
+		spec["secrets"] = secretsSpec
+	}
+
+	// ConfigMaps — build from assembled configmap definitions.
+	if configMapsSpec := buildConfigMapsSpec(configMaps, schemas); configMapsSpec != nil {
+		spec["configMaps"] = configMapsSpec
 	}
 
 	return spec
