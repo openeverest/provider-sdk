@@ -57,6 +57,11 @@ type Config struct {
 	// ModulePath is the Go module path (e.g., "github.com/openeverest/provider-percona-server-mongodb").
 	ModulePath string
 
+	// RepoSlug is the "owner/repo" form used by badge services such as shields.io,
+	// which address repositories without the host or any /vN major-version suffix.
+	// If empty, it is derived from ModulePath.
+	RepoSlug string
+
 	// OperatorAPIGroup is the API group of the operator CRDs (e.g., "psmdb.percona.com").
 	// Optional: used as a hint in RBAC marker comments.
 	OperatorAPIGroup string
@@ -126,6 +131,21 @@ func (c *Config) DeriveDefaults() {
 	if c.OperatorResource == "" {
 		c.OperatorResource = "<operator-resources>"
 	}
+	if c.RepoSlug == "" {
+		c.RepoSlug = repoSlugFromModulePath(c.ModulePath)
+	}
+}
+
+// repoSlugFromModulePath extracts "owner/repo" from a Go module path.
+// A module path carries the host and may carry a /vN major-version suffix
+// ("github.com/openeverest/provider-x/v2"), neither of which belongs in a
+// badge URL.
+func repoSlugFromModulePath(modulePath string) string {
+	parts := strings.Split(modulePath, "/")
+	if len(parts) < 3 {
+		return ""
+	}
+	return parts[1] + "/" + parts[2]
 }
 
 // toPascalCase converts a string to PascalCase.
