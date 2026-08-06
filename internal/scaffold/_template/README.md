@@ -180,24 +180,16 @@ Source of truth: [definition/versions.yaml](definition/versions.yaml).
 ## Development
 
 Requires Go (see [go.mod](go.mod)), Docker, Helm, kubectl, and a Kubernetes cluster you can
-reach. For local development we recommend [k3d](https://k3d.io) — `make dev-up` creates the
-cluster for you.
+reach. [dev/README.md](dev/README.md) covers the environment end to end: the recommended
+local k3d setup, running against a cluster you already have, and every `dev/.env` setting.
 
 ```bash
-make dev-up             # local k3d cluster + Tilt dev environment
+make dev-up             # local cluster + Tilt dev environment (see dev/README.md)
 make generate           # RBAC, provider spec, Helm chart sync
 make run                # run the provider locally against the cluster
 make test-unit
 make test-integration   # chainsaw suites under test/integration/
 make dev-down
-```
-
-To work against a cluster you already have — kind, GKE, a shared dev cluster — skip
-`make dev-up` and point Tilt at it:
-
-```bash
-cp dev/.env.example dev/.env   # set K8S_CONTEXT, and DOCKER_REGISTRY_URL for a remote registry
-tilt up -f dev/Tiltfile
 ```
 
 `make help` lists every target. `make verify` fails when generated files are stale — run
