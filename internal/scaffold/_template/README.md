@@ -3,6 +3,14 @@
 <!-- TODO(provider): replace the heading with the product name (e.g. "Percona Server for MongoDB
 Provider", "KubeAI Provider"). -->
 
+> [!WARNING]
+> **Pre-alpha.** OpenEverest v2 and this provider are under active development. CRD schemas,
+> chart values and defaults change frequently, including in breaking ways, and there is no
+> supported upgrade path between versions yet. Not for production use.
+
+<!-- TODO(sdk): remove the pre-alpha banner and the status badge at v2 GA. -->
+
+[![Status](https://img.shields.io/badge/status-pre--alpha-orange)](https://github.com/openeverest/openeverest)
 [![CI](https://[[ .ModulePath ]]/actions/workflows/ci.yaml/badge.svg?branch=main)](https://[[ .ModulePath ]]/actions/workflows/ci.yaml)
 [![Release](https://img.shields.io/github/v/release/[[ .RepoSlug ]])](https://[[ .ModulePath ]]/releases)
 [![Go Reference](https://pkg.go.dev/badge/[[ .ModulePath ]].svg)](https://pkg.go.dev/[[ .ModulePath ]])
