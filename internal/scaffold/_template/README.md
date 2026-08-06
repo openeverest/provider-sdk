@@ -3,6 +3,14 @@
 <!-- TODO(provider): replace the heading with the product name (e.g. "Percona Server for MongoDB
 Provider", "KubeAI Provider"). -->
 
+> [!WARNING]
+> **Pre-alpha.** OpenEverest v2 and this provider are under active development. CRD schemas,
+> chart values and defaults change frequently, including in breaking ways, and there is no
+> supported upgrade path between versions yet. Not for production use.
+
+<!-- TODO(sdk): remove the pre-alpha banner and the status badge at v2 GA. -->
+
+[![Status](https://img.shields.io/badge/status-pre--alpha-orange)](https://github.com/openeverest/openeverest)
 [![CI](https://[[ .ModulePath ]]/actions/workflows/ci.yaml/badge.svg?branch=main)](https://[[ .ModulePath ]]/actions/workflows/ci.yaml)
 [![Release](https://img.shields.io/github/v/release/[[ .RepoSlug ]])](https://[[ .ModulePath ]]/releases)
 [![Go Reference](https://pkg.go.dev/badge/[[ .ModulePath ]].svg)](https://pkg.go.dev/[[ .ModulePath ]])
@@ -52,6 +60,9 @@ manages pods directly — all lifecycle work is delegated to the operator.
 <!-- TODO(provider): the rows below are the standard set across all OpenEverest providers.
      Keep the wording of the rows you use identical so providers stay comparable, and delete
      the rows that make no sense for this technology rather than marking them unsupported. -->
+
+What you can do to a running instance through the `Instance` API. Upgrading the
+provider itself is covered under [Installation](#installation).
 
 | Capability | Status | Notes |
 |---|---|---|
@@ -180,24 +191,16 @@ Source of truth: [definition/versions.yaml](definition/versions.yaml).
 ## Development
 
 Requires Go (see [go.mod](go.mod)), Docker, Helm, kubectl, and a Kubernetes cluster you can
-reach. For local development we recommend [k3d](https://k3d.io) — `make dev-up` creates the
-cluster for you.
+reach. [dev/README.md](dev/README.md) covers the environment end to end: the recommended
+local k3d setup, running against a cluster you already have, and every `dev/.env` setting.
 
 ```bash
-make dev-up             # local k3d cluster + Tilt dev environment
+make dev-up             # local cluster + Tilt dev environment (see dev/README.md)
 make generate           # RBAC, provider spec, Helm chart sync
 make run                # run the provider locally against the cluster
 make test-unit
 make test-integration   # chainsaw suites under test/integration/
 make dev-down
-```
-
-To work against a cluster you already have — kind, GKE, a shared dev cluster — skip
-`make dev-up` and point Tilt at it:
-
-```bash
-cp dev/.env.example dev/.env   # set K8S_CONTEXT, and DOCKER_REGISTRY_URL for a remote registry
-tilt up -f dev/Tiltfile
 ```
 
 `make help` lists every target. `make verify` fails when generated files are stale — run
