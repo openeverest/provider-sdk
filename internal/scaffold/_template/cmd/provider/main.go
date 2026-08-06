@@ -18,7 +18,7 @@ func main() {
 	var metricsBindAddress string
 
 	flag.IntVar(&serverPort, "server-port", 8082, "The port for the provider HTTP server.")
-	flag.StringVar(&metricsBindAddress, "metrics-bind-address", "8081", "The address the metrics endpoint binds to. Use 0 to disable.")
+	flag.StringVar(&metricsBindAddress, "metrics-bind-address", ":8081", "The address the metrics endpoint binds to. Use 0 to disable.")
 	flag.Parse()
 
 	l := ctrl.Log.WithName("setup")
