@@ -61,6 +61,9 @@ manages pods directly — all lifecycle work is delegated to the operator.
      Keep the wording of the rows you use identical so providers stay comparable, and delete
      the rows that make no sense for this technology rather than marking them unsupported. -->
 
+What you can do to a running instance through the `Instance` API. Upgrading the
+provider itself is covered under [Installation](#installation).
+
 | Capability | Status | Notes |
 |---|---|---|
 | Provisioning | ❌ | |
