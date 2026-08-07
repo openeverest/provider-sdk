@@ -88,7 +88,7 @@ charts/[[ .ProviderName ]]/     # Helm chart for deployment
   workflows/
     build.yaml             # CI build
     test.yaml              # CI integration tests
-    publish.yaml           # Dev image + dev chart on push to main
+    publish.yaml           # Dev image on push to main
     release.yaml           # Tag-driven release: prod + dev images, README stamp
     oci-release.yaml       # Push Helm chart as OCI artifact on tag
 examples/
