@@ -1,6 +1,8 @@
 # provider-sdk
 
-CLI tool for scaffolding and extending [OpenEverest](https://github.com/openeverest) database providers.
+CLI tool for scaffolding and extending [OpenEverest](https://github.com/openeverest) providers
+— databases, caches, message queues, object storage, model-serving runtimes, and anything else
+fronted by a Kubernetes operator.
 
 ## Installation
 
@@ -32,6 +34,7 @@ provider-sdk init
 
 ```
 provider-my-database/
+├── README.md                         # Standard provider README (see below)
 ├── PROVIDER_DEVELOPMENT.md           # Complete development guide
 ├── cmd/provider/main.go              # Entry point
 ├── internal/
@@ -99,6 +102,19 @@ make generate
 # 9. Run locally against a cluster
 make run
 ```
+
+## Provider README template
+
+[`internal/scaffold/_template/README.md`](internal/scaffold/_template/README.md) is the
+standard README for every OpenEverest provider. It is the canonical source: iterate on it
+here, then apply it to the existing provider repositories.
+
+It is written for three audiences in order — platform users, operators, contributors — and
+leads with the fact that a provider is not standalone (it requires an OpenEverest
+installation). Sections marked `<!-- TODO(provider): ... -->` must be filled in per provider.
+The *Capabilities* tables deliberately reuse the same wording everywhere so providers stay
+comparable; rows that make no sense for a given technology are deleted rather than marked
+unsupported.
 
 ## Repository Structure
 
