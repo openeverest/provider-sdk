@@ -27,7 +27,7 @@ directory structure, the provider implementation, and common patterns.
 - [Step 9: Configure RBAC](#step-9-configure-rbac)
 - [Step 10: Generate and Test](#step-10-generate-and-test)
 - [Step 11: Release and Publishing](#step-11-release-and-publishing)
-- [Step 12: Define Presets (Optional)](#step-11-define-presets-optional)
+- [Step 12: Define Presets (Optional)](#step-12-define-presets-optional)
 - [Provider SDK CLI Reference](#provider-sdk-cli-reference)
 
 ---
@@ -109,11 +109,10 @@ charts/<provider-name>/              # ← GENERATED (mostly)
   templates/                         # Helm chart templates (edit if needed)
 
 .github/workflows/                   # ← CI/CD (standardized)
-  build.yaml                         # Build the provider on PRs
-  test.yaml                          # Integration tests
-  publish.yaml                       # Dev image + dev chart on every push to main
-  release.yaml                       # Tag-driven release: prod + dev images, README stamp
-  oci-release.yaml                   # Push Helm chart as an OCI artifact on tag push
+  ci.yaml                            # Lint, unit tests and integration tests on PRs
+  integration-test.yaml              # Reusable workflow called by ci.yaml
+  build.yaml                         # Build the provider image (push to main + tags)
+  release.yaml                       # Tag-driven release: OCI chart + GitHub release
 
 dev/                                 # ← LOCAL DEV (Tilt)
   Tiltfile                           # Provider dev workflow (installs core + builds provider)
@@ -1797,8 +1796,7 @@ chart before it is packaged. It exposes:
 
 | Target          | Purpose                                                                 |
 |-----------------|-------------------------------------------------------------------------|
-| `release`       | Stamp `Chart.yaml` version/appVersion + point `values.yaml` at the prod image |
-| `release-dev`   | Same, but point `values.yaml` at the `-dev` image (used for RC / pre-releases) |
+| `release`       | Stamp `Chart.yaml` version/appVersion + point `values.yaml` at the image |
 | `deps`          | Run `helm version` and (if you bundle an operator subchart) add its repo + resolve dependencies |
 
 Pass the version via `VERSION`, e.g. `make release VERSION=1.2.3`.
@@ -1813,9 +1811,10 @@ Pass the version via `VERSION`, e.g. `make release VERSION=1.2.3`.
 
 | Workflow            | Trigger                     | What it does                                                                 |
 |---------------------|-----------------------------|-----------------------------------------------------------------------------|
-| `publish.yaml`      | Push to `main` (or manual)  | Builds a multi-arch `-dev` image (`0.0.0-<sha>`) and uploads the dev chart   |
-| `release.yaml`      | Tag push `v*.*.*`           | Builds multi-arch prod + dev images (with attestations) and stamps the `--version` in `README.md` |
-| `oci-release.yaml`  | Tag push `v*.*.*`           | Packages the chart and pushes it to `oci://ghcr.io/<owner>/charts/<provider-name>` |
+| `ci.yaml`           | Pull request                | Lint, build, unit tests, generated-file verification, Helm lint, integration |
+| `integration-test.yaml` | Called by `ci.yaml`     | Reusable workflow: provisions k3d, deploys the provider, runs one test suite |
+| `build.yaml`        | Push to `main` and tag push | Builds and pushes the multi-arch provider image (with attestations on tags)  |
+| `release.yaml`      | `build.yaml` success on tag | Packages the chart, pushes it to GHCR as an OCI artifact, creates the release |
 
 ### Cutting a Release
 
@@ -1823,31 +1822,39 @@ Releases are fully tag-driven — pushing a `vX.Y.Z` tag runs everything, with n
 manual workflow dispatch required.
 
 1. Create and push a tag:
-   - `vX.Y.Z` for a stable release (builds prod + dev images, tags `latest`, stamps the README).
-   - `vX.Y.Z-rc1` / `vX.Y.Z-dev` (contains a `-`) for a pre-release (dev image only).
+   - `vX.Y.Z` for a stable release (image tagged `X.Y.Z` and `latest`, chart + release published).
+   - `vX.Y.Z-rc1` / `vX.Y.Z-dev` (contains a `-`) for a pre-release (no `latest` tag).
 
    ```bash
    git tag vX.Y.Z
    git push origin vX.Y.Z
    ```
-2. The tag triggers `release.yaml` (multi-arch prod + dev images, attestations,
-   and — for stable versions — a `--version` bump in `README.md` on `main`) and
-   `oci-release.yaml` (publishes the chart as an OCI artifact to GHCR) in parallel.
+2. The tag triggers `build.yaml`, which builds and pushes the multi-arch image
+   (with attestations). Once that succeeds, `release.yaml` runs: it verifies the
+   README compatibility table covers the release's minor series, packages the chart,
+   pushes it to GHCR as an OCI artifact, and creates the GitHub release.
 3. Users then install the chart with:
 
    ```bash
    helm install <provider-name> \
-     oci://ghcr.io/openeverest/charts/<provider-name> \
+     oci://ghcr.io/<owner>/charts/<provider-name> \
      --version X.Y.Z --create-namespace
    ```
 
+> **Compatibility table is release-blocking.** The release job fails if the README
+> compatibility table has no row for the tag's minor series (e.g. tagging `v0.2.0`
+> while the table only lists `0.1.x`). Add the row — with the OpenEverest / operator /
+> Kubernetes versions you've actually validated — in the PR that bumps the dependency,
+> not at release time.
+
 ### Images and Registry
 
-Images are published to `ghcr.io/openeverest/<provider-name>` (prod) and
-`ghcr.io/openeverest/<provider-name>-dev` (dev). If you publish under a different
-organization, update `IMAGE_PREFIX` in the chart `Makefile` and the
-`IMAGE_PREFIX` env in `release.yaml`. The OCI chart push and dev image use
-`${{ github.repository_owner }}`, so they adapt to the repo's owner automatically.
+Both the image and the chart are published under the repository owner's GHCR
+namespace — `ghcr.io/<owner>/<provider-name>` and
+`oci://ghcr.io/<owner>/charts/<provider-name>` — using
+`${{ github.repository_owner }}`, so a scaffolded provider publishes to the right
+place with no manual edits. `IMAGE_PREFIX` in the chart `Makefile` is only the
+local-dev default (`ghcr.io/openeverest`) and is overridden by the workflow.
 ## Step 12: Define Presets (Optional)
 
 Presets are cluster-scoped `InstancePreset` CRs that ship with your provider's Helm chart,

@@ -1,5 +1,5 @@
 # Configures GitHub's auto-generated release notes (the "What's Changed" list
-# produced by `generate_release_notes: true` in oci-release.yaml).
+# produced by `generate_release_notes: true` in release.yaml).
 changelog:
   exclude:
     authors:

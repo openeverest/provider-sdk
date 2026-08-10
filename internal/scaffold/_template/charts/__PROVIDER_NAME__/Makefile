@@ -17,10 +17,6 @@ prepare-chart:
 .PHONY: release
 release: prepare-chart
 
-.PHONY: release-dev
-release-dev: PROVIDER_IMAGE_NAME := [[ .ProviderName ]]-dev
-release-dev: prepare-chart
-
 .PHONY: deps
 deps:
 	$(HELM) version
