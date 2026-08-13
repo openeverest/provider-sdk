@@ -87,7 +87,7 @@ Stateful workloads additionally report:
 
 ## Installation
 
-<!-- TODO(provider): confirm the published chart coordinates and the current version. -->
+<!-- TODO(provider): confirm the published chart coordinates (org/repo) match where you publish. -->
 
 The provider chart is published as an OCI artifact:
 
@@ -105,7 +105,7 @@ helm install [[ .ProviderName ]] \
 Upgrade and uninstall:
 
 ```bash
-helm upgrade [[ .ProviderName ]] oci://ghcr.io/openeverest/charts/[[ .ProviderName ]] --version <chart-version>
+helm upgrade [[ .ProviderName ]] oci://ghcr.io/openeverest/charts/[[ .ProviderName ]]
 helm uninstall [[ .ProviderName ]] --namespace everest-system
 ```
 
