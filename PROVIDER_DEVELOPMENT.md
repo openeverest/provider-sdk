@@ -1855,6 +1855,9 @@ namespace — `ghcr.io/<owner>/<provider-name>` and
 `${{ github.repository_owner }}`, so a scaffolded provider publishes to the right
 place with no manual edits. `IMAGE_PREFIX` in the chart `Makefile` is only the
 local-dev default (`ghcr.io/openeverest`) and is overridden by the workflow.
+
+---
+
 ## Step 12: Define Presets (Optional)
 
 Presets are cluster-scoped `InstancePreset` CRs that ship with your provider's Helm chart,
