@@ -5,11 +5,11 @@ replicaCount: 1
 
 image:
   # -- Container image repository
-  repository: ghcr.io/openeverest/[[ .ProviderName ]]-dev
+  repository: ghcr.io/openeverest/[[ .ProviderName ]]
   # -- Image pull policy
   pullPolicy: IfNotPresent
   # -- Overrides the image tag whose default is the chart appVersion
-  tag: "latest"
+  tag: ""
 
 # -- Image pull secrets for private registries
 imagePullSecrets: []
