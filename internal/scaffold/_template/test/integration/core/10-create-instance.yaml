@@ -1,0 +1,22 @@
+# Sample Instance for the create-instance step.
+# TODO: adjust the components to match definition/provider.yaml.
+apiVersion: core.openeverest.io/v1alpha1
+kind: Instance
+metadata:
+  name: test-instance
+spec:
+  providerRef:
+    name: [[ .ProviderName ]]
+  components:
+    engine:
+      type: [[ .ComponentType ]]
+      replicas: 1
+      resources:
+        limits:
+          cpu: "1"
+          memory: 1G
+        requests:
+          cpu: 500m
+          memory: 512M
+      storage:
+        size: 10Gi

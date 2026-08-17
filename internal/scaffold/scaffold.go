@@ -49,8 +49,18 @@ type Config struct {
 	// ProviderName is the name of the provider (e.g., "provider-percona-server-mongodb").
 	ProviderName string
 
+	// ProviderShortName is a short identifier for the provider (e.g., "psmdb" for "percona-server-mongodb").
+	// Used in resource names where a short concise provider identifier is needed.
+	// If empty, it is derived from ProviderName by removing the "provider-" prefix.
+	ProviderShortName string
+
 	// ModulePath is the Go module path (e.g., "github.com/openeverest/provider-percona-server-mongodb").
 	ModulePath string
+
+	// RepoSlug is the "owner/repo" form used by badge services such as shields.io,
+	// which address repositories without the host or any /vN major-version suffix.
+	// If empty, it is derived from ModulePath.
+	RepoSlug string
 
 	// OperatorAPIGroup is the API group of the operator CRDs (e.g., "psmdb.percona.com").
 	// Optional: used as a hint in RBAC marker comments.
@@ -102,6 +112,9 @@ func (c *Config) DeriveDefaults() {
 	if c.GoPackage == "" {
 		c.GoPackage = strings.ToLower(strings.ReplaceAll(c.ProviderName, "-", ""))
 	}
+	if c.ProviderShortName == "" {
+		c.ProviderShortName = strings.TrimPrefix(c.ProviderName, "provider-")
+	}
 	// TopologyName intentionally left empty when not provided — the topology
 	// template directory is skipped during scaffolding in that case.
 	if c.TopologyName != "" {
@@ -118,6 +131,21 @@ func (c *Config) DeriveDefaults() {
 	if c.OperatorResource == "" {
 		c.OperatorResource = "<operator-resources>"
 	}
+	if c.RepoSlug == "" {
+		c.RepoSlug = repoSlugFromModulePath(c.ModulePath)
+	}
+}
+
+// repoSlugFromModulePath extracts "owner/repo" from a Go module path.
+// A module path carries the host and may carry a /vN major-version suffix
+// ("github.com/openeverest/provider-x/v2"), neither of which belongs in a
+// badge URL.
+func repoSlugFromModulePath(modulePath string) string {
+	parts := strings.Split(modulePath, "/")
+	if len(parts) < 3 {
+		return ""
+	}
+	return parts[1] + "/" + parts[2]
 }
 
 // toPascalCase converts a string to PascalCase.

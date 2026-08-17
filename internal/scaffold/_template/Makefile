@@ -6,8 +6,21 @@ $(LOCALBIN):
 # CONTAINER_TOOL defines the container tool to be used for building images.
 CONTAINER_TOOL ?= docker
 
+# OpenEverest branch to use for OpenEverest CRD installation.
+OPENEVEREST_BRANCH ?= release-2.0
+
 # Image URL to use for building/pushing image targets
 IMG ?= ghcr.io/openeverest/[[ .ProviderName ]]-dev:latest
+
+# Image URL for OpenEverest controller used in integration tests (must be pre-built).
+OPENEVEREST_CONTROLLER_IMG ?= ghcr.io/openeverest/openeverest-controller-dev:0.0.0
+
+# Split IMG into repository and tag for Helm values
+_IMG_REPO = $(firstword $(subst :, ,$(IMG)))
+_IMG_TAG  = $(lastword $(subst :, ,$(IMG)))
+
+# k3d cluster name (must match dev/k3d_config.yaml metadata.name)
+K3D_CLUSTER_NAME ?= [[ .ProviderName ]]-test
 
 # controller-gen version
 CONTROLLER_TOOLS_VERSION ?= v0.18.0
@@ -18,7 +31,7 @@ YQ_VERSION ?= v4.44.6
 YQ ?= $(LOCALBIN)/yq-$(YQ_VERSION)
 
 # golangci-lint version
-GOLANGCI_LINT_VERSION ?= v1.63.4
+GOLANGCI_LINT_VERSION ?= v2.11.3
 GOLANGCI_LINT ?= $(LOCALBIN)/golangci-lint-$(GOLANGCI_LINT_VERSION)
 
 # Helm chart directory
@@ -38,9 +51,9 @@ run: generate ## Run the provider locally.
 lint: golangci-lint ## Run golangci-lint.
 	$(GOLANGCI_LINT) run
 
-.PHONY: test
-test: ## Run unit tests.
-	go test ./... -coverprofile cover.out
+.PHONY: test-unit
+test-unit: ## Run unit tests.
+	go test -race ./... -coverprofile cover.out
 
 ##@ Code Generation
 
@@ -121,9 +134,53 @@ helm-template: helm-deps ## Render Helm chart templates locally (dry-run).
 
 ##@ Testing
 
+# Integration tests use chainsaw (https://kyverno.github.io/chainsaw/).
+# Install it locally with: go install github.com/kyverno/chainsaw@latest
+# Each suite is a directory under test/integration/ — see test/integration/README.md.
+
 .PHONY: test-integration
-test-integration: ## Run integration tests (kuttl) against a running cluster.
-	. ./test/vars.sh && kubectl kuttl test --config ./test/integration/kuttl.yaml
+test-integration: ## Run all integration tests against the current cluster.
+	. ./test/vars.sh && chainsaw test --config ./test/integration/.chainsaw.yaml ./test/integration
+
+.PHONY: test-integration-core
+test-integration-core: ## Run core integration tests.
+	. ./test/vars.sh && chainsaw test --config ./test/integration/.chainsaw.yaml ./test/integration/core
+
+.PHONY: load-image
+load-image: ## Import the provider image (IMG) into the k3d cluster.
+	k3d image import ${IMG} -c ${K3D_CLUSTER_NAME}
+
+.PHONY: load-openeverest-controller-image
+load-openeverest-controller-image: ## Import the OpenEverest controller image into the k3d cluster.
+	k3d image import ${OPENEVEREST_CONTROLLER_IMG} -c ${K3D_CLUSTER_NAME}
+
+.PHONY: install-crds
+install-crds: ## Install OpenEverest CRDs (and your operator's CRDs) into the cluster.
+	kubectl apply -f https://raw.githubusercontent.com/openeverest/openeverest/$(OPENEVEREST_BRANCH)/config/crd/bases/core.openeverest.io_providers.yaml
+	kubectl apply -f https://raw.githubusercontent.com/openeverest/openeverest/$(OPENEVEREST_BRANCH)/config/crd/bases/core.openeverest.io_instances.yaml
+	kubectl apply -f https://raw.githubusercontent.com/openeverest/openeverest/$(OPENEVEREST_BRANCH)/config/crd/bases/core.openeverest.io_instancepresets.yaml
+	kubectl apply -f https://raw.githubusercontent.com/openeverest/openeverest/$(OPENEVEREST_BRANCH)/config/crd/bases/monitoring.openeverest.io_monitoringconfigs.yaml
+	kubectl apply -f https://raw.githubusercontent.com/openeverest/openeverest/$(OPENEVEREST_BRANCH)/config/crd/bases/backup.openeverest.io_backupclasses.yaml
+	kubectl apply -f https://raw.githubusercontent.com/openeverest/openeverest/$(OPENEVEREST_BRANCH)/config/crd/bases/backup.openeverest.io_backups.yaml
+	kubectl apply -f https://raw.githubusercontent.com/openeverest/openeverest/$(OPENEVEREST_BRANCH)/config/crd/bases/backup.openeverest.io_restores.yaml
+	kubectl apply -f https://raw.githubusercontent.com/openeverest/openeverest/$(OPENEVEREST_BRANCH)/config/crd/bases/backup.openeverest.io_backupstorages.yaml
+	# TODO: install your operator's CRDs, e.g.:
+	# curl -fsSL https://raw.githubusercontent.com/<org>/<operator>/v$(OPERATOR_VERSION)/deploy/crd.yaml | kubectl apply --server-side -f -
+
+.PHONY: deploy-provider-ci
+deploy-provider-ci: helm-deps ## Deploy the provider via Helm for CI (IMG must already be imported into k3d).
+	# TODO: if your chart pulls dependencies from external repos, add them first:
+	# helm repo add <repo-name> <repo-url>
+	helm upgrade --install [[ .ProviderName ]] $(CHART_DIR) \
+		--create-namespace \
+		--namespace provider-system \
+		--set image.repository=$(_IMG_REPO) \
+		--set image.tag=$(_IMG_TAG) \
+		--set image.pullPolicy=Never \
+		--wait --timeout 2m
+	# TODO: if your chart bundles the DB operator as a subchart, scale it to 0
+	# (e.g. --set operator.replicaCount=0) — integration tests simulate the
+	# operator by patching CR statuses directly.
 
 ##@ Local Development Cluster
 
@@ -169,7 +226,7 @@ $(YQ): $(LOCALBIN)
 .PHONY: golangci-lint
 golangci-lint: $(GOLANGCI_LINT) ## Install golangci-lint.
 $(GOLANGCI_LINT): $(LOCALBIN)
-	$(call go-install-tool,$(GOLANGCI_LINT),github.com/golangci/golangci-lint/cmd/golangci-lint,$(GOLANGCI_LINT_VERSION))
+	$(call go-install-tool,$(GOLANGCI_LINT),github.com/golangci/golangci-lint/v2/cmd/golangci-lint,$(GOLANGCI_LINT_VERSION))
 
 # go-install-tool will 'go install' any package with custom target and target name. Usage:
 # $(call go-install-tool,<target>,<package>,<version>)

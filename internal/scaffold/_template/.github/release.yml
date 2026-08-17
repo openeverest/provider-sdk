@@ -1,0 +1,19 @@
+# Configures GitHub's auto-generated release notes (the "What's Changed" list
+# produced by `generate_release_notes: true` in release.yaml).
+changelog:
+  exclude:
+    authors:
+      - github-actions
+      - dependabot
+  categories:
+    - title: Features
+      labels:
+        - enhancement
+        - feature
+    - title: Bug Fixes
+      labels:
+        - bug
+        - fix
+    - title: Other Changes
+      labels:
+        - "*"

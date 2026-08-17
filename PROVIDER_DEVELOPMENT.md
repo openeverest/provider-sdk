@@ -20,12 +20,14 @@ directory structure, the provider implementation, and common patterns.
 - [Step 4: Define Topologies](#step-4-define-topologies)
 - [Step 5: Define Custom Types](#step-5-define-custom-types)
 - [Step 6: Configure the UI Schema](#step-6-configure-the-ui-schema)
-- [Step 7: Implement the Provider Interface](#step-7-implement-the-provider)
+- [Step 7: Implement the Provider Interface](#step-7-implement-the-provider-interface)
 - [Step 8: Add Backup and Restore Support (Optional)](#step-8-add-backup-and-restore-support-optional)
   - [Define BackupClasses](#define-backupclasses)
   - [Add Backup and Restore Implementation Files](#add-backup-and-restore-implementation-files)
 - [Step 9: Configure RBAC](#step-9-configure-rbac)
 - [Step 10: Generate and Test](#step-10-generate-and-test)
+- [Step 11: Release and Publishing](#step-11-release-and-publishing)
+- [Step 12: Define Presets (Optional)](#step-12-define-presets-optional)
 - [Provider SDK CLI Reference](#provider-sdk-cli-reference)
 
 ---
@@ -100,10 +102,17 @@ internal/                            # ← YOU IMPLEMENT THESE
     spec.go                          # Component name/type constants
 
 charts/<provider-name>/              # ← GENERATED (mostly)
+  Makefile                           # Stamps chart version/image + resolves deps at release time
   generated/
     provider-spec.yaml               # Generated from definition/ by `provider-sdk generate`
     rbac-rules.yaml                  # Generated from rbac.go by `make manifests`
   templates/                         # Helm chart templates (edit if needed)
+
+.github/workflows/                   # ← CI/CD (standardized)
+  ci.yaml                            # Lint, unit tests and integration tests on PRs
+  integration-test.yaml              # Reusable workflow called by ci.yaml
+  build.yaml                         # Build the provider image (push to main + tags)
+  release.yaml                       # Tag-driven release: OCI chart + GitHub release
 
 dev/                                 # ← LOCAL DEV (Tilt)
   Tiltfile                           # Provider dev workflow (installs core + builds provider)
@@ -1044,7 +1053,7 @@ ui:
 
 ---
 
-## Step 7:  Implement the Provider Interface
+## Step 7: Implement the Provider Interface
 
 The core of your provider is in `internal/provider/provider.go`. You must
 implement four methods:
@@ -1616,8 +1625,8 @@ After adding markers, run `make generate` to regenerate RBAC manifests.
 | `make docker-build`     | Build the container image                                  |
 | `make helm-install`     | Deploy with Helm                                           |
 | `make helm-template`    | Render Helm templates locally (dry-run)                    |
-| `make test`             | Run unit tests                                             |
-| `make test-integration` | Run kuttl integration tests                                |
+| `make test-unit`        | Run unit tests                                             |
+| `make test-integration` | Run chainsaw integration tests                             |
 | `make verify`           | Check generated files are up-to-date (CI)                  |
 | `make lint`             | Run golangci-lint                                          |
 | `make dev-up`           | Create a k3d cluster and start the Tilt dev environment    |
@@ -1725,12 +1734,32 @@ kubectl get providers
 
 ### Integration Tests
 
+The scaffolded project ships a [chainsaw](https://kyverno.github.io/chainsaw/)
+test skeleton under `test/integration/` plus CI wiring:
+
+- `test/integration/core/` — a suite skeleton that verifies the provider
+  deployment and contains commented-out lifecycle steps (create Instance →
+  assert operator CR → simulate readiness → assert `phase: Running` → delete)
+  to enable as you implement the provider.
+- `.github/workflows/ci.yaml` — runs lint, build, unit tests, generated-file
+  verification, Helm lint, and each integration suite on every PR.
+- `.github/workflows/integration-test.yaml` — a reusable workflow that
+  provisions a k3d cluster, builds and deploys the provider and the
+  OpenEverest controller, and runs one suite via its Make target.
+
 ```bash
-# Run kuttl integration tests
+# Install chainsaw locally
+go install github.com/kyverno/chainsaw@latest
+
+# Run all suites / a single suite
 make test-integration
+make test-integration-core
 ```
 
-Edit test files in `test/integration/` to add test cases for your provider.
+See `test/integration/README.md` in your generated project for conventions
+(numbered step files, simulating the operator by patching CR statuses, adding
+new suites). For a complete real-world example, see the
+[provider-percona-server-mongodb suites](https://github.com/openeverest/provider-percona-server-mongodb/tree/main/test/integration).
 
 ### CI Verification
 
@@ -1751,6 +1780,240 @@ helm upgrade <provider-name> charts/<provider-name>/
 # Uninstall
 helm uninstall <provider-name>
 ```
+
+---
+
+## Step 11: Release and Publishing
+
+Scaffolded providers ship with a standardized CI/CD pipeline so every OpenEverest
+provider is built, versioned, and published the same way. Three workflows under
+`.github/workflows/` drive it, backed by the chart `Makefile`.
+
+### The Chart Makefile
+
+`charts/<provider-name>/Makefile` stamps the release version and image into the
+chart before it is packaged. It exposes:
+
+| Target          | Purpose                                                                 |
+|-----------------|-------------------------------------------------------------------------|
+| `release`       | Stamp `Chart.yaml` version/appVersion + point `values.yaml` at the image |
+| `deps`          | Run `helm version` and (if you bundle an operator subchart) add its repo + resolve dependencies |
+
+Pass the version via `VERSION`, e.g. `make release VERSION=1.2.3`.
+
+> **Bundling an operator subchart?** Uncomment the dependency block in
+> `charts/<provider-name>/Chart.yaml` and add the matching
+> `helm repo add` + `helm dependency update .` lines to the `deps` target so the
+> subchart can be resolved during release. Providers without a subchart need no
+> changes — `deps` is a no-op beyond `helm version`.
+
+### Workflows
+
+| Workflow            | Trigger                     | What it does                                                                 |
+|---------------------|-----------------------------|-----------------------------------------------------------------------------|
+| `ci.yaml`           | Pull request                | Lint, build, unit tests, generated-file verification, Helm lint, integration |
+| `integration-test.yaml` | Called by `ci.yaml`     | Reusable workflow: provisions k3d, deploys the provider, runs one test suite |
+| `build.yaml`        | Push to `main` and tag push | Builds and pushes the multi-arch provider image (with attestations on tags)  |
+| `release.yaml`      | `build.yaml` success on tag | Packages the chart, pushes it to GHCR as an OCI artifact, creates the release |
+
+### Cutting a Release
+
+Releases are fully tag-driven — pushing a `vX.Y.Z` tag runs everything, with no
+manual workflow dispatch required.
+
+1. Create and push a tag:
+   - `vX.Y.Z` for a stable release (image tagged `X.Y.Z` and `latest`, chart + release published).
+   - `vX.Y.Z-rc1` / `vX.Y.Z-dev` (contains a `-`) for a pre-release (no `latest` tag).
+
+   ```bash
+   git tag vX.Y.Z
+   git push origin vX.Y.Z
+   ```
+2. The tag triggers `build.yaml`, which builds and pushes the multi-arch image
+   (with attestations). Once that succeeds, `release.yaml` runs: it verifies the
+   README compatibility table covers the release's minor series, packages the chart,
+   pushes it to GHCR as an OCI artifact, and creates the GitHub release.
+3. Users then install the chart with:
+
+   ```bash
+   helm install <provider-name> \
+     oci://ghcr.io/<owner>/charts/<provider-name> \
+     --version X.Y.Z --create-namespace
+   ```
+
+> **Compatibility table is release-blocking.** The release job fails if the README
+> compatibility table has no row for the tag's minor series (e.g. tagging `v0.2.0`
+> while the table only lists `0.1.x`). Add the row — with the OpenEverest / operator /
+> Kubernetes versions you've actually validated — in the PR that bumps the dependency,
+> not at release time.
+
+### Images and Registry
+
+Both the image and the chart are published under the repository owner's GHCR
+namespace — `ghcr.io/<owner>/<provider-name>` and
+`oci://ghcr.io/<owner>/charts/<provider-name>` — using
+`${{ github.repository_owner }}`, so a scaffolded provider publishes to the right
+place with no manual edits. `IMAGE_PREFIX` in the chart `Makefile` is only the
+local-dev default (`ghcr.io/openeverest`) and is overridden by the workflow.
+
+---
+
+## Step 12: Define Presets (Optional)
+
+Presets are cluster-scoped `InstancePreset` CRs that ship with your provider's Helm chart,
+giving users ready-made configurations they can select when creating an Instance
+instead of filling in every field manually. Each preset is rendered from
+`charts/<provider-name>/templates/presets.yaml` using entries in `values.yaml`.
+
+### How Presets Work
+
+Presets are defined in `charts/<provider-name>/values.yaml` under the `presets:` key
+and deployed as `InstancePreset` Kubernetes resources when the Helm chart is installed.
+The final resource name is `<shortName>-<preset.name>` (e.g., `psmdb-standalone`).
+
+```
+values.yaml presets:   →   presets.yaml template   →   InstancePreset CR
+  name: standalone              (Helm render)           standalone-psmdb
+  enabled: true
+  spec: ...
+```
+
+### Defining Presets
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `name` | string | Preset name prefix — combined with `shortName` to form the resource name |
+| `enabled` | bool | Set to `false` to exclude this preset from the rendered chart |
+| `spec` | object | `InstancePresetSpec` (provider, version, topology, components, etc.) |
+
+Edit `charts/<provider-name>/values.yaml` and populate the `presets:` array:
+
+```yaml
+# charts/<provider-name>/values.yaml
+presets:
+  - name: standalone
+    enabled: true
+    spec:
+      provider: my-provider
+      version: "8.0.12"
+      topology:
+        type: standalone
+      components:
+        engine:
+          replicas: 1
+          resources:
+            limits:
+              cpu: "1"
+              memory: 2Gi
+          storage:
+            size: 25Gi
+```
+
+The `spec` field is the full `InstancePresetSpec` — the same structure as
+`Instance.spec`. 
+
+**Important distinction:**
+- **Cluster-scoped resources** (like `storageClass`) CAN be set directly in the preset
+- **Namespace-scoped resources** (like secret names, ConfigMap names) MUST be left empty and will be resolved from annotated defaults in the target namespace when the preset is applied
+
+**Example preset spec:**
+
+```yaml
+# charts/<provider-name>/values.yaml
+presets:
+  - name: production
+    enabled: true
+    spec:
+      provider: my-provider
+      version: "8.0.12"
+      topology:
+        type: replicaSet
+      components:
+        engine:
+          replicas: 3
+          resources:
+            limits:
+              cpu: "2"
+              memory: 8Gi
+          storage:
+            size: 100Gi
+            storageClass: "fast-ssd"  # Cluster-scoped - CAN be set in preset
+          configuration:
+            secretRef:
+              name: ""                # Namespace-scoped - MUST be empty
+```
+
+### Setting Default Annotations for Resources
+
+When a preset is applied to create an Instance, empty resource references (like secret names,
+ConfigMap names, or StorageClass names) are resolved from resources annotated as defaults.
+
+**Namespace-scoped resources** (Secret, ConfigMap) use the annotation format:
+`openeverest.io/is-default-components-{component-name}: "true"`
+
+**Cluster-scoped resources** (StorageClass) use the standard Kubernetes annotation:
+`storageclass.kubernetes.io/is-default-class: "true"`
+
+**Example: Annotating a default Secret**
+
+```bash
+kubectl annotate Secret db-credentials \
+  openeverest.io/is-default-components-engine="true" \
+  --namespace prod \
+  --overwrite
+```
+
+Or in a YAML manifest:
+
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: db-credentials
+  namespace: prod
+  annotations:
+    openeverest.io/is-default-components-engine: "true"
+type: Opaque
+data:
+  username: YWRtaW4=
+  password: cGFzc3dvcmQ=
+```
+
+**Example: Annotating a default StorageClass**
+
+StorageClass is a cluster-scoped resource that uses the standard Kubernetes annotation:
+
+```bash
+kubectl annotate StorageClass fast-ssd \
+  storageclass.kubernetes.io/is-default-class="true" \
+  --overwrite
+```
+
+Or in a YAML manifest:
+
+```yaml
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: fast-ssd
+  annotations:
+    storageclass.kubernetes.io/is-default-class: "true"
+provisioner: kubernetes.io/aws-ebs
+parameters:
+  type: gp3
+  iops: "3000"
+  throughput: "125"
+```
+
+**Resolution behavior:**
+- When creating an Instance from a preset in a specific namespace, the API
+  automatically discovers and fills in annotated defaults for empty field
+- For namespace-scoped resources (Secret, ConfigMap), defaults are resolved per namespace
+- For cluster-scoped resources (StorageClass), defaults are resolved cluster-wide using
+  the standard Kubernetes annotation
+- If multiple resources have the default annotation, the most recently created one is used
+- If no default is found, the field remains empty and validation may fail (depending
+  on whether the field is required)
 
 ---
 
@@ -1825,3 +2088,4 @@ Use this checklist to track your progress:
 - [ ] **Topology config types** (if needed) in `definition/topologies/*/types.go`
 - [ ] **`make generate`** runs without errors
 - [ ] **Integration tests** pass
+- [ ] **Presets** defined in `charts/<provider-name>/values.yaml` (optional, but recommended)
