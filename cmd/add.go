@@ -20,8 +20,8 @@ import (
 
 var addCmd = &cobra.Command{
 	Use:   "add",
-	Short: "Add components, topologies, backup, secrets, or configmaps to an existing provider project",
-	Long: `Add new components, topologies, backup support, secrets, or configmaps to an existing provider project.
+	Short: "Add components, topologies, backup, backupclasses, secrets, or configmaps to an existing provider project",
+	Long: `Add new components, topologies, backup support, backupclasses, secrets, or configmaps to an existing provider project.
 
 Run from within a scaffolded provider project directory (must contain
 definition/provider.yaml).
