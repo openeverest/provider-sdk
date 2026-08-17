@@ -15,6 +15,7 @@
 package scaffold
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"strings"
@@ -230,12 +231,19 @@ func addComponentConstants(cfg *AddComponentConfig) error {
 }
 
 // writeYAMLWithHeader marshals data to YAML with a header comment and writes to path.
+// It uses a 2-space indent to match the rest of the generated definition files
+// (e.g. topology.yaml).
 func writeYAMLWithHeader(path string, data any, header string) error {
-	out, err := yaml.Marshal(data)
-	if err != nil {
+	var buf bytes.Buffer
+	enc := yaml.NewEncoder(&buf)
+	enc.SetIndent(2)
+	if err := enc.Encode(data); err != nil {
 		return fmt.Errorf("marshaling YAML: %w", err)
 	}
-	return os.WriteFile(path, []byte(header+"\n"+string(out)), 0o644)
+	if err := enc.Close(); err != nil {
+		return fmt.Errorf("closing YAML encoder: %w", err)
+	}
+	return os.WriteFile(path, []byte(header+"\n"+buf.String()), 0o644)
 }
 
 // toExportedName converts the first letter to uppercase.
