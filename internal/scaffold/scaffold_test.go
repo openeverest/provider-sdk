@@ -303,6 +303,39 @@ func TestScaffoldCustomTopologyName(t *testing.T) {
 	}
 }
 
+// TestAddTopologyIndentation ensures AddTopology writes topology.yaml with
+// 2-space indentation via writeYAMLWithHeader. yaml.v3 defaults to 4 spaces
+// without SetIndent, so this guards against that regression.
+func TestAddTopologyIndentation(t *testing.T) {
+	dest := filepath.Join(t.TempDir(), "provider-test")
+
+	cfg := &Config{
+		ProviderName: "provider-test",
+		ModulePath:   "github.com/example/provider-test",
+	}
+	if err := Scaffold(cfg, dest); err != nil {
+		t.Fatalf("Scaffold() error: %v", err)
+	}
+
+	// AddTopology resolves paths relative to the working directory.
+	t.Chdir(dest)
+
+	if err := AddTopology(&AddTopologyConfig{TopologyName: "replicaSet"}); err != nil {
+		t.Fatalf("AddTopology() error: %v", err)
+	}
+
+	topoYAML, err := os.ReadFile(filepath.Join("definition", "topologies", "replicaSet", "topology.yaml"))
+	if err != nil {
+		t.Fatalf("reading topology.yaml: %v", err)
+	}
+	if !strings.Contains(string(topoYAML), "\n  components:") {
+		t.Errorf("topology.yaml first-level nesting is not indented with 2 spaces:\n%s", topoYAML)
+	}
+	if strings.Contains(string(topoYAML), "\n    components:") {
+		t.Errorf("topology.yaml uses 4-space indentation at the first nesting level:\n%s", topoYAML)
+	}
+}
+
 func TestToPascalCase(t *testing.T) {
 	tests := []struct {
 		input    string
