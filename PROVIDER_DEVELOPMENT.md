@@ -2212,8 +2212,6 @@ spec:
           properties:
             configFile:
               type: string
-            settings:
-              type: string
           type: object
       uiSchema:
         components:

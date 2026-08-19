@@ -37,7 +37,7 @@ func validateName(name string) error {
 	}
 
 	if !nameRE.MatchString(name) {
-		return fmt.Errorf("invalid name %q: must be alphanumeric or '-', start with a letter, and end with an alphanumeric character", name)
+		return fmt.Errorf("invalid name %q: must be lower alphanumeric or '-', start with a letter, and end with an alphanumeric character", name)
 	}
 
 	if token.IsKeyword(name) {
