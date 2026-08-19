@@ -30,8 +30,8 @@ type AddConfigMapConfig struct {
 // AddConfigMap creates definition/configmaps/<name>/{definition.yaml, ui.yaml,
 // types.go} in the current provider project.
 func AddConfigMap(cfg *AddConfigMapConfig) error {
-	if cfg.Name == "" {
-		return fmt.Errorf("configmap name is required")
+	if err := validateName(cfg.Name); err != nil {
+		return fmt.Errorf("invalid configmap name: %w", err)
 	}
 
 	if _, err := os.Stat("definition/provider.yaml"); err != nil {

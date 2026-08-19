@@ -46,13 +46,13 @@ func TestAddSecret(t *testing.T) {
 
 	// Run AddSecret.
 	cfg := &AddSecretConfig{
-		Name: "credentials",
+		Name: "tls-credentials",
 	}
 	err := AddSecret(cfg)
 	require.NoError(t, err)
 
 	// Verify files were created.
-	secretDir := filepath.Join(projectDir, "definition", "secrets", "credentials")
+	secretDir := filepath.Join(projectDir, "definition", "secrets", "tls-credentials")
 
 	defFile := filepath.Join(secretDir, "definition.yaml")
 	_, err = os.Stat(defFile)
@@ -69,13 +69,13 @@ func TestAddSecret(t *testing.T) {
 	// Verify definition.yaml content.
 	defContent, err := os.ReadFile(defFile)
 	require.NoError(t, err)
-	assert.Contains(t, string(defContent), "CredentialsSecretData")
+	assert.Contains(t, string(defContent), "TlsCredentialsSecretData")
 
 	// Verify types.go content.
 	typesContent, err := os.ReadFile(typesFile)
 	require.NoError(t, err)
-	assert.Contains(t, string(typesContent), "type CredentialsSecretData struct")
-	assert.Contains(t, string(typesContent), "package credentials")
+	assert.Contains(t, string(typesContent), "type TlsCredentialsSecretData struct")
+	assert.Contains(t, string(typesContent), "package tlscredentials")
 
 	// Verify that running again fails (directory exists).
 	err = AddSecret(cfg)
@@ -108,7 +108,6 @@ func TestAddSecret_NotInProviderProject(t *testing.T) {
 func TestAddConfigMap(t *testing.T) {
 	projectDir := setupMinimalProvider(t)
 
-	// Run AddConfigMap.
 	cfg := &AddConfigMapConfig{
 		Name: "app-config",
 	}

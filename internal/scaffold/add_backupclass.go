@@ -37,9 +37,10 @@ type AddBackupClassConfig struct {
 // AddBackupClass creates definition/backupclasses/<name>/{class.yaml, ui.yaml,
 // types.go} in the current provider project.
 func AddBackupClass(cfg *AddBackupClassConfig) error {
-	if cfg.Name == "" {
-		return fmt.Errorf("backup class name is required")
+	if err := validateName(cfg.Name); err != nil {
+		return fmt.Errorf("invalid backup class name: %w", err)
 	}
+
 	if cfg.ExecutionMode == "" {
 		cfg.ExecutionMode = "ProviderManaged"
 	}

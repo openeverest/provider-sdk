@@ -30,8 +30,8 @@ type AddSecretConfig struct {
 // AddSecret creates definition/secrets/<name>/{definition.yaml, ui.yaml,
 // types.go} in the current provider project.
 func AddSecret(cfg *AddSecretConfig) error {
-	if cfg.Name == "" {
-		return fmt.Errorf("secret name is required")
+	if err := validateName(cfg.Name); err != nil {
+		return fmt.Errorf("invalid secret name: %w", err)
 	}
 
 	if _, err := os.Stat("definition/provider.yaml"); err != nil {
