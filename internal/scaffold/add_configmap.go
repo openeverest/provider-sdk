@@ -118,9 +118,7 @@ package %s
 // Example:
 //   type %s struct {
 //       // ConfigFile is the main configuration file content.
-//       ConfigFile string `+"`json:\"config.yaml\"`"+`
-//       // Settings contains additional settings.
-//       Settings string `+"`json:\"settings.json\"`"+`
+//       ConfigFile string `+"`json:\"configFile\"`"+`
 //   }
 type %s struct{}
 `, pkgName, cfg.Name, pkgName,

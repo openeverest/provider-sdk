@@ -2114,9 +2114,6 @@ Use the `provider-sdk add configmap` command to scaffold a new configmap type:
 ```bash
 # Add an application config type
 provider-sdk add configmap --name app-config
-
-# Add a database settings type
-provider-sdk add configmap --name database-settings
 ```
 
 This creates:
@@ -2144,9 +2141,7 @@ package appconfig
 // +k8s:openapi-gen=true
 type AppConfigConfigMapData struct {
     // ConfigFile is the main configuration file content.
-    ConfigFile string `json:"config.yaml"`
-    // Settings contains additional settings in JSON format.
-    Settings string `json:"settings.json,omitempty"`
+    ConfigFile string `json:"configFile"`
 }
 ```
 
@@ -2184,26 +2179,58 @@ spec:
     credentials:
       parametersSchema:
         openAPIV3Schema:
-          type: object
           properties:
-            username:
-              type: string
             password:
               type: string
+            username:
+              type: string
+          type: object
       uiSchema:
+        components:
+          password:
+            fieldParams:
+              label: Password
+              placeholder: Enter database password
+            uiType: text
+            validation:
+              required: true
+          username:
+            fieldParams:
+              label: Username
+              placeholder: Enter database username
+            uiType: text
+            validation:
+              required: true
+        componentsOrder:
+          - username
+          - password
         label: Database Credentials
-        # ... UI hints ...
   configMaps:
     app-config:
       parametersSchema:
         openAPIV3Schema:
-          type: object
           properties:
-            config.yaml:
+            configFile:
               type: string
+            settings:
+              type: string
+          type: object
       uiSchema:
+        components:
+          configFile:
+            fieldParams:
+              label: Configuration
+              maxRows: 20
+              minRows: 5
+              multiline: true
+              placeholder: |
+                # Enter your configuration here
+            uiType: text
+            validation:
+              required: true
+        componentsOrder:
+          - configFile
         label: Application Configuration
-        # ... UI hints ...
 ```
 
 ---
