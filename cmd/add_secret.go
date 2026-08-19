@@ -52,7 +52,7 @@ Examples:
   # Add a credentials secret type
   provider-sdk add secret --name credentials
 
-  # Add a TLS certificates secret type  
+  # Add a TLS certificates secret type
   provider-sdk add secret --name tls-certificates`,
 	RunE: runAddSecret,
 }

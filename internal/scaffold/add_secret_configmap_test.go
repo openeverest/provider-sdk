@@ -23,10 +23,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestAddSecret(t *testing.T) {
-	tmpDir := t.TempDir()
+// setupMinimalProvider creates a minimal provider project structure in a temp
+// directory and changes into it, returning the project directory path.
+func setupMinimalProvider(t *testing.T) string {
+	t.Helper()
 
-	// Create a minimal provider project structure.
+	tmpDir := t.TempDir()
 	defDir := filepath.Join(tmpDir, "definition")
 	err := os.MkdirAll(defDir, 0o755)
 	require.NoError(t, err)
@@ -34,22 +36,23 @@ func TestAddSecret(t *testing.T) {
 	err = os.WriteFile(providerYAML, []byte("name: test-provider\n"), 0o644)
 	require.NoError(t, err)
 
-	// Change to the temp directory to simulate running from project root.
-	oldWD, err := os.Getwd()
-	require.NoError(t, err)
-	err = os.Chdir(tmpDir)
-	require.NoError(t, err)
-	defer os.Chdir(oldWD)
+	t.Chdir(tmpDir)
+
+	return tmpDir
+}
+
+func TestAddSecret(t *testing.T) {
+	projectDir := setupMinimalProvider(t)
 
 	// Run AddSecret.
 	cfg := &AddSecretConfig{
 		Name: "credentials",
 	}
-	err = AddSecret(cfg)
+	err := AddSecret(cfg)
 	require.NoError(t, err)
 
 	// Verify files were created.
-	secretDir := filepath.Join(defDir, "secrets", "credentials")
+	secretDir := filepath.Join(projectDir, "definition", "secrets", "credentials")
 
 	defFile := filepath.Join(secretDir, "definition.yaml")
 	_, err = os.Stat(defFile)
@@ -80,6 +83,8 @@ func TestAddSecret(t *testing.T) {
 }
 
 func TestAddSecret_EmptyName(t *testing.T) {
+	setupMinimalProvider(t)
+
 	cfg := &AddSecretConfig{
 		Name: "",
 	}
@@ -91,46 +96,27 @@ func TestAddSecret_EmptyName(t *testing.T) {
 func TestAddSecret_NotInProviderProject(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	oldWD, err := os.Getwd()
-	require.NoError(t, err)
-	err = os.Chdir(tmpDir)
-	require.NoError(t, err)
-	defer os.Chdir(oldWD)
+	t.Chdir(tmpDir)
 
 	cfg := &AddSecretConfig{
 		Name: "test-secret",
 	}
-	err = AddSecret(cfg)
+	err := AddSecret(cfg)
 	assert.Error(t, err, "AddSecret() should fail when not in provider project")
 }
 
 func TestAddConfigMap(t *testing.T) {
-	tmpDir := t.TempDir()
-
-	// Create a minimal provider project structure.
-	defDir := filepath.Join(tmpDir, "definition")
-	err := os.MkdirAll(defDir, 0o755)
-	require.NoError(t, err)
-	providerYAML := filepath.Join(defDir, "provider.yaml")
-	err = os.WriteFile(providerYAML, []byte("name: test-provider\n"), 0o644)
-	require.NoError(t, err)
-
-	// Change to the temp directory to simulate running from project root.
-	oldWD, err := os.Getwd()
-	require.NoError(t, err)
-	err = os.Chdir(tmpDir)
-	require.NoError(t, err)
-	defer os.Chdir(oldWD)
+	projectDir := setupMinimalProvider(t)
 
 	// Run AddConfigMap.
 	cfg := &AddConfigMapConfig{
 		Name: "app-config",
 	}
-	err = AddConfigMap(cfg)
+	err := AddConfigMap(cfg)
 	require.NoError(t, err)
 
 	// Verify files were created.
-	cmDir := filepath.Join(defDir, "configmaps", "app-config")
+	cmDir := filepath.Join(projectDir, "definition", "configmaps", "app-config")
 
 	defFile := filepath.Join(cmDir, "definition.yaml")
 	_, err = os.Stat(defFile)
@@ -161,6 +147,8 @@ func TestAddConfigMap(t *testing.T) {
 }
 
 func TestAddConfigMap_EmptyName(t *testing.T) {
+	setupMinimalProvider(t)
+
 	cfg := &AddConfigMapConfig{
 		Name: "",
 	}
@@ -171,15 +159,11 @@ func TestAddConfigMap_EmptyName(t *testing.T) {
 func TestAddConfigMap_NotInProviderProject(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	oldWD, err := os.Getwd()
-	require.NoError(t, err)
-	err = os.Chdir(tmpDir)
-	require.NoError(t, err)
-	defer os.Chdir(oldWD)
+	t.Chdir(tmpDir)
 
 	cfg := &AddConfigMapConfig{
 		Name: "test-config",
 	}
-	err = AddConfigMap(cfg)
+	err := AddConfigMap(cfg)
 	assert.Error(t, err, "AddConfigMap() should fail when not in provider project")
 }
