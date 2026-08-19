@@ -18,85 +18,63 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestAssembleSecrets(t *testing.T) {
 	tmpDir := t.TempDir()
 	secretDir := filepath.Join(tmpDir, "secrets", "credentials")
-	if err := os.MkdirAll(secretDir, 0o755); err != nil {
-		t.Fatalf("creating secrets directory: %v", err)
-	}
+	err := os.MkdirAll(secretDir, 0o755)
+	require.NoError(t, err)
 
 	defYAML := "parametersSchema:\n  openAPIV3Schema: CredentialsSecretData\n"
-	if err := os.WriteFile(filepath.Join(secretDir, "definition.yaml"), []byte(defYAML), 0o644); err != nil {
-		t.Fatalf("writing definition.yaml: %v", err)
-	}
+	err = os.WriteFile(filepath.Join(secretDir, "definition.yaml"), []byte(defYAML), 0o644)
+	require.NoError(t, err)
 
 	uiYAML := "label: Credentials Secret\ncomponentsOrder:\n  - username\n"
-	if err := os.WriteFile(filepath.Join(secretDir, "ui.yaml"), []byte(uiYAML), 0o644); err != nil {
-		t.Fatalf("writing ui.yaml: %v", err)
-	}
+	err = os.WriteFile(filepath.Join(secretDir, "ui.yaml"), []byte(uiYAML), 0o644)
+	require.NoError(t, err)
 
 	typeRefs := make(map[string]bool)
 	secrets, err := AssembleSecrets(tmpDir, typeRefs)
-	if err != nil {
-		t.Fatalf("AssembleSecrets() error: %v", err)
-	}
-	if len(secrets) != 1 {
-		t.Fatalf("expected 1 secret, got %d", len(secrets))
-	}
-	if !typeRefs["CredentialsSecretData"] {
-		t.Error("type reference not collected")
-	}
+	require.NoError(t, err)
+	require.Len(t, secrets, 1)
+	assert.True(t, typeRefs["CredentialsSecretData"], "type reference not collected")
 }
 
 func TestAssembleSecrets_NoDir(t *testing.T) {
 	tmpDir := t.TempDir()
 	typeRefs := make(map[string]bool)
 	secrets, err := AssembleSecrets(tmpDir, typeRefs)
-	if err != nil {
-		t.Fatalf("AssembleSecrets() error: %v", err)
-	}
-	if len(secrets) != 0 {
-		t.Errorf("expected 0 secrets, got %d", len(secrets))
-	}
+	require.NoError(t, err)
+	assert.Empty(t, secrets)
 }
 
 func TestAssembleConfigMaps(t *testing.T) {
 	tmpDir := t.TempDir()
 	cmDir := filepath.Join(tmpDir, "configmaps", "app-config")
-	if err := os.MkdirAll(cmDir, 0o755); err != nil {
-		t.Fatalf("creating configmaps directory: %v", err)
-	}
+	err := os.MkdirAll(cmDir, 0o755)
+	require.NoError(t, err)
 
 	defYAML := "parametersSchema:\n  openAPIV3Schema: AppConfigData\n"
-	if err := os.WriteFile(filepath.Join(cmDir, "definition.yaml"), []byte(defYAML), 0o644); err != nil {
-		t.Fatalf("writing definition.yaml: %v", err)
-	}
+	err = os.WriteFile(filepath.Join(cmDir, "definition.yaml"), []byte(defYAML), 0o644)
+	require.NoError(t, err)
 
 	typeRefs := make(map[string]bool)
 	cms, err := AssembleConfigMaps(tmpDir, typeRefs)
-	if err != nil {
-		t.Fatalf("AssembleConfigMaps() error: %v", err)
-	}
-	if len(cms) != 1 {
-		t.Fatalf("expected 1 configmap, got %d", len(cms))
-	}
-	if !typeRefs["AppConfigData"] {
-		t.Error("type reference not collected")
-	}
+	require.NoError(t, err)
+	require.Len(t, cms, 1)
+	assert.True(t, typeRefs["AppConfigData"], "type reference not collected")
 }
 
 func TestAssembleConfigMaps_NoDir(t *testing.T) {
 	tmpDir := t.TempDir()
 	typeRefs := make(map[string]bool)
 	cms, err := AssembleConfigMaps(tmpDir, typeRefs)
-	if err != nil {
-		t.Fatalf("AssembleConfigMaps() error: %v", err)
-	}
-	if len(cms) != 0 {
-		t.Errorf("expected 0 configmaps, got %d", len(cms))
-	}
+	require.NoError(t, err)
+	assert.Empty(t, cms)
 }
 
 func TestBuildSecretsSpec(t *testing.T) {
@@ -113,19 +91,11 @@ func TestBuildSecretsSpec(t *testing.T) {
 		"CredsData": map[string]any{"type": "object"},
 	}
 	spec := buildSecretsSpec(secrets, schemas)
-	if spec == nil {
-		t.Fatal("buildSecretsSpec returned nil")
-	}
+	require.NotNil(t, spec)
 	creds, ok := spec["creds"].(map[string]any)
-	if !ok {
-		t.Fatal("creds not found")
-	}
-	if _, ok := creds["parametersSchema"]; !ok {
-		t.Error("parametersSchema not found")
-	}
-	if _, ok := creds["uiSchema"]; !ok {
-		t.Error("uiSchema not found")
-	}
+	require.True(t, ok, "creds not found")
+	assert.Contains(t, creds, "parametersSchema")
+	assert.Contains(t, creds, "uiSchema")
 }
 
 func TestBuildConfigMapsSpec(t *testing.T) {
@@ -142,17 +112,9 @@ func TestBuildConfigMapsSpec(t *testing.T) {
 		"CfgData": map[string]any{"type": "object"},
 	}
 	spec := buildConfigMapsSpec(cms, schemas)
-	if spec == nil {
-		t.Fatal("buildConfigMapsSpec returned nil")
-	}
+	require.NotNil(t, spec)
 	cfg, ok := spec["cfg"].(map[string]any)
-	if !ok {
-		t.Fatal("cfg not found")
-	}
-	if _, ok := cfg["parametersSchema"]; !ok {
-		t.Error("parametersSchema not found")
-	}
-	if _, ok := cfg["uiSchema"]; !ok {
-		t.Error("uiSchema not found")
-	}
+	require.True(t, ok, "cfg not found")
+	assert.Contains(t, cfg, "parametersSchema")
+	assert.Contains(t, cfg, "uiSchema")
 }
