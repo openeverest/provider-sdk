@@ -1,53 +1,83 @@
-# Provider Development Guide
+# Provider development guide
 
-This guide walks you through everything you need to define and implement to create
-a working OpenEverest provider. It covers the conceptual model, the definition
-directory structure, the provider implementation, and common patterns.
+Reference for building an OpenEverest provider: what you declare, what you implement, and
+how you ship it.
 
-> **Reference implementation**: See
-> [provider-percona-server-mongodb](https://github.com/openeverest/provider-percona-server-mongodb)
-> for a complete, working example of a provider for Percona Server for MongoDB.
+**New to providers?** Read [Conceptual model](#conceptual-model) below — it is five minutes and
+the rest of this document assumes it. Then work through the [tutorial](TUTORIAL.md), which
+builds a working provider end to end in about an hour. Come back here when you need a
+specific answer.
 
-## Table of Contents
+Apart from the concepts, the sections below are independent. Read the one you need; nothing
+requires the previous one.
 
-- [Conceptual Model](#conceptual-model)
-- [Project Structure Overview](#project-structure-overview)
-- [Step 1: Initialize the Provider Project](#step-1-initialize-the-provider-project)
-- [Step 2: Define Components](#step-2-define-components)
-- [Step 3: Define Versions](#step-3-define-versions)
-  - [Component Version Catalog](#component-version-catalog)
-  - [Version Bundles](#version-bundles)
-- [Step 4: Define Topologies](#step-4-define-topologies)
-- [Step 5: Define Custom Types](#step-5-define-custom-types)
-- [Step 6: Configure the UI Schema](#step-6-configure-the-ui-schema)
-- [Step 7: Implement the Provider Interface](#step-7-implement-the-provider-interface)
-- [Step 8: Add Backup and Restore Support (Optional)](#step-8-add-backup-and-restore-support-optional)
-  - [Define BackupClasses](#define-backupclasses)
-  - [Add Backup and Restore Implementation Files](#add-backup-and-restore-implementation-files)
-- [Step 9: Configure RBAC](#step-9-configure-rbac)
-- [Step 10: Generate and Test](#step-10-generate-and-test)
-- [Step 11: Release and Publishing](#step-11-release-and-publishing)
-- [Step 12: Define Presets (Optional)](#step-12-define-presets-optional)
-- [Provider SDK CLI Reference](#provider-sdk-cli-reference)
+## Where things are
+
+| | |
+|---|---|
+| [Tutorial](TUTORIAL.md) | Build your first provider, start to finish |
+| [provider-example](https://github.com/openeverest/provider-example) | The smallest complete provider, commented to be read |
+| [provider-percona-server-mongodb](https://github.com/openeverest/provider-percona-server-mongodb) | A production provider: sharding, backups, monitoring |
+| This guide | Everything else |
+
+## Contents
+
+**Concepts**
+- [Conceptual model](#conceptual-model)
+- [How a provider runs](#how-a-provider-runs)
+- [Project structure](#project-structure)
+
+**Declare what your provider offers**
+- [Scaffold the project](#scaffold-the-project)
+- [Define components](#define-components)
+- [Define versions](#define-versions)
+- [Define topologies](#define-topologies)
+- [Define parameter types](#define-parameter-types)
+- [Configure the UI schema](#configure-the-ui-schema)
+
+**Implement it**
+- [Implement the provider interface](#implement-the-provider-interface)
+- [Configure RBAC](#configure-rbac)
+- [Add backup and restore support](#add-backup-and-restore-support)
+
+**Ship it**
+- [Generate, run and test](#generate-run-and-test)
+- [Release and publish](#release-and-publish)
+- [Define presets](#define-presets)
+
+**Reference**
+- [Provider SDK CLI](#provider-sdk-cli-reference)
 
 ---
 
-## Conceptual Model
+## Conceptual model
 
-An OpenEverest **Provider** bridges the gap between the platform's generic
-**Instance** abstraction and a specific database operator. The provider
-defines *what* can be deployed (components, versions, topologies) and *how* to
-translate Instance specs into operator resources.
+OpenEverest gives users one API for every data service: the `Instance` custom resource. A
+**Provider** is the piece that knows what a particular technology needs. It declares *what*
+can be deployed — components, versions, topologies, parameters — and implements *how* an
+Instance spec becomes running infrastructure.
+
+Most providers translate the Instance into the custom resources of a database operator, and
+that is the case this guide assumes throughout. It is not a requirement: a provider can create
+Kubernetes objects directly, which is what
+[provider-example](https://github.com/openeverest/provider-example) does. Either way the
+contract is identical.
 
 ### Key Concepts
 
 | Concept | Description | Example (MongoDB) |
 |---------|-------------|-------------------|
-| **Component** | A logical part of a database deployment | `engine`, `proxy`, `backupAgent`, `monitoring` |
+| **Component** | A role within a deployment | `engine`, `proxy`, `backupAgent`, `monitoring` |
 | **Component Type** | The software a component runs | `mongod`, `backup`, `pmm` |
-| **Topology** | A deployment architecture combining components | `replicaSet`, `sharded` |
-| **Version** | A specific release of a component type | `8.0.12-4` (mongod), `2.11.0` (backup) |
+| **Topology** | A deployment architecture: a distinct set of components, or a distinct way of wiring them | `replicaSet`, `sharded` |
+| **Component version** | A release of one component type, and the image that implements it | `8.0.12-4` (mongod), `2.11.0` (backup) |
+| **Version bundle** | A named set of component versions known to work together. This is the "version" users pick, as `spec.version` on the Instance | `8.0.12` |
 | **Provider Interface** | The Go interface you implement | `Validate`, `Sync`, `Status`, `Cleanup` |
+
+**Component version** and **version bundle** are easy to confuse and worth separating now.
+Users do not choose a mongod release and a backup-agent release; they choose one bundle, and
+the runtime expands it into a concrete version per component before your code runs. See
+[Define versions](#define-versions).
 
 ### How It Fits Together
 
@@ -80,7 +110,50 @@ different roles.
 
 ---
 
-## Project Structure Overview
+## How a provider runs
+
+A provider is its own program, not a plugin loaded into OpenEverest. It ships as a container
+image and a Helm chart, and runs as a Deployment beside the core:
+
+```mermaid
+flowchart TB
+    U([User, UI or CLI]) -->|creates| API[OpenEverest API server]
+    API -->|POST /validate| SRV
+    API -->|persists| I["Instance<br/>core.openeverest.io"]
+    subgraph P["your provider (a Deployment)"]
+        SRV[HTTP server]
+        REC[reconciler]
+    end
+    I -.->|watch| REC
+    REC -->|Sync| R[("operator CRs, or<br/>Kubernetes objects")]
+    REC -->|Status| I
+    PCR["Provider CR<br/>(generated from definition/)"] -.->|read by| API
+    PCR -.->|read by| REC
+```
+
+Installing the chart puts two things in the cluster: the Deployment, and a `Provider` custom
+resource generated from your `definition/` directory. That `Provider` is how the rest of the
+platform learns what you offer — the API server and the UI read versions, topologies and
+parameter schemas from it, never from your Go code.
+
+The provider watches every `Instance` and ignores any whose `spec.providerRef.name` is not its
+own name, so several providers coexist in one cluster without knowing about each other.
+
+Your code has **two entry points**, which is worth internalising early:
+
+| Entry point | Called by | When |
+|---|---|---|
+| `Validate` over HTTP (`/validate`) | the OpenEverest API server | before an Instance is persisted |
+| `Validate` → `Sync` → `Status`, or `Cleanup` | the reconciler in your own binary | on every reconcile, and on deletion |
+
+The same `Validate` function serves both, at two different moments. An Instance created
+through the API or the UI is rejected before it exists. One created with `kubectl apply` or by
+a GitOps controller bypasses that path: it is persisted, and the reconciler then rejects it by
+setting `phase: Failed`. Write validation messages that read well in both situations.
+
+---
+
+## Project structure
 
 ```
 definition/                          # ← YOU EDIT THESE
@@ -125,7 +198,7 @@ dev/                                 # ← LOCAL DEV (Tilt)
 
 ---
 
-## Step 1: Initialize the Provider Project
+## Scaffold the project
 
 Before defining components, topologies, or implementing the provider interface,
 scaffold a new provider project using the `provider-sdk init` command.
@@ -186,7 +259,7 @@ disagree the provider silently reconciles nothing.
 
 ---
 
-## Step 2: Define Components
+## Define components
 
 Components are the building blocks of your provider. Each component represents
 a logical part of the database deployment.
@@ -238,7 +311,7 @@ The `provider-sdk add component` command updates all four files automatically.
 
 ---
 
-## Step 3: Define Versions
+## Define versions
 
 All version information lives in `definition/versions.yaml`. It has two
 related sections: the **component version catalog** and **version bundles**.
@@ -364,7 +437,7 @@ func (p *Provider) Sync(c *controller.Context) error {
 
 ---
 
-## Step 4: Define Topologies
+## Define topologies
 
 Topologies define deployment architectures — which components are used together
 and how they're configured.
@@ -409,7 +482,7 @@ ui:
       components:
         version:
           uiType: select
-          path: spec.components.engine.version
+          path: spec.version
           fieldParams:
             label: Database Version
     resources:
@@ -476,7 +549,7 @@ func (p *Provider) Sync(c *controller.Context) error {
 
 ---
 
-## Step 5: Define Custom Types
+## Define parameter types
 
 Custom types allow you to extend the Instance spec with provider-specific fields.
 
@@ -521,7 +594,7 @@ const (
 
 ---
 
-## Step 6: Configure the UI Schema
+## Configure the UI schema
 
 The UI schema in each `topology.yaml` tells the OpenEverest frontend how to
 render the Instance creation/edit form.
@@ -585,7 +658,7 @@ A **Component** is a single form field:
 | `uiType` | string | `number`, `select`, `text`, `hidden` |
 | `path` | string | Dot-notation path in Instance spec (e.g. `spec.components.engine.replicas`) |
 | `fieldParams` | object | Field configuration (see each type below) |
-| `validation` | object | Validation rules (see [Validation](#validation-1)) |
+| `validation` | object | Validation rules (see [Validation](#validation)) |
 
 #### Number Field
 
@@ -640,7 +713,7 @@ Supported `fieldParams`:
 ```yaml
 version:
   uiType: select
-  path: spec.engine.version
+  path: spec.version
   fieldParams:
     label: Database Version
     optionsPath: spec.versions
@@ -1083,7 +1156,7 @@ ui:
 
 ---
 
-## Step 7: Implement the Provider Interface
+## Implement the provider interface
 
 The core of your provider is in `internal/provider/provider.go`. You must
 implement four methods:
@@ -1239,7 +1312,7 @@ if c.TryDecodeTopologyParameters(&params) {
 }
 ```
 
-## Step 8: Add Backup and Restore Support (Optional)
+## Add backup and restore support
 
 Backup support is entirely optional. If your operator doesn't support backups,
 skip this section. Backup integration requires two parts:
@@ -1601,7 +1674,7 @@ Run `make generate` to update manifests.
 
 ---
 
-## Step 9: Configure RBAC
+## Configure RBAC
 
 RBAC permissions are declared using
 [kubebuilder markers](https://book.kubebuilder.io/reference/markers/rbac)
@@ -1642,7 +1715,7 @@ After adding markers, run `make generate` to regenerate RBAC manifests.
 
 ---
 
-## Step 10: Generate and Test
+## Generate, run and test
 
 ### Make Targets
 
@@ -1744,8 +1817,8 @@ without conflicting. See `dev/README.md` in your generated project for details.
 make k3d-cluster-up
 
 # Install prerequisites (OpenEverest CRDs, operator)
-kubectl apply -f https://raw.githubusercontent.com/openeverest/openeverest/v2/config/crd/bases/core.openeverest.io_providers.yaml
-kubectl apply -f https://raw.githubusercontent.com/openeverest/openeverest/v2/config/crd/bases/core.openeverest.io_instances.yaml
+kubectl apply -f https://raw.githubusercontent.com/openeverest/openeverest/main/config/crd/bases/core.openeverest.io_providers.yaml
+kubectl apply -f https://raw.githubusercontent.com/openeverest/openeverest/main/config/crd/bases/core.openeverest.io_instances.yaml
 # Install your operator...
 
 # Deploy the provider with Helm
@@ -1769,7 +1842,7 @@ test skeleton under `test/integration/` plus CI wiring:
 
 - `test/integration/core/` — a suite skeleton that verifies the provider
   deployment and contains commented-out lifecycle steps (create Instance →
-  assert operator CR → simulate readiness → assert `phase: Running` → delete)
+  assert operator CR → simulate readiness → assert `phase: Ready` → delete)
   to enable as you implement the provider.
 - `.github/workflows/ci.yaml` — runs lint, build, unit tests, generated-file
   verification, Helm lint, and each integration suite on every PR.
@@ -1813,7 +1886,7 @@ helm uninstall <provider-name>
 
 ---
 
-## Step 11: Release and Publishing
+## Release and publish
 
 Scaffolded providers ship with a standardized CI/CD pipeline so every OpenEverest
 provider is built, versioned, and published the same way. Three workflows under
@@ -1888,9 +1961,9 @@ local-dev default (`ghcr.io/openeverest`) and is overridden by the workflow.
 
 ---
 
-## Step 12: Define Presets (Optional)
+## Define presets
 
-Presets are cluster-scoped `InstancePreset` CRs that ship with your provider's Helm chart,
+Presets are optional. They are cluster-scoped `InstancePreset` CRs that ship with your provider's Helm chart,
 giving users ready-made configurations they can select when creating an Instance
 instead of filling in every field manually. Each preset is rendered from
 `charts/<provider-name>/templates/presets.yaml` using entries in `values.yaml`.
@@ -2047,7 +2120,7 @@ parameters:
 
 ---
 
-## Provider SDK CLI Reference
+## Provider SDK CLI reference
 
 ### `provider-sdk init`
 
