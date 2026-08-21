@@ -1,10 +1,10 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "[[ .ProviderName ]].fullname" . }}
+  name: {{ include "[[ .ProjectName ]].fullname" . }}
   namespace: {{ .Release.Namespace }}
   labels:
-    {{- include "[[ .ProviderName ]].labels" . | nindent 4 }}
+    {{- include "[[ .ProjectName ]].labels" . | nindent 4 }}
 spec:
   replicas: {{ .Values.replicaCount }}
   revisionHistoryLimit: {{ .Values.revisionHistoryLimit }}
@@ -14,7 +14,7 @@ spec:
   {{- end }}
   selector:
     matchLabels:
-      {{- include "[[ .ProviderName ]].selectorLabels" . | nindent 6 }}
+      {{- include "[[ .ProjectName ]].selectorLabels" . | nindent 6 }}
   template:
     metadata:
       {{- with .Values.podAnnotations }}
@@ -22,7 +22,7 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       labels:
-        {{- include "[[ .ProviderName ]].labels" . | nindent 8 }}
+        {{- include "[[ .ProjectName ]].labels" . | nindent 8 }}
         {{- with .Values.podLabels }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
@@ -31,7 +31,7 @@ spec:
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      serviceAccountName: {{ include "[[ .ProviderName ]].serviceAccountName" . }}
+      serviceAccountName: {{ include "[[ .ProjectName ]].serviceAccountName" . }}
       terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
       {{- with .Values.topologySpreadConstraints }}
       topologySpreadConstraints:
@@ -43,7 +43,7 @@ spec:
         - name: provider
           securityContext:
             {{- toYaml .Values.securityContext | nindent 12 }}
-          image: {{ include "[[ .ProviderName ]].image" . }}
+          image: {{ include "[[ .ProjectName ]].image" . }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           args:
             - --server-port={{ .Values.service.port }}

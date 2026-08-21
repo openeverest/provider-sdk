@@ -10,7 +10,7 @@ CONTAINER_TOOL ?= docker
 OPENEVEREST_BRANCH ?= release-2.0
 
 # Image URL to use for building/pushing image targets
-IMG ?= ghcr.io/openeverest/[[ .ProviderName ]]-dev:latest
+IMG ?= ghcr.io/openeverest/[[ .ProjectName ]]-dev:latest
 
 # Image URL for OpenEverest controller used in integration tests (must be pre-built).
 OPENEVEREST_CONTROLLER_IMG ?= ghcr.io/openeverest/openeverest-controller-dev:0.0.0
@@ -20,7 +20,7 @@ _IMG_REPO = $(firstword $(subst :, ,$(IMG)))
 _IMG_TAG  = $(lastword $(subst :, ,$(IMG)))
 
 # k3d cluster name (must match dev/k3d_config.yaml metadata.name)
-K3D_CLUSTER_NAME ?= [[ .ProviderName ]]-test
+K3D_CLUSTER_NAME ?= [[ .ProjectName ]]-test
 
 # controller-gen version
 CONTROLLER_TOOLS_VERSION ?= v0.18.0
@@ -35,7 +35,7 @@ GOLANGCI_LINT_VERSION ?= v2.11.3
 GOLANGCI_LINT ?= $(LOCALBIN)/golangci-lint-$(GOLANGCI_LINT_VERSION)
 
 # Helm chart directory
-CHART_DIR ?= charts/[[ .ProviderName ]]
+CHART_DIR ?= charts/[[ .ProjectName ]]
 
 .PHONY: help
 help: ## Display this help.
@@ -118,19 +118,19 @@ helm-deps: ## Download/update Helm chart dependencies.
 
 .PHONY: helm-install
 helm-install: helm-deps ## Install the provider using Helm.
-	helm install [[ .ProviderName ]] $(CHART_DIR) --create-namespace
+	helm install [[ .ProjectName ]] $(CHART_DIR) --create-namespace
 
 .PHONY: helm-upgrade
 helm-upgrade: helm-deps ## Upgrade the provider using Helm.
-	helm upgrade [[ .ProviderName ]] $(CHART_DIR)
+	helm upgrade [[ .ProjectName ]] $(CHART_DIR)
 
 .PHONY: helm-uninstall
 helm-uninstall: ## Uninstall the provider using Helm.
-	helm uninstall [[ .ProviderName ]]
+	helm uninstall [[ .ProjectName ]]
 
 .PHONY: helm-template
 helm-template: helm-deps ## Render Helm chart templates locally (dry-run).
-	helm template [[ .ProviderName ]] $(CHART_DIR)
+	helm template [[ .ProjectName ]] $(CHART_DIR)
 
 ##@ Testing
 
@@ -171,7 +171,7 @@ install-crds: ## Install OpenEverest CRDs (and your operator's CRDs) into the cl
 deploy-provider-ci: helm-deps ## Deploy the provider via Helm for CI (IMG must already be imported into k3d).
 	# TODO: if your chart pulls dependencies from external repos, add them first:
 	# helm repo add <repo-name> <repo-url>
-	helm upgrade --install [[ .ProviderName ]] $(CHART_DIR) \
+	helm upgrade --install [[ .ProjectName ]] $(CHART_DIR) \
 		--create-namespace \
 		--namespace provider-system \
 		--set image.repository=$(_IMG_REPO) \

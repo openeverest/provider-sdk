@@ -25,7 +25,7 @@ spec:
     #     content: kubectl -n $NAMESPACE get <operator-resource> -o yaml
     - podLogs:
         namespace: provider-system
-        selector: app.kubernetes.io/name=[[ .ProviderName ]]
+        selector: app.kubernetes.io/name=[[ .ProjectName ]]
         tail: 100
 
   steps:

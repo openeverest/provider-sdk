@@ -5,6 +5,9 @@
 # Run `provider-sdk add component` to add components interactively.
 # For more details, see github.com/openeverest/provider-sdk/blob/main/PROVIDER_DEVELOPMENT.md.
 
+# The name of the Provider CR this repository ships, and the value users put in
+# spec.providerRef.name on an Instance. Keep it in sync with
+# common.ProviderName and the chart's provider.name value.
 name: [[ .ProviderName ]]
 
 # Components map logical component names to their type.

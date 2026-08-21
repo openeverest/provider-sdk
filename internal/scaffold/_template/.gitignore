@@ -32,5 +32,5 @@ Thumbs.db
 .docker/
 
 # Helm chart dependencies (downloaded by `helm dep up`)
-charts/[[ .ProviderName ]]/charts/
-charts/[[ .ProviderName ]]/Chart.lock
+charts/[[ .ProjectName ]]/charts/
+charts/[[ .ProjectName ]]/Chart.lock

@@ -38,13 +38,13 @@ var initOpts struct {
 
 func init() {
 	f := initCmd.Flags()
-	f.StringVar(&initOpts.name, "name", "", "Provider name (e.g., provider-my-database)")
+	f.StringVar(&initOpts.name, "name", "", "Provider name (e.g., my-database)")
 	f.StringVar(&initOpts.shortName, "short-name", "", "Short provider name used in resource names "+
-		"(e.g., 'psmdb' for 'percona-server-mongodb'), defaults to name without 'provider-' prefix)")
+		"(e.g., 'psmdb' for 'percona-server-mongodb'), defaults to the provider name")
 	f.StringVar(&initOpts.modulePath, "module", "", "Go module path (e.g., github.com/my-org/provider-my-database)")
 	f.StringVar(&initOpts.apiGroup, "api-group", "", "Operator API group (optional, used as RBAC hint)")
 	f.StringVar(&initOpts.resource, "resource", "", "Operator resource, plural (optional, used as RBAC hint)")
-	f.StringVarP(&initOpts.outputDir, "output-dir", "o", "", "Output directory (default: ./<name>)")
+	f.StringVarP(&initOpts.outputDir, "output-dir", "o", "", "Output directory (default: ./provider-<name>)")
 	f.BoolVar(&initOpts.nonInteractive, "non-interactive", false, "Fail instead of prompting for missing values")
 
 	rootCmd.AddCommand(initCmd)
@@ -63,7 +63,7 @@ to define the provider's components and topologies.
 
 Example:
   provider-sdk init \\
-    --name provider-my-database \\
+    --name my-database \\
     --module github.com/my-org/provider-my-database`,
 	RunE: runInit,
 }
@@ -86,24 +86,16 @@ func runInit(_ *cobra.Command, _ []string) error {
 			return fmt.Errorf("required flags not set in non-interactive mode: %s", strings.Join(missing, ", "))
 		}
 	} else {
-		if err := promptTUI(&initOpts.name, "Provider name", "provider-my-database", "", true); err != nil {
+		if err := promptTUI(&initOpts.name, "Provider name", "my-database", "", true); err != nil {
 			return err
 		}
 		if err := promptTUI(&initOpts.modulePath, "Go module path", "github.com/my-org/provider-my-database", "", true); err != nil {
 			return err
 		}
 		if err := promptTUI(&initOpts.shortName, "Short provider name used in resource names "+
-			"(e.g., 'psmdb' for 'percona-server-mongodb')", "(optional, defaults to name without 'provider-' prefix)", "", false); err != nil {
+			"(e.g., 'psmdb' for 'percona-server-mongodb')", "(optional, defaults to the provider name)", "", false); err != nil {
 			return err
 		}
-	}
-
-	if initOpts.outputDir == "" {
-		cwd, err := os.Getwd()
-		if err != nil {
-			return fmt.Errorf("getting working directory: %w", err)
-		}
-		initOpts.outputDir = filepath.Join(cwd, initOpts.name)
 	}
 
 	cfg := &scaffold.Config{
@@ -115,9 +107,20 @@ func runInit(_ *cobra.Command, _ []string) error {
 	}
 	cfg.DeriveDefaults()
 
+	// Defaulted after derivation: the directory is named after the project, not
+	// the provider.
+	if initOpts.outputDir == "" {
+		cwd, err := os.Getwd()
+		if err != nil {
+			return fmt.Errorf("getting working directory: %w", err)
+		}
+		initOpts.outputDir = filepath.Join(cwd, cfg.ProjectName)
+	}
+
 	fmt.Println()
 	fmt.Println("=== Configuration Summary ===")
 	fmt.Printf("  Provider name:        %s\n", cfg.ProviderName)
+	fmt.Printf("  Project name:         %s\n", cfg.ProjectName)
 	fmt.Printf("  Provider short name:  %s\n", cfg.ProviderShortName)
 	fmt.Printf("  Go module path:       %s\n", cfg.ModulePath)
 	fmt.Printf("  Go package name:      %s\n", cfg.GoPackage)

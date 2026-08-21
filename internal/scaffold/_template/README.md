@@ -1,4 +1,4 @@
-# [[ .ProviderName ]]
+# [[ .ProjectName ]]
 
 <!-- TODO(provider): replace the heading with the product name (e.g. "Percona Server for MongoDB
 Provider", "KubeAI Provider"). -->
@@ -36,7 +36,7 @@ parameters, backup wiring — so that users, the API server, and the UI stay tec
 ```mermaid
 flowchart LR
     U([User / API / UI]) -->|creates| I["Instance<br/>core.openeverest.io"]
-    I --> P["[[ .ProviderName ]]<br/>(this repository)"]
+    I --> P["[[ .ProjectName ]]<br/>(this repository)"]
     P -->|reconciles into| O["Operator CR<br/>[[ .OperatorAPIGroup ]]"]
     O --> W["Upstream operator"]
     W --> R[("Workloads, Services,<br/>Secrets, PVCs")]
@@ -51,7 +51,7 @@ manages pods directly — all lifecycle work is delegated to the operator.
 
 <!-- TODO(provider): keep this table accurate for every release. -->
 
-| [[ .ProviderName ]] | OpenEverest | Operator | Kubernetes |
+| [[ .ProjectName ]] | OpenEverest | Operator | Kubernetes |
 |---|---|---|---|
 | `0.1.x` | `>= 2.0.0` | `x.y.z` | `1.30` – `1.34` |
 
@@ -92,8 +92,8 @@ Stateful workloads additionally report:
 The provider chart is published as an OCI artifact:
 
 ```bash
-helm install [[ .ProviderName ]] \
-  oci://ghcr.io/openeverest/charts/[[ .ProviderName ]] \
+helm install [[ .ProjectName ]] \
+  oci://ghcr.io/openeverest/charts/[[ .ProjectName ]] \
   --version <chart-version> \
   --namespace everest-system
 ```
@@ -105,8 +105,8 @@ helm install [[ .ProviderName ]] \
 Upgrade and uninstall:
 
 ```bash
-helm upgrade [[ .ProviderName ]] oci://ghcr.io/openeverest/charts/[[ .ProviderName ]]
-helm uninstall [[ .ProviderName ]] --namespace everest-system
+helm upgrade [[ .ProjectName ]] oci://ghcr.io/openeverest/charts/[[ .ProjectName ]]
+helm uninstall [[ .ProjectName ]] --namespace everest-system
 ```
 
 Uninstalling the chart does **not** delete running `Instance` resources or their data.
@@ -180,7 +180,7 @@ Source of truth: [definition/versions.yaml](definition/versions.yaml).
 
 ## Configuration
 
-- **Chart values:** [charts/[[ .ProviderName ]]/values.yaml](charts/[[ .ProviderName ]]/values.yaml)
+- **Chart values:** [charts/[[ .ProjectName ]]/values.yaml](charts/[[ .ProjectName ]]/values.yaml)
 - **Instance parameters:** per-component and per-topology `parameters` schemas, defined under
   [definition/](definition/) and published on the `Provider` resource
   (`kubectl get provider [[ .ProviderName ]] -o yaml`). The API server and the UI validate
@@ -218,7 +218,7 @@ code generation, and the backup/restore interfaces are documented once for all p
 | `internal/provider/` | `ProviderInterface` implementation, backup interfaces, RBAC markers |
 | `internal/common/` | Component name constants |
 | `definition/` | Provider identity, component types, versions, topologies, backup classes |
-| `charts/[[ .ProviderName ]]/` | Helm chart (`generated/` is produced by `make generate`) |
+| `charts/[[ .ProjectName ]]/` | Helm chart (`generated/` is produced by `make generate`) |
 | `config/rbac/role.yaml` | Generated `ClusterRole` — do not edit |
 | `test/integration/` | Chainsaw suites (see its `README.md`) |
 | `test/vars.sh` | Pinned operator and workload versions used by tests |
@@ -239,7 +239,7 @@ code generation, and the backup/restore interfaces are documented once for all p
 ## Troubleshooting
 
 ```bash
-kubectl logs -n everest-system deploy/[[ .ProviderName ]] -f
+kubectl logs -n everest-system deploy/[[ .ProjectName ]] -f
 ```
 
 | Symptom | Where to look |

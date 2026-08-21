@@ -16,7 +16,7 @@ permissions:
 
 env:
   REGISTRY: ghcr.io
-  CHART_DIR: charts/[[ .ProviderName ]]
+  CHART_DIR: charts/[[ .ProjectName ]]
 
 jobs:
   release:
@@ -79,24 +79,24 @@ jobs:
             "$REGISTRY" \
             --username "${{ github.actor }}" \
             --password-stdin
-          helm push release-artifacts/[[ .ProviderName ]]-*.tgz \
+          helm push release-artifacts/[[ .ProjectName ]]-*.tgz \
             "oci://${REGISTRY}/${{ github.repository_owner }}/charts"
 
       - name: Generate install notes
         run: |
           cat > release-artifacts/notes.md <<EOF
-          ## [[ .ProviderName ]] v${VERSION}
+          ## [[ .ProjectName ]] v${VERSION}
 
           ### Image
           \`\`\`
-          ${REGISTRY}/${{ github.repository_owner }}/[[ .ProviderName ]]:${VERSION}
+          ${REGISTRY}/${{ github.repository_owner }}/[[ .ProjectName ]]:${VERSION}
           \`\`\`
           Platforms: \`linux/amd64\`, \`linux/arm64\`
 
           ### Install with Helm
           \`\`\`bash
-          helm install [[ .ProviderName ]] \\
-            oci://${REGISTRY}/${{ github.repository_owner }}/charts/[[ .ProviderName ]] \\
+          helm install [[ .ProjectName ]] \\
+            oci://${REGISTRY}/${{ github.repository_owner }}/charts/[[ .ProjectName ]] \\
             --version ${VERSION} -n everest-system
           \`\`\`
           EOF
@@ -110,5 +110,5 @@ jobs:
           append_body: true
           generate_release_notes: true
           prerelease: ${{ contains(steps.version.outputs.version, '-') }}
-          files: release-artifacts/[[ .ProviderName ]]-*.tgz
+          files: release-artifacts/[[ .ProjectName ]]-*.tgz
           fail_on_unmatched_files: true

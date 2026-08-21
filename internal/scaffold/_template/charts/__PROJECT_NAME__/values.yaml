@@ -1,11 +1,11 @@
-# Default values for [[ .ProviderName ]].
+# Default values for [[ .ProjectName ]].
 
 # -- Number of replicas for the provider deployment
 replicaCount: 1
 
 image:
   # -- Container image repository
-  repository: ghcr.io/openeverest/[[ .ProviderName ]]
+  repository: ghcr.io/openeverest/[[ .ProjectName ]]
   # -- Image pull policy
   pullPolicy: IfNotPresent
   # -- Overrides the image tag whose default is the chart appVersion
@@ -116,7 +116,8 @@ tolerations: []
 affinity: {}
 
 provider:
-  # -- The name to register for the Provider custom resource
+  # -- The name to register for the Provider custom resource.
+  # Must match `name` in definition/provider.yaml and common.ProviderName.
   name: [[ .ProviderName ]]
   # -- Short identifier for the provider, used in resource names
   # This appears in preset names (e.g., '<shortName>-replicaset') and can be

@@ -19,7 +19,64 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
+
+func TestDeriveProjectName(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		config        Config
+		wantProvider  string
+		wantProject   string
+		wantShortName string
+	}{
+		"adds the project prefix": {
+			config:        Config{ProviderName: "percona-server-mongodb"},
+			wantProvider:  "percona-server-mongodb",
+			wantProject:   "provider-percona-server-mongodb",
+			wantShortName: "percona-server-mongodb",
+		},
+		"tolerates a name that already carries the prefix": {
+			config:        Config{ProviderName: "provider-mariadb"},
+			wantProvider:  "mariadb",
+			wantProject:   "provider-mariadb",
+			wantShortName: "mariadb",
+		},
+		"strips only one prefix": {
+			config:        Config{ProviderName: "provider-provider-x"},
+			wantProvider:  "provider-x",
+			wantProject:   "provider-provider-x",
+			wantShortName: "provider-x",
+		},
+		"an explicit short name wins": {
+			config:        Config{ProviderName: "percona-server-mongodb", ProviderShortName: "psmdb"},
+			wantProvider:  "percona-server-mongodb",
+			wantProject:   "provider-percona-server-mongodb",
+			wantShortName: "psmdb",
+		},
+		"an explicit project name wins": {
+			config:        Config{ProviderName: "mariadb", ProjectName: "mariadb-provider"},
+			wantProvider:  "mariadb",
+			wantProject:   "mariadb-provider",
+			wantShortName: "mariadb",
+		},
+	}
+
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			config := test.config
+			config.DeriveDefaults()
+
+			assert.Equal(t, test.wantProvider, config.ProviderName)
+			assert.Equal(t, test.wantProject, config.ProjectName)
+			assert.Equal(t, test.wantShortName, config.ProviderShortName)
+		})
+	}
+}
 
 func TestScaffold(t *testing.T) {
 	outputDir := t.TempDir()
@@ -28,7 +85,7 @@ func TestScaffold(t *testing.T) {
 	dest := filepath.Join(outputDir, "provider-test-db")
 
 	cfg := &Config{
-		ProviderName: "provider-test-db",
+		ProviderName: "test-db",
 		ModulePath:   "github.com/example/provider-test-db",
 	}
 
@@ -100,7 +157,7 @@ func TestScaffold(t *testing.T) {
 	if err != nil {
 		t.Fatalf("reading spec.go: %v", err)
 	}
-	if !strings.Contains(string(specContent), "ProviderName = \"provider-test-db\"") {
+	if !strings.Contains(string(specContent), "ProviderName = \"test-db\"") {
 		t.Error("spec.go does not contain expected ProviderName constant")
 	}
 
@@ -145,7 +202,7 @@ func TestScaffold(t *testing.T) {
 	if err != nil {
 		t.Fatalf("reading definition/provider.yaml: %v", err)
 	}
-	if !strings.Contains(string(providerYAML), "name: provider-test-db") {
+	if !strings.Contains(string(providerYAML), "name: test-db") {
 		t.Error("definition/provider.yaml does not contain expected provider name")
 	}
 	if strings.Contains(string(providerYAML), "\n  engine:") {

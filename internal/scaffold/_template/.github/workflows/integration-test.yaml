@@ -32,7 +32,7 @@ permissions:
   contents: read
 
 env:
-  IMG: [[ .ProviderName ]]:ci
+  IMG: [[ .ProjectName ]]:ci
   # Branch of openeverest/openeverest to build the platform from.
   OPENEVEREST_BRANCH: main
 

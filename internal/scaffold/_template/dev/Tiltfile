@@ -1,4 +1,4 @@
-# Tiltfile for developing [[ .ProviderName ]].
+# Tiltfile for developing [[ .ProjectName ]].
 #
 # Installs the latest released OpenEverest v2 core, then builds and deploys this
 # provider with live-reload. You do NOT need a local checkout of the core.
@@ -60,7 +60,7 @@ ui_admin_password = os.getenv('UI_ADMIN_PASSWORD', 'admin')
 # Paths
 # ===========================
 provider_dir = os.path.realpath('{0}/..'.format(config.main_dir))
-chart_dir = '{0}/charts/[[ .ProviderName ]]'.format(provider_dir)
+chart_dir = '{0}/charts/[[ .ProjectName ]]'.format(provider_dir)
 print('Using provider dir: {0}'.format(provider_dir))
 print('Using provider chart dir: {0}'.format(chart_dir))
 
@@ -148,7 +148,7 @@ local_resource(
 # ===========================
 # Provider: image (live update)
 # ===========================
-provider_image = 'ghcr.io/openeverest/[[ .ProviderName ]]:tilt-dev'
+provider_image = 'ghcr.io/openeverest/[[ .ProjectName ]]:tilt-dev'
 docker_build_with_restart(
     provider_image,
     context=provider_dir,
@@ -174,7 +174,7 @@ if install_openeverest:
     provider_resource_deps = provider_resource_deps + ['openeverest']
 
 helm_resource(
-    '[[ .ProviderName ]]',
+    '[[ .ProjectName ]]',
     chart_dir,
     namespace=provider_namespace,
     flags=[
@@ -213,6 +213,6 @@ if enable_minio:
             'minio-s3:backupstorage:{0}'.format(provider_namespace),
         ],
         new_name='backup-storage',
-        resource_deps=['[[ .ProviderName ]]'],
+        resource_deps=['[[ .ProjectName ]]'],
         labels=['backup-storage'],
     )

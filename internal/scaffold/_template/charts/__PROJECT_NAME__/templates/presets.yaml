@@ -6,7 +6,7 @@ kind: InstancePreset
 metadata:
   name: {{ $.Values.provider.shortName }}-{{ $preset.name }}
   labels:
-    {{- include "[[ .ProviderName ]].labels" $ | nindent 4 }}
+    {{- include "[[ .ProjectName ]].labels" $ | nindent 4 }}
     app.kubernetes.io/component: preset
 spec:
   {{- toYaml $preset.spec | nindent 2 }}
