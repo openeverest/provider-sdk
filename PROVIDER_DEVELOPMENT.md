@@ -1613,6 +1613,9 @@ The scaffold includes base RBAC for the provider runtime:
 - Instances, Providers (read/update)
 - Leases (leader election)
 - Events (recording)
+- Secrets — the runtime writes the connection details returned by `Status()`
+  into the Instance's connection Secret. Without it every reconcile that would
+  report `Ready` fails, and the Instance freezes on its last reported phase.
 
 ### Adding Provider-Specific RBAC
 
