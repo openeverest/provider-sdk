@@ -32,8 +32,8 @@ type AddTopologyConfig struct {
 // AddTopology adds a new topology to an existing provider project.
 // It creates definition/topologies/<name>/topology.yaml and types.go.
 func AddTopology(cfg *AddTopologyConfig) error {
-	if err := validateName(cfg.TopologyName); err != nil {
-		return fmt.Errorf("invalid topology name: %w", err)
+	if err := validateIdentifierName(cfg.TopologyName); err != nil {
+		return fmt.Errorf("invalid topology name for Go identifier: %w", err)
 	}
 
 	// Ensure we're in a provider project.

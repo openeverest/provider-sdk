@@ -32,9 +32,10 @@ type AddComponentConfig struct {
 // It updates definition/provider.yaml, definition/versions.yaml,
 // definition/components/types.go, and internal/common/spec.go.
 func AddComponent(cfg *AddComponentConfig) error {
-	if cfg.ComponentName == "" {
-		return fmt.Errorf("component name is required")
+	if err := validateIdentifierName(cfg.ComponentName); err != nil {
+		return fmt.Errorf("invalid component name for Go identifier: %w", err)
 	}
+
 	if cfg.ComponentType == "" {
 		return fmt.Errorf("component type is required")
 	}

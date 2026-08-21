@@ -20,28 +20,50 @@ import (
 	"regexp"
 )
 
-// nameRE matches valid names accepted by the scaffolder. Names follow the
-// DNS-1123 label format used for Kubernetes resource names, with one added
-// restriction: they cannot start with a digit, because the name is also used
-// to derive Go identifiers (package and type names). A name must be lowercase,
-// start with a letter, end with an alphanumeric character, and contain only
-// letters, digits, and hyphens. Hyphens are stripped when deriving Go package
-// names.
-var nameRE = regexp.MustCompile(`^[a-z]([-a-z0-9]*[a-z0-9])?$`)
+// resourceNameRE matches names in the DNS-1123 label format used for
+// Kubernetes resource names. A name must be 1-63 characters, start and end
+// with a lowercase alphanumeric character, and contain only lowercase
+// alphanumeric characters and hyphens.
+var resourceNameRE = regexp.MustCompile(`^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$`)
 
-// validateName rejects names that are unusable as a Kubernetes resource name
-// or Go identifier.
-func validateName(name string) error {
+// identifierNameRE matches valid Go identifiers. They cannot start with a
+// digit, and contain only letters, digits, and underscores.
+var identifierNameRE = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`)
+
+// validateResourceName applies to names that become Kubernetes object names or
+// keys addressed as such: secrets, configmaps, backup classes.
+func validateResourceName(name string) error {
 	if name == "" {
 		return fmt.Errorf("name is required")
 	}
 
-	if !nameRE.MatchString(name) {
-		return fmt.Errorf("invalid name %q: must be lower alphanumeric or '-', start with a letter, and end with an alphanumeric character", name)
+	if !resourceNameRE.MatchString(name) {
+		return fmt.Errorf(
+			"invalid name %q: must be 1-63 characters, contain only lowercase alphanumeric or '-', and start and end with an alphanumeric",
+			name,
+		)
 	}
 
-	if token.IsKeyword(name) {
-		return fmt.Errorf("invalid name %q: must not be a Go keyword", name)
+	return nil
+}
+
+// validateIdentifierName applies to names that only have to yield a Go
+// identifier: topologies and components. The name is converted to PascalCase
+// before checking against the Go identifier regex, and normalized to a
+// lowercase, symbol-free identifier before checking against Go keywords.
+func validateIdentifierName(name string) error {
+	if name == "" {
+		return fmt.Errorf("name is required")
+	}
+
+	pascal := toPascalCase(name)
+	if !identifierNameRE.MatchString(pascal) {
+		return fmt.Errorf("invalid name %q: %q is not a valid Go identifier", name, pascal)
+	}
+
+	ident := toGoIdent(name)
+	if token.IsKeyword(ident) {
+		return fmt.Errorf("invalid name %q: %q is a Go keyword", name, ident)
 	}
 
 	return nil

@@ -30,8 +30,12 @@ type AddConfigMapConfig struct {
 // AddConfigMap creates definition/configmaps/<name>/{definition.yaml, ui.yaml,
 // types.go} in the current provider project.
 func AddConfigMap(cfg *AddConfigMapConfig) error {
-	if err := validateName(cfg.Name); err != nil {
-		return fmt.Errorf("invalid configmap name: %w", err)
+	if err := validateResourceName(cfg.Name); err != nil {
+		return fmt.Errorf("invalid configmap name for Kubernetes resource: %w", err)
+	}
+
+	if err := validateIdentifierName(cfg.Name); err != nil {
+		return fmt.Errorf("invalid configmap name for Go identifier: %w", err)
 	}
 
 	if _, err := os.Stat("definition/provider.yaml"); err != nil {

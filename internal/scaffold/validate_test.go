@@ -15,13 +15,71 @@
 package scaffold
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-func TestValidateName(t *testing.T) {
+func TestValidateResourceName(t *testing.T) {
+	tests := map[string]struct {
+		input string
+		err   string
+	}{
+		"empty": {
+			input: "",
+			err:   "name is required",
+		},
+		"simple": {
+			input: "credentials",
+		},
+		"with digit": {
+			input: "2fa",
+		},
+		"with hyphen": {
+			input: "app-config",
+		},
+		"mixed case": {
+			input: "replicaSet",
+			err:   `invalid name "replicaSet"`,
+		},
+		"trailing hyphen": {
+			input: "config-",
+			err:   `invalid name "config-"`,
+		},
+		"leading hyphen": {
+			input: "-config",
+			err:   `invalid name "-config"`,
+		},
+		"dot": {
+			input: "../../escaped",
+			err:   `invalid name "../../escaped"`,
+		},
+		"max length": {
+			input: strings.Repeat("a", 63),
+		},
+		"too long": {
+			input: strings.Repeat("a", 64),
+			err:   `invalid name`,
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			err := validateResourceName(tt.input)
+			if tt.err == "" {
+				require.NoError(t, err)
+				return
+			}
+
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), tt.err)
+		})
+	}
+}
+
+func TestValidateIdentifierName(t *testing.T) {
 	tests := map[string]struct {
 		input string
 		err   string
@@ -47,16 +105,7 @@ func TestValidateName(t *testing.T) {
 			input: "app-config",
 		},
 		"mixed case": {
-			input: "PerconaBackupMongoDB",
-			err:   `invalid name "PerconaBackupMongoDB"`,
-		},
-		"trailing hyphen": {
-			input: "config-",
-			err:   `invalid name "config-"`,
-		},
-		"leading hyphen": {
-			input: "-config",
-			err:   `invalid name "-config"`,
+			input: "replicaSet",
 		},
 		"dot": {
 			input: "../../escaped",
@@ -64,13 +113,13 @@ func TestValidateName(t *testing.T) {
 		},
 		"reserved Go keyword": {
 			input: "import",
-			err:   `invalid name "import": must not be a Go keyword`,
+			err:   `invalid name "import": "import" is a Go keyword`,
 		},
 	}
 
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
-			err := validateName(tt.input)
+			err := validateIdentifierName(tt.input)
 			if tt.err == "" {
 				require.NoError(t, err)
 				return

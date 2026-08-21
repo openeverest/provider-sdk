@@ -30,8 +30,12 @@ type AddSecretConfig struct {
 // AddSecret creates definition/secrets/<name>/{definition.yaml, ui.yaml,
 // types.go} in the current provider project.
 func AddSecret(cfg *AddSecretConfig) error {
-	if err := validateName(cfg.Name); err != nil {
-		return fmt.Errorf("invalid secret name: %w", err)
+	if err := validateResourceName(cfg.Name); err != nil {
+		return fmt.Errorf("invalid secret name for Kubernetes resource: %w", err)
+	}
+
+	if err := validateIdentifierName(cfg.Name); err != nil {
+		return fmt.Errorf("invalid secret name for Go identifier: %w", err)
 	}
 
 	if _, err := os.Stat("definition/provider.yaml"); err != nil {

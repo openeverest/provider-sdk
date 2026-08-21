@@ -37,8 +37,12 @@ type AddBackupClassConfig struct {
 // AddBackupClass creates definition/backupclasses/<name>/{class.yaml, ui.yaml,
 // types.go} in the current provider project.
 func AddBackupClass(cfg *AddBackupClassConfig) error {
-	if err := validateName(cfg.Name); err != nil {
-		return fmt.Errorf("invalid backup class name: %w", err)
+	if err := validateResourceName(cfg.Name); err != nil {
+		return fmt.Errorf("invalid backup class name for Kubernetes resource: %w", err)
+	}
+
+	if err := validateIdentifierName(cfg.Name); err != nil {
+		return fmt.Errorf("invalid backup class name for Go identifier: %w", err)
 	}
 
 	if cfg.ExecutionMode == "" {
