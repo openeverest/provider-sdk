@@ -20,11 +20,10 @@ import (
 	"regexp"
 )
 
-// resourceNameRE matches names in the DNS-1123 label format used for
-// Kubernetes resource names. A name must be 1-63 characters, start and end
-// with a lowercase alphanumeric character, and contain only lowercase
-// alphanumeric characters and hyphens.
-var resourceNameRE = regexp.MustCompile(`^[a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?$`)
+// resourceNameRE matches names in the RFC-1123 label format used for
+// Kubernetes resource names.
+// https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#rfc-1035-label-names
+var resourceNameRE = regexp.MustCompile(`^[a-z]([-a-z0-9]{0,61}[a-z0-9])?$`)
 
 // identifierNameRE matches valid Go identifiers. They cannot start with a
 // digit, and contain only letters, digits, and underscores.
@@ -39,7 +38,7 @@ func validateResourceName(name string) error {
 
 	if !resourceNameRE.MatchString(name) {
 		return fmt.Errorf(
-			"invalid name %q: must be 1-63 characters, contain only lowercase alphanumeric or '-', and start and end with an alphanumeric",
+			"invalid name %q: must be 1-63 characters, contain only lowercase alphanumeric or '-', and start with an alphabetic and end with an alphanumeric",
 			name,
 		)
 	}

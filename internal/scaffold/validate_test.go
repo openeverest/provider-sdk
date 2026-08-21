@@ -35,7 +35,11 @@ func TestValidateResourceName(t *testing.T) {
 			input: "credentials",
 		},
 		"with digit": {
+			input: "config1",
+		},
+		"leading digit": {
 			input: "2fa",
+			err:   `invalid name "2fa"`,
 		},
 		"with hyphen": {
 			input: "app-config",
