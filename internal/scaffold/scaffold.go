@@ -44,14 +44,25 @@ var templateFS embed.FS
 
 const templateRoot = "_template"
 
+// projectPrefix distinguishes the project name from the provider name.
+const projectPrefix = "provider-"
+
 // Config holds the configuration for scaffolding a new provider project.
 type Config struct {
-	// ProviderName is the name of the provider (e.g., "provider-percona-server-mongodb").
+	// ProviderName is the name of the provider (e.g., "percona-server-mongodb"):
+	// the name of the Provider CR this project ships, and the value users put in
+	// spec.providerRef.name on an Instance.
 	ProviderName string
+
+	// ProjectName names the artifacts built around the provider: the repository,
+	// the Helm chart, the container image and the provider's own workload
+	// (e.g., "provider-percona-server-mongodb").
+	// If empty, it is derived from ProviderName.
+	ProjectName string
 
 	// ProviderShortName is a short identifier for the provider (e.g., "psmdb" for "percona-server-mongodb").
 	// Used in resource names where a short concise provider identifier is needed.
-	// If empty, it is derived from ProviderName by removing the "provider-" prefix.
+	// If empty, it defaults to ProviderName.
 	ProviderShortName string
 
 	// ModulePath is the Go module path (e.g., "github.com/openeverest/provider-percona-server-mongodb").
@@ -79,7 +90,7 @@ type Config struct {
 	TopologyName string
 
 	// GoPackage is the Go package name for the root package.
-	// If empty, it is derived from ProviderName by stripping hyphens and lowercasing.
+	// If empty, it is derived from ProjectName by stripping hyphens and lowercasing.
 	GoPackage string
 
 	// TopologyPackage is the Go package name for the topology (e.g., "standalone", "replicaset").
@@ -109,11 +120,18 @@ func (c *Config) Validate() error {
 
 // DeriveDefaults fills in optional fields from required ones.
 func (c *Config) DeriveDefaults() {
+	// Users think in repository names, which differ from the provider name by
+	// exactly this prefix.
+	c.ProviderName = strings.TrimPrefix(c.ProviderName, projectPrefix)
+
+	if c.ProjectName == "" && c.ProviderName != "" {
+		c.ProjectName = projectPrefix + c.ProviderName
+	}
 	if c.GoPackage == "" {
-		c.GoPackage = strings.ToLower(strings.ReplaceAll(c.ProviderName, "-", ""))
+		c.GoPackage = strings.ToLower(strings.ReplaceAll(c.ProjectName, "-", ""))
 	}
 	if c.ProviderShortName == "" {
-		c.ProviderShortName = strings.TrimPrefix(c.ProviderName, "provider-")
+		c.ProviderShortName = c.ProviderName
 	}
 	// TopologyName intentionally left empty when not provided — the topology
 	// template directory is skipped during scaffolding in that case.
@@ -163,14 +181,14 @@ func toPascalCase(s string) string {
 	return strings.Join(parts, "")
 }
 
-// pathReplacer returns a Replacer that substitutes provider-name placeholder
-// tokens in file-system path segments (directory and file names).
+// pathReplacer returns a Replacer that substitutes placeholder tokens in
+// file-system path segments (directory and file names).
 //
-// Only ProviderName is used in path segments; all other values are substituted
-// inside file contents via the Go template engine.
+// Only ProjectName and TopologyName are used in path segments; all other
+// values are substituted inside file contents via the Go template engine.
 func (c *Config) pathReplacer() *strings.Replacer {
 	return strings.NewReplacer(
-		"__PROVIDER_NAME__", c.ProviderName,
+		"__PROJECT_NAME__", c.ProjectName,
 		"__TOPOLOGY_NAME__", c.TopologyName,
 	)
 }
@@ -220,7 +238,7 @@ func Scaffold(cfg *Config, outputDir string) error {
 		relPath = applyRenames(relPath)
 
 		// Substitute the provider-name token in path segments
-		// (e.g., charts/__PROVIDER_NAME__/ → charts/provider-foo/).
+		// (e.g., charts/__PROJECT_NAME__/ → charts/provider-foo/).
 		outPath := pathReplacer.Replace(relPath)
 		destPath := filepath.Join(outputDir, outPath)
 

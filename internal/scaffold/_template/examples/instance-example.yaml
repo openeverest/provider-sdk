@@ -1,4 +1,4 @@
-# Example Instance CR for the [[ .ProviderName ]] provider.
+# Example Instance CR for the [[ .ProjectName ]] provider.
 # Apply this to your cluster to create a database instance.
 #
 # Prerequisites:

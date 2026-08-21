@@ -134,7 +134,7 @@ scaffold a new provider project using the `provider-sdk init` command.
 
 ```bash
 provider-sdk init \
-  --name provider-my-database \
+  --name my-database \
   --module github.com/my-org/provider-my-database
 ```
 
@@ -148,12 +148,41 @@ provider-sdk init
 
 | Flag | Description | Default |
 |------|-------------|---------|
-| `--name` | Provider name (e.g., `provider-my-database`) | — (required) |
+| `--name` | Provider name (e.g., `my-database`) | — (required) |
 | `--module` | Go module path (e.g., `github.com/my-org/provider-my-database`) | — (required) |
 | `--api-group` | Operator API group (optional, used as RBAC hint) | — |
 | `--resource` | Operator resource, plural (optional, used as RBAC hint) | — |
-| `--output-dir`, `-o` | Output directory | `./<name>` |
+| `--output-dir`, `-o` | Output directory | `./provider-<name>` |
 | `--non-interactive` | Fail instead of prompting for missing values | `false` |
+
+### The Provider Name and the Project Name
+
+A provider has two names, and scaffolding derives the second from the first.
+
+`--name` is the **provider** — the technology, `my-database`. It names the
+`Provider` CR, and it is what users write on an Instance:
+
+```yaml
+spec:
+  providerRef:
+    name: my-database
+```
+
+The **project** is `provider-my-database`. It names the repository, the Helm
+chart, the container image and the provider's own Deployment — everything built
+*around* the provider, as opposed to the provider itself. Either form of
+`--name` is accepted, since the two differ by exactly that prefix.
+
+The provider name appears in three files, which must always agree:
+
+| Where | Value |
+|-------|-------|
+| `definition/provider.yaml` → `name` | `my-database` |
+| `internal/common/spec.go` → `ProviderName` | `my-database` |
+| `charts/provider-my-database/values.yaml` → `provider.name` | `my-database` |
+
+The runtime looks its own `Provider` CR up by `common.ProviderName`, so if they
+disagree the provider silently reconciles nothing.
 
 ---
 
@@ -178,7 +207,8 @@ provider-sdk add component --name configServer --type mongod
 Edit `definition/provider.yaml`:
 
 ```yaml
-name: my-provider
+# The name of the Provider CR. See Step 1.
+name: my-database
 
 components:
   engine:
@@ -2025,7 +2055,7 @@ Scaffold a new provider project.
 
 ```bash
 provider-sdk init \
-  --name provider-my-database \
+  --name my-database \
   --module github.com/my-org/provider-my-database
 ```
 

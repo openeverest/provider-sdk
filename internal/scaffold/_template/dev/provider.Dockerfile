@@ -1,4 +1,4 @@
-# Dev container image for [[ .ProviderName ]].
+# Dev container image for [[ .ProjectName ]].
 #
 # The `dev` stage is used by the Tilt dev workflow (dev/Tiltfile). It expects a
 # pre-built `bin/provider` binary in the build context and supports live

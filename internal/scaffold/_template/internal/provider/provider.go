@@ -15,7 +15,7 @@ import (
 // Compile-time check that Provider implements the required interface.
 var _ controller.ProviderInterface = (*Provider)(nil)
 
-// Provider implements controller.ProviderInterface for the [[ .ProviderName ]] provider.
+// Provider implements controller.ProviderInterface for the [[ .ProjectName ]] provider.
 type Provider struct {
 	controller.BaseProvider
 }
