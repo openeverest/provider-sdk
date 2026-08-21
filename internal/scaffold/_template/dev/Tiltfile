@@ -36,8 +36,14 @@ if os.path.exists(local_env_file):
 # the core from source in a separate Tilt instance.
 install_openeverest = str2bool(os.getenv('INSTALL_OPENEVEREST', 'true'))
 
-# Released OpenEverest core version to install. Empty means latest.
-openeverest_version = os.getenv('OPENEVEREST_VERSION', '')
+# Released OpenEverest core version to install.
+#
+# Defaults to a constraint rather than "latest", because v2 currently ships
+# only as pre-releases (2.0.0-dev.N) and Helm's default resolution skips those
+# — it would install v1, whose CRDs a v2 provider cannot use. An explicit
+# constraint with a `-0` lower bound matches pre-releases, so this tracks the
+# newest v2 and keeps working once 2.0.0 is generally available.
+openeverest_version = os.getenv('OPENEVEREST_VERSION', '>=2.0.0-0 <3.0.0')
 
 # Helm repository that hosts the OpenEverest core chart.
 openeverest_helm_repo = os.getenv(
