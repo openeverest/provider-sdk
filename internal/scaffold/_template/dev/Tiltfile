@@ -151,11 +151,14 @@ local_resource(
 provider_image = 'ghcr.io/openeverest/[[ .ProjectName ]]:tilt-dev'
 docker_build_with_restart(
     provider_image,
-    context=provider_dir,
+    # bin/ is the context, not the repository root: the dev image needs exactly
+    # one file, and a repo-root context would force .dockerignore to admit the
+    # binary for every build, including the production one.
+    context='{0}/bin'.format(provider_dir),
     dockerfile='{0}/dev/provider.Dockerfile'.format(provider_dir),
     target='dev',
     entrypoint=['/home/provider/provider'],
-    only=['bin/provider'],
+    only=['provider'],
     live_update=[
         sync('{0}/bin/provider'.format(provider_dir), '/home/provider/provider'),
     ],
