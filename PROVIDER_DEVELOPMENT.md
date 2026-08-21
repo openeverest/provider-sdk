@@ -1613,6 +1613,7 @@ The scaffold includes base RBAC for the provider runtime:
 - Instances, Providers (read/update)
 - Leases (leader election)
 - Events (recording)
+- Secrets (read/write, for `reconcileConnectionSecret`)
 
 ### Adding Provider-Specific RBAC
 
