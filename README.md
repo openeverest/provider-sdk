@@ -94,12 +94,17 @@ provider-sdk add backup                      # Adds backup.go
 provider-sdk add backupclass --name my-backup-class
 
 # 6. If added: implement backup logic in internal/provider/backup.go + backup_mirror.go
-# 7. Add RBAC markers in internal/provider/rbac.go
 
-# 8. Generate all manifests
+# 7. Optionally add secret and configmap type definitions
+provider-sdk add secret --name my-secret
+provider-sdk add configmap --name my-config
+
+# 8. Add RBAC markers in internal/provider/rbac.go
+
+# 9. Generate all manifests
 make generate
 
-# 9. Run locally against a cluster
+# 10. Run locally against a cluster
 make run
 ```
 
@@ -129,7 +134,9 @@ provider-sdk/
 │   ├── add_component.go            # add component subcommand
 │   ├── add_topology.go             # add topology subcommand
 │   ├── add_backup.go               # add backup subcommand
-│   └── add_backupclass.go          # add backupclass subcommand
+│   ├── add_backupclass.go          # add backupclass subcommand
+│   ├── add_secret.go               # add secret subcommand
+│   └── add_configmap.go            # add configmap subcommand
 ├── internal/
 │   ├── scaffold/                   # Scaffolding engine + embedded template
 │   │   ├── scaffold.go
@@ -138,12 +145,20 @@ provider-sdk/
 │   │   ├── add_topology.go
 │   │   ├── add_backup.go
 │   │   ├── add_backupclass.go
+│   │   ├── add_configmap.go
+│   │   ├── add_secret.go
+│   │   ├── add_secret_configmap_test.go
+│   │   ├── validate.go
+│   │   ├── validate_test.go
 │   │   └── _template/             # Template files (embedded in binary)
 │   ├── generate/                   # Provider CR spec generator
 │   │   ├── generate.go
 │   │   ├── assemble.go
 │   │   ├── backupclasses.go
-│   │   └── schema.go
+│   │   ├── configmaps.go
+│   │   ├── schema.go
+│   │   ├── secrets.go
+│   │   └── secrets_configmaps_test.go
 │   └── tui/                        # Terminal UI helpers
 │       ├── multiselect.go
 │       └── prompt.go

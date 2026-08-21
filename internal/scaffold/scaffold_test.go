@@ -34,13 +34,12 @@ func TestScaffold(t *testing.T) {
 		ModulePath:   "github.com/example/provider-test-db",
 	}
 
-	if err := Scaffold(cfg, dest); err != nil {
-		t.Fatalf("Scaffold() error: %v", err)
-	}
+	err := Scaffold(cfg, dest)
+	require.NoError(t, err)
 
 	// Verify go.mod was created (renamed from go.mod.tmpl).
 	goMod := filepath.Join(dest, "go.mod")
-	_, err := os.Stat(goMod)
+	_, err = os.Stat(goMod)
 	assert.NoError(t, err, "go.mod not found")
 
 	// Verify go.mod.tmpl does NOT exist.
@@ -208,13 +207,12 @@ func TestScaffoldCustomTopologyName(t *testing.T) {
 		TopologyName: "replicaSet",
 	}
 
-	if err := Scaffold(cfg, dest); err != nil {
-		t.Fatalf("Scaffold() error: %v", err)
-	}
+	err := Scaffold(cfg, dest)
+	require.NoError(t, err)
 
 	// Verify the custom topology directory was created.
 	topoDir := filepath.Join(dest, "definition", "topologies", "replicaSet")
-	_, err := os.Stat(topoDir)
+	_, err = os.Stat(topoDir)
 	assert.NoError(t, err, "custom topology directory not created")
 
 	// Verify the default standalone does NOT exist.
