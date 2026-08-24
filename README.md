@@ -20,7 +20,7 @@ go run github.com/openeverest/provider-sdk@latest init
 
 ```bash
 provider-sdk init \
-  --name provider-my-database \
+  --name my-database \
   --module github.com/my-org/provider-my-database
 ```
 

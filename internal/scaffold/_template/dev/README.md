@@ -1,7 +1,7 @@
 # Provider development with Tilt
 
 This directory contains a [Tilt](https://tilt.dev/) setup for developing
-`[[ .ProviderName ]]`. It installs the latest released OpenEverest v2 core and
+`[[ .ProjectName ]]`. It installs the latest released OpenEverest v2 core and
 then builds and deploys this provider, with live-reload on every code change.
 
 You do **not** need a local checkout of the OpenEverest core.

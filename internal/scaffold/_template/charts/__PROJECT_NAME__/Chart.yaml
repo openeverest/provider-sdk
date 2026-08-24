@@ -1,6 +1,6 @@
 apiVersion: v2
-name: [[ .ProviderName ]]
-description: A Helm chart for deploying the OpenEverest [[ .ProviderName ]] provider
+name: [[ .ProjectName ]]
+description: A Helm chart for deploying the OpenEverest [[ .ProjectName ]] provider
 type: application
 version: 0.1.0
 appVersion: "0.1.0"
@@ -8,9 +8,9 @@ keywords:
   - openeverest
   - provider
   - database
-home: https://github.com/openeverest/[[ .ProviderName ]]
+home: https://github.com/openeverest/[[ .ProjectName ]]
 sources:
-  - https://github.com/openeverest/[[ .ProviderName ]]
+  - https://github.com/openeverest/[[ .ProjectName ]]
 maintainers:
   - name: OpenEverest Contributors
 # TODO: If your provider depends on an operator Helm chart, add it here.

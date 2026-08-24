@@ -1,4 +1,4 @@
-// package main implements the [[ .ProviderName ]] provider.
+// package main implements the [[ .ProjectName ]] provider.
 package main
 
 import (

@@ -2,7 +2,7 @@ HELM ?= helm
 
 # values to override
 IMAGE_PREFIX ?= ghcr.io/openeverest
-PROVIDER_IMAGE_NAME ?= [[ .ProviderName ]]
+PROVIDER_IMAGE_NAME ?= [[ .ProjectName ]]
 VERSION ?= 0.1.0
 CHART_VERSION ?= $(VERSION)
 

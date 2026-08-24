@@ -23,6 +23,61 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestDeriveProjectName(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		config        Config
+		wantProvider  string
+		wantProject   string
+		wantShortName string
+	}{
+		"adds the project prefix": {
+			config:        Config{ProviderName: "percona-server-mongodb"},
+			wantProvider:  "percona-server-mongodb",
+			wantProject:   "provider-percona-server-mongodb",
+			wantShortName: "percona-server-mongodb",
+		},
+		"tolerates a name that already carries the prefix": {
+			config:        Config{ProviderName: "provider-mariadb"},
+			wantProvider:  "mariadb",
+			wantProject:   "provider-mariadb",
+			wantShortName: "mariadb",
+		},
+		"strips only one prefix": {
+			config:        Config{ProviderName: "provider-provider-x"},
+			wantProvider:  "provider-x",
+			wantProject:   "provider-provider-x",
+			wantShortName: "provider-x",
+		},
+		"an explicit short name wins": {
+			config:        Config{ProviderName: "percona-server-mongodb", ProviderShortName: "psmdb"},
+			wantProvider:  "percona-server-mongodb",
+			wantProject:   "provider-percona-server-mongodb",
+			wantShortName: "psmdb",
+		},
+		"an explicit project name wins": {
+			config:        Config{ProviderName: "mariadb", ProjectName: "mariadb-provider"},
+			wantProvider:  "mariadb",
+			wantProject:   "mariadb-provider",
+			wantShortName: "mariadb",
+		},
+	}
+
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			config := test.config
+			config.DeriveDefaults()
+
+			assert.Equal(t, test.wantProvider, config.ProviderName)
+			assert.Equal(t, test.wantProject, config.ProjectName)
+			assert.Equal(t, test.wantShortName, config.ProviderShortName)
+		})
+	}
+}
+
 func TestScaffold(t *testing.T) {
 	outputDir := t.TempDir()
 	// TempDir creates the dir, but Scaffold expects it not to exist.
@@ -30,7 +85,7 @@ func TestScaffold(t *testing.T) {
 	dest := filepath.Join(outputDir, "provider-test-db")
 
 	cfg := &Config{
-		ProviderName: "provider-test-db",
+		ProviderName: "test-db",
 		ModulePath:   "github.com/example/provider-test-db",
 	}
 
@@ -86,7 +141,7 @@ func TestScaffold(t *testing.T) {
 	specFile := filepath.Join(dest, "internal", "common", "spec.go")
 	specContent, err := os.ReadFile(specFile)
 	require.NoError(t, err)
-	assert.Contains(t, string(specContent), "ProviderName = \"provider-test-db\"")
+	assert.Contains(t, string(specContent), "ProviderName = \"test-db\"")
 
 	// Verify derived GoPackage was substituted.
 	genFile := filepath.Join(dest, "gen.go")
@@ -116,7 +171,7 @@ func TestScaffold(t *testing.T) {
 	// Verify definition/provider.yaml has correct provider name and empty components.
 	providerYAML, err := os.ReadFile(filepath.Join(dest, "definition", "provider.yaml"))
 	require.NoError(t, err)
-	assert.Contains(t, string(providerYAML), "name: provider-test-db")
+	assert.Contains(t, string(providerYAML), "name: test-db")
 	assert.NotContains(t, string(providerYAML), "\n  engine:", "definition/provider.yaml should not have a hardcoded engine component")
 	assert.Contains(t, string(providerYAML), "components: {}", "definition/provider.yaml should have an empty components map")
 
