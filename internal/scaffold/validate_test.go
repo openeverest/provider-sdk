@@ -83,21 +83,21 @@ func TestValidateResourceName(t *testing.T) {
 	}
 }
 
-func TestValidateIdentifierName(t *testing.T) {
+func TestValidateIdentifier(t *testing.T) {
 	tests := map[string]struct {
 		input string
 		err   string
 	}{
 		"empty": {
 			input: "",
-			err:   "name is required",
+			err:   "identifier is required",
 		},
 		"simple": {
 			input: "credentials",
 		},
 		"leading digit": {
 			input: "2fa",
-			err:   `invalid name "2fa"`,
+			err:   `invalid identifier "2fa"`,
 		},
 		"trailing digit": {
 			input: "config1",
@@ -113,17 +113,17 @@ func TestValidateIdentifierName(t *testing.T) {
 		},
 		"dot": {
 			input: "../../escaped",
-			err:   `invalid name "../../escaped"`,
+			err:   `invalid identifier "../../escaped"`,
 		},
 		"reserved Go keyword": {
 			input: "import",
-			err:   `invalid name "import": "import" is a Go keyword`,
+			err:   `invalid identifier "import": "import" is a Go keyword`,
 		},
 	}
 
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
-			err := validateIdentifierName(tt.input)
+			err := validateIdentifier(tt.input)
 			if tt.err == "" {
 				require.NoError(t, err)
 				return

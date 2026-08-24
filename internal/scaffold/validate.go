@@ -46,23 +46,23 @@ func validateResourceName(name string) error {
 	return nil
 }
 
-// validateIdentifierName applies to names that only have to yield a Go
-// identifier: topologies and components. The name is converted to PascalCase
+// validateIdentifier applies to identifiers that only have to yield a Go
+// identifier: topologies and components. The identifier is converted to PascalCase
 // before checking against the Go identifier regex, and normalized to a
 // lowercase, symbol-free identifier before checking against Go keywords.
-func validateIdentifierName(name string) error {
-	if name == "" {
-		return fmt.Errorf("name is required")
+func validateIdentifier(identifier string) error {
+	if identifier == "" {
+		return fmt.Errorf("identifier is required")
 	}
 
-	pascal := toPascalCase(name)
+	pascal := toPascalCase(identifier)
 	if !identifierNameRE.MatchString(pascal) {
-		return fmt.Errorf("invalid name %q: %q is not a valid Go identifier", name, pascal)
+		return fmt.Errorf("invalid identifier %q: %q is not a valid Go identifier", identifier, pascal)
 	}
 
-	ident := toGoIdent(name)
+	ident := toGoIdent(identifier)
 	if token.IsKeyword(ident) {
-		return fmt.Errorf("invalid name %q: %q is a Go keyword", name, ident)
+		return fmt.Errorf("invalid identifier %q: %q is a Go keyword", identifier, ident)
 	}
 
 	return nil

@@ -18,7 +18,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -32,7 +31,7 @@ type AddTopologyConfig struct {
 // AddTopology adds a new topology to an existing provider project.
 // It creates definition/topologies/<name>/topology.yaml and types.go.
 func AddTopology(cfg *AddTopologyConfig) error {
-	if err := validateIdentifierName(cfg.TopologyName); err != nil {
+	if err := validateIdentifier(cfg.TopologyName); err != nil {
 		return fmt.Errorf("invalid topology name for Go identifier: %w", err)
 	}
 
@@ -232,7 +231,7 @@ func createTopologyYAML(topoDir, topoName string, components []string) error {
 
 // createTopologyTypes generates a types.go for the topology.
 func createTopologyTypes(topoDir, topoName string) error {
-	pkgName := strings.ToLower(topoName)
+	pkgName := toGoIdent(topoName)
 	typeName := toPascalCase(topoName) + "TopologyParameters"
 
 	content := fmt.Sprintf(`// Package %s contains parameter types for the %s topology.

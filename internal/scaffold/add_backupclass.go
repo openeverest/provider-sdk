@@ -41,7 +41,7 @@ func AddBackupClass(cfg *AddBackupClassConfig) error {
 		return fmt.Errorf("invalid backup class name for Kubernetes resource: %w", err)
 	}
 
-	if err := validateIdentifierName(cfg.Name); err != nil {
+	if err := validateIdentifier(cfg.Name); err != nil {
 		return fmt.Errorf("invalid backup class name for Go identifier: %w", err)
 	}
 
