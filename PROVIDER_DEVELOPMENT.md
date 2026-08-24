@@ -1185,6 +1185,36 @@ func (p *Provider) Validate(c *controller.Context) error {
 }
 ```
 
+#### Realize it or reject it
+
+Every field in `InstanceSpec` must be either realized or rejected. A field
+the provider silently drops is worse than one it does not support: the API
+accepts the object, the user believes the setting took effect, and nothing
+tells them otherwise. `serviceType: LoadBalancer` quietly downgraded to
+ClusterIP and `schedulingPolicy.tolerations` quietly ignored are the same bug,
+and both are usually discovered during the outage they were meant to prevent.
+
+There are two ways to enforce this, and choosing between them is part of
+designing a field:
+
+- **Declarative** — publish a catalog and let the runtime validate against it:
+  `topology.type` against `spec.topologies`, `version` against the version
+  bundles, `parameters` against `parametersSchema`. Unsupported means
+  undeclared, so rejection is automatic and cannot be forgotten. Prefer this
+  wherever it fits.
+- **Imperative** — for fields with no catalog, reject in `Validate()` with a
+  message naming both the field and the provider, so the user knows where the
+  limitation comes from:
+
+  ```go
+  if engine.SchedulingPolicy != nil && len(engine.SchedulingPolicy.Tolerations) > 0 {
+      return fmt.Errorf("provider %q does not support .schedulingPolicy.tolerations", p.Name())
+  }
+  ```
+
+Fields realized by the runtime rather than the provider — `deletionPolicy`,
+the backup cascade — are out of scope for provider validation.
+
 ### Sync
 
 Create or update operator resources. This is called on every
