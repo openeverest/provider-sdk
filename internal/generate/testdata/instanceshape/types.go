@@ -12,10 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package fakecore mirrors the shape of the core Instance types that UI schema
-// paths address, so path resolution can be exercised without depending on
-// openeverest core or apimachinery.
-package fakecore
+// Package instanceshape is a type universe for exercising UI schema path
+// resolution.
+//
+// It is deliberately not a copy of core's Instance types, and carries no
+// obligation to track them. It exists to cover each Go construct the resolver
+// has to traverse: struct fields addressed by JSON tag, pointers, maps keyed by
+// component or resource name, inlined embedded structs, and the opaque
+// parameters boundary. Add to it when the resolver learns to handle a new
+// construct — not when core changes shape.
+//
+// Coverage against the real core types comes from running generate against the
+// providers, which resolve paths against whichever core version they pin.
+package instanceshape
 
 type InstanceSpec struct {
 	Version    string                   `json:"version,omitempty"`
@@ -30,10 +39,16 @@ type TopologySpec struct {
 }
 
 type ComponentSpec struct {
+	CommonComponentFields `json:",inline"`
+
 	Replicas   *int32                `json:"replicas,omitempty"`
 	Storage    *Storage              `json:"storage,omitempty"`
 	Resources  *ResourceRequirements `json:"resources,omitempty"`
 	Parameters *RawExtension         `json:"parameters,omitempty"`
+}
+
+type CommonComponentFields struct {
+	Image string `json:"image,omitempty"`
 }
 
 type Storage struct {

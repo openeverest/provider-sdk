@@ -254,11 +254,23 @@ func deref(t types.Type) types.Type {
 	}
 }
 
+// fieldByJSONTag finds the field a JSON key addresses, descending into embedded
+// structs whose tag has no name — core inlines those, and their fields are
+// addressable as if they were declared on the outer struct.
 func fieldByJSONTag(s *types.Struct, name string) (*types.Var, bool) {
 	for i := range s.NumFields() {
+		f := s.Field(i)
 		tag, _, _ := strings.Cut(reflect.StructTag(s.Tag(i)).Get("json"), ",")
 		if tag == name {
-			return s.Field(i), true
+			return f, true
+		}
+		if tag != "" || !f.Embedded() {
+			continue
+		}
+		if embedded, ok := deref(f.Type()).Underlying().(*types.Struct); ok {
+			if promoted, found := fieldByJSONTag(embedded, name); found {
+				return promoted, true
+			}
 		}
 	}
 	return nil, false

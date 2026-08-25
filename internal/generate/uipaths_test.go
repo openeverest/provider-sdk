@@ -21,7 +21,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const fakeCorePackage = "./testdata/fakecore"
+const shapePackage = "./testdata/instanceshape"
 
 // configWithPath builds a provider whose "simple" topology declares an engine
 // component and renders a single field at the given path.
@@ -57,6 +57,7 @@ func TestValidateUISchemaPathsResolvable(t *testing.T) {
 	for _, path := range []string{
 		"spec.version",
 		"spec.components.engine.replicas",
+		"spec.components.engine.image",
 		"spec.components.engine.storage.size",
 		"spec.components.engine.resources.limits.cpu",
 		"spec.components.engine.parameters.configuration",
@@ -64,7 +65,7 @@ func TestValidateUISchemaPathsResolvable(t *testing.T) {
 		"status.somethingElse",
 	} {
 		t.Run(path, func(t *testing.T) {
-			issues, err := validateUISchemaPaths(configWithPath(path), []string{fakeCorePackage})
+			issues, err := validateUISchemaPaths(configWithPath(path), []string{shapePackage})
 			require.NoError(t, err)
 			assert.Empty(t, issues)
 		})
@@ -104,7 +105,7 @@ func TestValidateUISchemaPathsRejected(t *testing.T) {
 
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
-			issues, err := validateUISchemaPaths(configWithPath(tt.path), []string{fakeCorePackage})
+			issues, err := validateUISchemaPaths(configWithPath(tt.path), []string{shapePackage})
 			require.NoError(t, err)
 			require.Len(t, issues, 1)
 			assert.Equal(t, "simple", issues[0].Topology)
@@ -121,7 +122,7 @@ func TestValidateUISchemaPathsUndeclaredParametersSchema(t *testing.T) {
 	cfg := configWithPath("spec.components.engine.parameters.configuration")
 	cfg.Components["engine"] = map[string]any{"type": "db"}
 
-	issues, err := validateUISchemaPaths(cfg, []string{fakeCorePackage})
+	issues, err := validateUISchemaPaths(cfg, []string{shapePackage})
 	require.NoError(t, err)
 	require.Len(t, issues, 1)
 	assert.Equal(t,
@@ -151,7 +152,7 @@ func TestValidateUISchemaPathsCELExpressions(t *testing.T) {
 		},
 	})
 
-	issues, err := validateUISchemaPaths(cfg, []string{fakeCorePackage})
+	issues, err := validateUISchemaPaths(cfg, []string{shapePackage})
 	require.NoError(t, err)
 	require.Len(t, issues, 2, "both the plain and the original.-prefixed reference are checked")
 	for _, issue := range issues {
