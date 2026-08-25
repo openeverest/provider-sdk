@@ -55,7 +55,7 @@ func ResolveSchemas(pkgPatterns []string, typeNames []string) (map[string]any, e
 // Each pkgPattern can be a relative path (e.g., "./definition/...") or a full import path.
 func loadPackages(pkgPatterns []string) ([]*packages.Package, error) {
 	cfg := &packages.Config{
-		Mode: packages.NeedName | packages.NeedTypes | packages.NeedImports,
+		Mode: packages.NeedName | packages.NeedTypes | packages.NeedImports | packages.NeedDeps,
 	}
 	var result []*packages.Package
 	for _, pattern := range pkgPatterns {
