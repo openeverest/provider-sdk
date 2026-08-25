@@ -20,9 +20,15 @@ ui:
       components:
         version:
           uiType: select
-          path: spec.components.engine.version
+          path: spec.version
           fieldParams:
             label: Database Version
+            # Options come from the version bundles in versions.yaml, which the
+            # generator copies onto the Provider CR.
+            optionsPath: spec.versions
+            optionsPathConfig:
+              labelPath: name
+              valuePath: name
     resources:
       label: Resources
       description: Configure the resources your new database will have access to.
