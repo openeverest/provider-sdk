@@ -150,7 +150,7 @@ name: test
 components:
   %s:
     type: %s`, tt.name, tt.componentType)
-			assert.YAMLEq(t, string(providerYAML), expected)
+			assert.YAMLEq(t, expected, string(providerYAML))
 		})
 	}
 }

@@ -80,7 +80,7 @@ func TestAddConfigMap(t *testing.T) {
 			expected := fmt.Sprintf(`
 parametersSchema:
   openAPIV3Schema: %s`, tt.expectedSecretType)
-			assert.YAMLEq(t, string(defYAML), expected)
+			assert.YAMLEq(t, expected, string(defYAML))
 
 			// Verify ui.yaml exists.
 			uiFile := filepath.Join(projectDir, "definition", "configmaps", tt.name, "ui.yaml")
