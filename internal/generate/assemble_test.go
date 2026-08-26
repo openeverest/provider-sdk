@@ -51,8 +51,8 @@ func TestBuildTopologySpecSelectsCRFields(t *testing.T) {
 	engine, ok := components["engine"].(map[string]any)
 	require.True(t, ok)
 
-	assert.Equal(t, supportedFields, engine["supportedFields"],
-		"the inline schema is passed through verbatim, nesting included")
+	assert.Equal(t, map[string]any{"openAPIV3Schema": supportedFields}, engine["supportedFields"],
+		"the inline schema is wrapped in the envelope the CR field expects, nesting intact")
 	assert.Contains(t, engine, "optional")
 	assert.NotContains(t, engine, "defaults", "defaults is an authoring aid, not a CR field")
 }

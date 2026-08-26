@@ -200,10 +200,11 @@ func buildTopologySpec(configMap map[string]any, typeRefs map[string]bool) map[s
 					if opt, ok := compMap["optional"]; ok {
 						specComp["optional"] = opt
 					}
-					// Passed through verbatim: it is an inline schema over
-					// ComponentSpec, not a Go type reference to resolve.
+					// Wrapped in the ParametersSchema envelope the CR field
+					// expects, but not resolved: unlike parametersSchema it is an
+					// inline schema over ComponentSpec, not a Go type reference.
 					if sf, ok := compMap["supportedFields"]; ok {
-						specComp["supportedFields"] = sf
+						specComp["supportedFields"] = map[string]any{"openAPIV3Schema": sf}
 					}
 					// Intentionally skip "defaults" and other non-CR fields.
 				}
