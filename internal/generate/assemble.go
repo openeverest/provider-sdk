@@ -179,8 +179,8 @@ func buildComponentsSpec(comps map[string]any, typeRefs map[string]bool) map[str
 }
 
 // buildTopologySpec builds a single topology entry for the Provider CR spec.
-// It extracts only CR-valid fields (optional, parametersSchema) from the topology config,
-// intentionally dropping non-CR fields like "defaults".
+// It extracts only CR-valid fields (optional, supportedFields, parametersSchema)
+// from the topology config, intentionally dropping non-CR fields like "defaults".
 func buildTopologySpec(configMap map[string]any, typeRefs map[string]bool) map[string]any {
 	result := make(map[string]any)
 
@@ -199,6 +199,11 @@ func buildTopologySpec(configMap map[string]any, typeRefs map[string]bool) map[s
 				if compMap, ok := compRaw.(map[string]any); ok {
 					if opt, ok := compMap["optional"]; ok {
 						specComp["optional"] = opt
+					}
+					// Passed through verbatim: it is an inline schema over
+					// ComponentSpec, not a Go type reference to resolve.
+					if sf, ok := compMap["supportedFields"]; ok {
+						specComp["supportedFields"] = sf
 					}
 					// Intentionally skip "defaults" and other non-CR fields.
 				}
