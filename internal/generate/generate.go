@@ -16,9 +16,11 @@ package generate
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -101,10 +103,26 @@ func Run(opts Options) error {
 		}
 	}
 
-	// 3. Build the Provider CR spec map with schemas injected.
+	// 3. Reject UI schema paths that do not address a real Instance field. The
+	//    schemas are copied verbatim into the Provider CR, so emitting an
+	//    unresolvable path publishes a broken form to every cluster.
+	issues, err := ValidateUISchemaPaths(cfg, opts.TypesPackages)
+	if err != nil {
+		return fmt.Errorf("validating UI schema paths: %w", err)
+	}
+	if len(issues) > 0 {
+		var b strings.Builder
+		fmt.Fprintf(&b, "%d UI schema path(s) do not address a real Instance field:", len(issues))
+		for _, issue := range issues {
+			fmt.Fprintf(&b, "\n  - %s", issue)
+		}
+		return errors.New(b.String())
+	}
+
+	// 4. Build the Provider CR spec map with schemas injected.
 	specMap := buildSpecMap(cfg, schemas, secrets, configMaps)
 
-	// 4. Write to chart generated directory.
+	// 5. Write to chart generated directory.
 	outputDir := filepath.Join(opts.ChartDir, "generated")
 	if err := os.MkdirAll(outputDir, 0o755); err != nil {
 		return fmt.Errorf("creating output directory: %w", err)
@@ -129,7 +147,7 @@ func Run(opts Options) error {
 
 	fmt.Fprintf(os.Stderr, "Generated: %s\n", outputFile)
 
-	// 5. Emit BackupClass manifests, one per definition/backupclasses/<name>/.
+	// 6. Emit BackupClass manifests, one per definition/backupclasses/<name>/.
 	if len(backupClasses) > 0 {
 		bcOutDir := filepath.Join(opts.ChartDir, "generated", "backupclasses")
 		if err := writeBackupClassManifests(bcOutDir, backupClasses, schemas); err != nil {

@@ -30,146 +30,44 @@ Or run interactively (you will be prompted for each value):
 provider-sdk init
 ```
 
-## Generated Structure
+## Documentation
 
-```
-provider-my-database/
-├── README.md                         # Standard provider README (see below)
-├── PROVIDER_DEVELOPMENT.md           # Complete development guide
-├── cmd/provider/main.go              # Entry point
-├── internal/
-│   ├── provider/
-│   │   ├── provider.go               # ProviderInterface implementation stubs
-│   │   └── rbac.go                   # Kubebuilder RBAC markers
-│   └── common/
-│       └── spec.go                   # Component name/type constants
-├── definition/
-│   ├── provider.yaml                 # Provider name + component→type mapping
-│   ├── versions.yaml                 # Component type version/image catalog
-│   ├── types.go                      # Shared Go types
-│   ├── components/
-│   │   └── types.go                  # Component custom spec types
-│   └── topologies/
-│       └── <topology>/
-│           ├── topology.yaml         # Topology config + UI schema
-│           └── types.go              # Topology config types
-├── gen.go                            # go:generate directive
-├── config/rbac/role.yaml             # Generated ClusterRole
-├── charts/provider-my-database/      # Helm chart
-│   ├── Chart.yaml
-│   ├── values.yaml
-│   ├── Makefile                      # Chart version/image stamping + deps
-│   ├── generated/
-│   │   ├── provider-spec.yaml        # Generated from definition/
-│   │   └── rbac-rules.yaml           # Generated from RBAC markers
-│   └── templates/
-├── test/integration/                 # chainsaw integration test skeleton
-├── dev/k3d_config.yaml               # Local k3d cluster config
-├── examples/                         # Example Instance CRs
-├── .github/workflows/                # CI/CD: build, test, publish, release, oci-release
-├── Makefile
-├── Dockerfile
-└── go.mod
-```
+| | |
+|---|---|
+| **[Tutorial](TUTORIAL.md)** | **Start here.** Build a working provider end to end, in about an hour. |
+| [Provider development guide](PROVIDER_DEVELOPMENT.md) | Reference for everything: components, versions, topologies, the UI schema, the provider interface, RBAC, backups, releasing. |
+| [provider-example](https://github.com/openeverest/provider-example) | The smallest complete provider, commented to be read. |
+| [provider-percona-server-mongodb](https://github.com/openeverest/provider-percona-server-mongodb) | A production provider, for when you need to see the real thing. |
 
-## After Scaffolding
+## Commands
 
-Read [PROVIDER_DEVELOPMENT.md](PROVIDER_DEVELOPMENT.md).
+| Command | Purpose |
+|---|---|
+| `provider-sdk init` | Scaffold a new provider project |
+| `provider-sdk add component` | Add a component and its type |
+| `provider-sdk add topology` | Add a deployment topology |
+| `provider-sdk add backup` | Add backup and restore implementation stubs |
+| `provider-sdk add backupclass` | Add a BackupClass definition |
+| `provider-sdk generate` | Build the Provider CR spec from `definition/` |
+
+Each command prints its own flags with `--help`. `generate` is normally invoked through
+`go generate ./...` or `make generate` rather than by hand.
+
+## Working on the SDK itself
 
 ```bash
-cd provider-my-database
-
-# 1. Add your operator Go dependency
-go get your-operator-module@latest
-go mod tidy
-
-# 2. Add components and topologies
-provider-sdk add component --name mydb --type mydb
-provider-sdk add topology --name standalone
-
-# 3. Configure versions in definition/versions.yaml
-# 4. Implement provider logic in internal/provider/provider.go
-# 5. Optionally add backup and restore support (only if your operator supports backups)
-provider-sdk add backup                      # Adds backup.go
-provider-sdk add backupclass --name my-backup-class
-
-# 6. If added: implement backup logic in internal/provider/backup.go + backup_mirror.go
-
-# 7. Optionally add secret and configmap type definitions
-provider-sdk add secret --name my-secret
-provider-sdk add configmap --name my-config
-
-# 8. Add RBAC markers in internal/provider/rbac.go
-
-# 9. Generate all manifests
-make generate
-
-# 10. Run locally against a cluster
-make run
+make build   # build to ./bin/provider-sdk
+make test    # run unit tests
 ```
 
-## Provider README template
+The scaffolding engine lives in `internal/scaffold/`, with the project template it emits under
+`internal/scaffold/_template/` (embedded into the binary; the leading underscore keeps the Go
+toolchain from compiling it). The Provider CR generator lives in `internal/generate/`.
 
 [`internal/scaffold/_template/README.md`](internal/scaffold/_template/README.md) is the
-standard README for every OpenEverest provider. It is the canonical source: iterate on it
-here, then apply it to the existing provider repositories.
-
-It is written for three audiences in order — platform users, operators, contributors — and
-leads with the fact that a provider is not standalone (it requires an OpenEverest
-installation). Sections marked `<!-- TODO(provider): ... -->` must be filled in per provider.
-The *Capabilities* tables deliberately reuse the same wording everywhere so providers stay
-comparable; rows that make no sense for a given technology are deleted rather than marked
-unsupported.
-
-## Repository Structure
-
-```
-provider-sdk/
-├── main.go                         # Entry point
-├── cmd/
-│   ├── root.go                     # Root command
-│   ├── init.go                     # init subcommand
-│   ├── generate.go                 # generate subcommand
-│   ├── add.go                      # add parent command
-│   ├── add_component.go            # add component subcommand
-│   ├── add_topology.go             # add topology subcommand
-│   ├── add_backup.go               # add backup subcommand
-│   ├── add_backupclass.go          # add backupclass subcommand
-│   ├── add_secret.go               # add secret subcommand
-│   └── add_configmap.go            # add configmap subcommand
-├── internal/
-│   ├── scaffold/                   # Scaffolding engine + embedded template
-│   │   ├── scaffold.go
-│   │   ├── scaffold_test.go
-│   │   ├── add_component.go
-│   │   ├── add_topology.go
-│   │   ├── add_backup.go
-│   │   ├── add_backupclass.go
-│   │   ├── add_configmap.go
-│   │   ├── add_secret.go
-│   │   ├── add_secret_configmap_test.go
-│   │   ├── validate.go
-│   │   ├── validate_test.go
-│   │   └── _template/             # Template files (embedded in binary)
-│   ├── generate/                   # Provider CR spec generator
-│   │   ├── generate.go
-│   │   ├── assemble.go
-│   │   ├── backupclasses.go
-│   │   ├── configmaps.go
-│   │   ├── schema.go
-│   │   ├── secrets.go
-│   │   └── secrets_configmaps_test.go
-│   └── tui/                        # Terminal UI helpers
-│       ├── multiselect.go
-│       └── prompt.go
-├── pkg/util/
-├── go.mod
-└── go.sum
-```
-
-## Development
-
-```bash
-make build   # Build binary to ./bin/provider-sdk
-make test    # Run unit tests
-```
+standard README for every OpenEverest provider, and the canonical copy: iterate on it here,
+then apply it to the provider repositories. It is written for three audiences in order —
+platform users, operators, contributors — and leads with the fact that a provider is not
+standalone. The *Capabilities* tables deliberately reuse the same wording everywhere so
+providers stay comparable; rows that make no sense for a technology are deleted rather than
+marked unsupported.
