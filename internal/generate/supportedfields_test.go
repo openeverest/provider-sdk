@@ -65,27 +65,50 @@ properties:
 func TestValidateSupportedFieldsRejects(t *testing.T) {
 	for name, tc := range map[string]struct{ schema, wantReason string }{
 		"a field that does not exist": {
-			schema:     "properties:\n  storidge: {}",
+			schema: `
+properties:
+  storidge: {}
+`,
 			wantReason: "no such field on ComponentSpec",
 		},
 		"a field that does not exist inside a group": {
-			schema:     "properties:\n  storage:\n    properties:\n      sighs: {}",
+			schema: `
+properties:
+  storage:
+    properties:
+      sighs: {}
+`,
 			wantReason: "no such field on Storage",
 		},
 		"re-typing a struct as a scalar": {
-			schema:     "properties:\n  storage: {type: string}",
+			schema: `
+properties:
+  storage: {type: string}
+`,
 			wantReason: `declared as "string" but the field is "object"`,
 		},
 		"re-typing a scalar": {
-			schema:     "properties:\n  replicas: {type: string}",
+			schema: `
+properties:
+  replicas: {type: string}
+`,
 			wantReason: `declared as "string" but the field is "integer"`,
 		},
 		"selecting inside a scalar": {
-			schema:     "properties:\n  replicas:\n    properties:\n      anything: {}",
+			schema: `
+properties:
+  replicas:
+    properties:
+      anything: {}
+`,
 			wantReason: "has none to select",
 		},
 		"requiring something undeclared": {
-			schema:     "required: [storage]\nproperties:\n  resources: {}",
+			schema: `
+required: [storage]
+properties:
+  resources: {}
+`,
 			wantReason: `required lists "storage", which the schema does not declare`,
 		},
 	} {
