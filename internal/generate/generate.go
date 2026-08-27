@@ -119,6 +119,23 @@ func Run(opts Options) error {
 		return errors.New(b.String())
 	}
 
+	// 3b. Reject a supportedFields declaration that does not select from
+	//     ComponentSpec, or a form control bound to a core field the component
+	//     does not declare it honours.
+	fieldIssues, err := ValidateSupportedFields(cfg, opts.TypesPackages)
+	if err != nil {
+		return fmt.Errorf("validating supportedFields: %w", err)
+	}
+	fieldIssues = append(fieldIssues, ValidateUIPathsAreDeclared(cfg)...)
+	if len(fieldIssues) > 0 {
+		var b strings.Builder
+		fmt.Fprintf(&b, "%d supportedFields problem(s):", len(fieldIssues))
+		for _, issue := range fieldIssues {
+			fmt.Fprintf(&b, "\n  - %s", issue)
+		}
+		return errors.New(b.String())
+	}
+
 	// 4. Build the Provider CR spec map with schemas injected.
 	specMap := buildSpecMap(cfg, schemas, secrets, configMaps)
 
