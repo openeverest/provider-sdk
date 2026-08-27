@@ -20,8 +20,8 @@ import (
 
 var addCmd = &cobra.Command{
 	Use:   "add",
-	Short: "Add components, topologies, or backup support to an existing provider project",
-	Long: `Add new components, topologies, or backup support to an existing provider project.
+	Short: "Add components, topologies, backup, backupclasses, secrets, or configmaps to an existing provider project",
+	Long: `Add new components, topologies, backup support, backupclasses, secrets, or configmaps to an existing provider project.
 
 Run from within a scaffolded provider project directory (must contain
 definition/provider.yaml).
@@ -30,7 +30,9 @@ Subcommands:
   component    Add a new component to the provider
   topology     Add a new topology to the provider
   backup       Add backup support implementation files
-  backupclass  Add a new BackupClass definition`,
+  backupclass  Add a new BackupClass definition
+  secret       Add a new secret type definition
+  configmap    Add a new configmap type definition`,
 }
 
 func init() {

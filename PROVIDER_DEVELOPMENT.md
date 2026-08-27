@@ -44,6 +44,7 @@ requires the previous one.
 - [Generate, run and test](#generate-run-and-test)
 - [Release and publish](#release-and-publish)
 - [Define presets](#define-presets)
+- [Define secrets and configmaps](#define-secrets-and-configmaps)
 
 **Reference**
 - [Provider SDK CLI](#provider-sdk-cli-reference)
@@ -166,6 +167,21 @@ definition/                          # ← YOU EDIT THESE
     <topology-name>/
       topology.yaml                  # Topology config + UI schema
       types.go                       # Topology-specific parameter types
+  backupclasses/                     # BackupClass definitions (optional)
+    <class-name>/
+      class.yaml                     # BackupClass metadata, limits, schema refs
+      ui.yaml                        # UI rendering hints
+      types.go                       # Backup/restore/PITR parameter types
+  secrets/                           # Secret type definitions (optional)
+    <secret-name>/
+      definition.yaml                # Secret schema configuration
+      ui.yaml                        # UI rendering hints
+      types.go                       # Secret data schema types
+  configmaps/                        # ConfigMap type definitions (optional)
+    <configmap-name>/
+      definition.yaml                # ConfigMap schema configuration
+      ui.yaml                        # UI rendering hints
+      types.go                       # ConfigMap data schema types
 
 internal/                            # ← YOU IMPLEMENT THESE
   provider/
@@ -2153,7 +2169,207 @@ parameters:
 
 ---
 
-## Provider SDK CLI reference
+## Define Secrets and ConfigMaps
+
+Providers can declare custom Secret and ConfigMap types that users can create
+through the OpenEverest UI. These definitions tell OpenEverest what data keys
+are expected and how to render the creation form.
+
+### Define Secret Types
+
+Use the `provider-sdk add secret` command to scaffold a new secret type:
+
+```bash
+# Add a credentials secret type
+provider-sdk add secret --name credentials
+
+# Add a TLS certificates secret type
+provider-sdk add secret --name tls-certificates
+```
+
+This creates:
+- `definition/secrets/<name>/definition.yaml` — Schema configuration
+- `definition/secrets/<name>/ui.yaml` — UI rendering hints
+- `definition/secrets/<name>/types.go` — Go types for secret data schema
+
+#### Secret Definition Structure
+
+**`definition.yaml`** example:
+
+```yaml
+# definition/secrets/credentials/definition.yaml
+parametersSchema:
+  openAPIV3Schema: CredentialsSecretData
+```
+
+**`types.go`** example:
+
+```go
+// definition/secrets/credentials/types.go
+package credentials
+
+// CredentialsSecretData describes the expected data keys for this secret type.
+// +k8s:openapi-gen=true
+type CredentialsSecretData struct {
+    // Username is the database username.
+    Username string `json:"username"`
+    // Password is the database password.
+    Password string `json:"password"`
+}
+```
+
+**`ui.yaml`** example:
+
+```yaml
+# definition/secrets/credentials/ui.yaml
+label: Database Credentials
+componentsOrder:
+  - username
+  - password
+components:
+  username:
+    uiType: text
+    fieldParams:
+      label: Username
+      placeholder: Enter database username
+    validation:
+      required: true
+  password:
+    uiType: text
+    fieldParams:
+      label: Password
+      placeholder: Enter database password
+    validation:
+      required: true
+```
+
+### Define ConfigMap Types
+
+Use the `provider-sdk add configmap` command to scaffold a new configmap type:
+
+```bash
+# Add an application config type
+provider-sdk add configmap --name app-config
+```
+
+This creates:
+- `definition/configmaps/<name>/definition.yaml` — Schema configuration
+- `definition/configmaps/<name>/ui.yaml` — UI rendering hints
+- `definition/configmaps/<name>/types.go` — Go types for configmap data schema
+
+#### ConfigMap Definition Structure
+
+**`definition.yaml`** example:
+
+```yaml
+# definition/configmaps/app-config/definition.yaml
+parametersSchema:
+  openAPIV3Schema: AppConfigConfigMapData
+```
+
+**`types.go`** example:
+
+```go
+// definition/configmaps/app-config/types.go
+package appconfig
+
+// AppConfigConfigMapData describes the expected data keys for this configmap type.
+// +k8s:openapi-gen=true
+type AppConfigConfigMapData struct {
+    // ConfigFile is the main configuration file content.
+    ConfigFile string `json:"configFile"`
+}
+```
+
+**`ui.yaml`** example:
+
+```yaml
+# definition/configmaps/app-config/ui.yaml
+label: Application Configuration
+componentsOrder:
+  - configFile
+components:
+  configFile:
+    uiType: text
+    fieldParams:
+      label: Configuration
+      placeholder: |
+        # Enter your configuration here
+      multiline: true
+      minRows: 5
+      maxRows: 20
+    validation:
+      required: true
+```
+
+### Generated Output
+
+When you run `make generate`, the secret and configmap definitions are included
+in the Provider CR spec under `spec.secrets` and `spec.configMaps` respectively:
+
+```yaml
+# charts/<provider-name>/generated/provider-spec.yaml
+spec:
+  # ... other fields ...
+  secrets:
+    credentials:
+      parametersSchema:
+        openAPIV3Schema:
+          properties:
+            password:
+              type: string
+            username:
+              type: string
+          type: object
+      uiSchema:
+        components:
+          password:
+            fieldParams:
+              label: Password
+              placeholder: Enter database password
+            uiType: text
+            validation:
+              required: true
+          username:
+            fieldParams:
+              label: Username
+              placeholder: Enter database username
+            uiType: text
+            validation:
+              required: true
+        componentsOrder:
+          - username
+          - password
+        label: Database Credentials
+  configMaps:
+    app-config:
+      parametersSchema:
+        openAPIV3Schema:
+          properties:
+            configFile:
+              type: string
+          type: object
+      uiSchema:
+        components:
+          configFile:
+            fieldParams:
+              label: Configuration
+              maxRows: 20
+              minRows: 5
+              multiline: true
+              placeholder: |
+                # Enter your configuration here
+            uiType: text
+            validation:
+              required: true
+        componentsOrder:
+          - configFile
+        label: Application Configuration
+```
+
+---
+
+## Provider SDK CLI Reference
 
 ### `provider-sdk init`
 
@@ -2184,6 +2400,26 @@ provider-sdk add topology --name replicaSet
 ```
 
 Creates: `topologies/<name>/topology.yaml`, `topologies/<name>/types.go`
+
+### `provider-sdk add secret`
+
+Add a secret type definition to an existing provider project.
+
+```bash
+provider-sdk add secret --name credentials
+```
+
+Creates: `secrets/<name>/definition.yaml`, `secrets/<name>/ui.yaml`, `secrets/<name>/types.go`
+
+### `provider-sdk add configmap`
+
+Add a configmap type definition to an existing provider project.
+
+```bash
+provider-sdk add configmap --name app-config
+```
+
+Creates: `configmaps/<name>/definition.yaml`, `configmaps/<name>/ui.yaml`, `configmaps/<name>/types.go`
 
 ### `provider-sdk generate`
 
@@ -2225,3 +2461,5 @@ Use this checklist to track your progress:
 - [ ] **`make generate`** runs without errors
 - [ ] **Integration tests** pass
 - [ ] **Presets** defined in `charts/<provider-name>/values.yaml` (optional, but recommended)
+- [ ] **Secret types** defined in `definition/secrets/` (optional)
+- [ ] **ConfigMap types** defined in `definition/configmaps/` (optional)

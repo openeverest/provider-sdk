@@ -17,10 +17,10 @@ package scaffold
 import (
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestDeriveProjectName(t *testing.T) {
@@ -89,48 +89,38 @@ func TestScaffold(t *testing.T) {
 		ModulePath:   "github.com/example/provider-test-db",
 	}
 
-	if err := Scaffold(cfg, dest); err != nil {
-		t.Fatalf("Scaffold() error: %v", err)
-	}
+	err := Scaffold(cfg, dest)
+	require.NoError(t, err)
 
 	// Verify go.mod was created (renamed from go.mod.tmpl).
 	goMod := filepath.Join(dest, "go.mod")
-	if _, err := os.Stat(goMod); err != nil {
-		t.Errorf("go.mod not found: %v", err)
-	}
+	_, err = os.Stat(goMod)
+	assert.NoError(t, err, "go.mod not found")
 
 	// Verify go.mod.tmpl does NOT exist.
 	goModTmpl := filepath.Join(dest, "go.mod.tmpl")
-	if _, err := os.Stat(goModTmpl); err == nil {
-		t.Error("go.mod.tmpl should not exist in output (should be renamed to go.mod)")
-	}
+	_, err = os.Stat(goModTmpl)
+	assert.Error(t, err, "go.mod.tmpl should not exist in output (should be renamed to go.mod)")
 
 	// Verify placeholder substitution in go.mod.
 	content, err := os.ReadFile(goMod)
-	if err != nil {
-		t.Fatalf("reading go.mod: %v", err)
-	}
-	if !strings.Contains(string(content), "module github.com/example/provider-test-db") {
-		t.Error("go.mod does not contain expected module path")
-	}
+	require.NoError(t, err)
+	assert.Contains(t, string(content), "module github.com/example/provider-test-db")
 
 	// Verify chart directory was renamed.
 	chartDir := filepath.Join(dest, "charts", "provider-test-db")
-	if _, err := os.Stat(chartDir); err != nil {
-		t.Errorf("chart directory not renamed: %v", err)
-	}
+	_, err = os.Stat(chartDir)
+	assert.NoError(t, err, "chart directory not renamed")
 
 	// Verify __PROVIDER_NAME__ directory does NOT exist.
 	placeholderDir := filepath.Join(dest, "charts", "__PROVIDER_NAME__")
-	if _, err := os.Stat(placeholderDir); err == nil {
-		t.Error("placeholder directory __PROVIDER_NAME__ should not exist in output")
-	}
+	_, err = os.Stat(placeholderDir)
+	assert.Error(t, err, "placeholder directory __PROVIDER_NAME__ should not exist in output")
 
 	// Verify __TOPOLOGY_NAME__ directory does NOT exist.
 	topoPlaceholderDir := filepath.Join(dest, "definition", "topologies", "__TOPOLOGY_NAME__")
-	if _, err := os.Stat(topoPlaceholderDir); err == nil {
-		t.Error("placeholder directory __TOPOLOGY_NAME__ should not exist in output")
-	}
+	_, err = os.Stat(topoPlaceholderDir)
+	assert.Error(t, err, "placeholder directory __TOPOLOGY_NAME__ should not exist in output")
 
 	// Verify no unresolved Go template directives remain in any file.
 	// Template files use [[ .Field ]] syntax; after rendering all should be gone.
@@ -142,37 +132,23 @@ func TestScaffold(t *testing.T) {
 		if readErr != nil {
 			return readErr
 		}
-		if strings.Contains(string(data), "[[ .") {
-			t.Errorf("unresolved Go template directive in %s", path)
-		}
+		assert.NotContains(t, string(data), "[[ .", "unresolved Go template directive in %s", path)
 		return nil
 	})
-	if err != nil {
-		t.Fatalf("walking output directory: %v", err)
-	}
+	require.NoError(t, err, "walking output directory")
 
 	// Verify Go package derivation.
 	specFile := filepath.Join(dest, "internal", "common", "spec.go")
 	specContent, err := os.ReadFile(specFile)
-	if err != nil {
-		t.Fatalf("reading spec.go: %v", err)
-	}
-	if !strings.Contains(string(specContent), "ProviderName = \"test-db\"") {
-		t.Error("spec.go does not contain expected ProviderName constant")
-	}
+	require.NoError(t, err)
+	assert.Contains(t, string(specContent), "ProviderName = \"test-db\"")
 
 	// Verify derived GoPackage was substituted.
 	genFile := filepath.Join(dest, "gen.go")
 	genContent, err := os.ReadFile(genFile)
-	if err != nil {
-		t.Fatalf("reading gen.go: %v", err)
-	}
-	if !strings.Contains(string(genContent), "package providertestdb") {
-		t.Error("gen.go does not contain derived package name providertestdb")
-	}
-	if !strings.Contains(string(genContent), "go tool provider-sdk generate") {
-		t.Error("gen.go does not contain provider-sdk generate directive")
-	}
+	require.NoError(t, err)
+	assert.Contains(t, string(genContent), "package providertestdb")
+	assert.Contains(t, string(genContent), "go tool provider-sdk generate")
 
 	// Verify definition/ directory structure exists (no topology files by default).
 	for _, defFile := range []string{
@@ -182,97 +158,65 @@ func TestScaffold(t *testing.T) {
 		"definition/README.md",
 		"definition/components/types.go",
 	} {
-		if _, err := os.Stat(filepath.Join(dest, defFile)); err != nil {
-			t.Errorf("definition file %s not found: %v", defFile, err)
-		}
+		_, err := os.Stat(filepath.Join(dest, defFile))
+		assert.NoError(t, err, "definition file %s not found", defFile)
 	}
 
 	// Verify NO topology directory is created when none is specified.
 	toposDir := filepath.Join(dest, "definition", "topologies")
-	if entries, err := os.ReadDir(toposDir); err == nil && len(entries) > 0 {
-		names := make([]string, 0, len(entries))
-		for _, e := range entries {
-			names = append(names, e.Name())
-		}
-		t.Errorf("expected empty topologies/ directory, found: %v", names)
-	}
+	entries, err := os.ReadDir(toposDir)
+	require.NoError(t, err)
+	assert.Empty(t, entries, "expected empty topologies/ directory")
 
 	// Verify definition/provider.yaml has correct provider name and empty components.
 	providerYAML, err := os.ReadFile(filepath.Join(dest, "definition", "provider.yaml"))
-	if err != nil {
-		t.Fatalf("reading definition/provider.yaml: %v", err)
-	}
-	if !strings.Contains(string(providerYAML), "name: test-db") {
-		t.Error("definition/provider.yaml does not contain expected provider name")
-	}
-	if strings.Contains(string(providerYAML), "\n  engine:") {
-		t.Error("definition/provider.yaml should not have a hardcoded engine component")
-	}
-	if !strings.Contains(string(providerYAML), "components: {}") {
-		t.Error("definition/provider.yaml should have an empty components map")
-	}
+	require.NoError(t, err)
+	assert.Contains(t, string(providerYAML), "name: test-db")
+	assert.NotContains(t, string(providerYAML), "\n  engine:", "definition/provider.yaml should not have a hardcoded engine component")
+	assert.Contains(t, string(providerYAML), "components: {}", "definition/provider.yaml should have an empty components map")
 
 	// Verify generated/provider-spec.yaml exists in chart.
 	providerSpec := filepath.Join(chartDir, "generated", "provider-spec.yaml")
-	if _, err := os.Stat(providerSpec); err != nil {
-		t.Errorf("generated/provider-spec.yaml not found in chart: %v", err)
-	}
+	_, err = os.Stat(providerSpec)
+	assert.NoError(t, err, "generated/provider-spec.yaml not found in chart")
 
 	// Verify old flat files do NOT exist.
 	for _, oldFile := range []string{"provider-config.yaml", "provider.yaml"} {
-		if _, err := os.Stat(filepath.Join(dest, oldFile)); err == nil {
-			t.Errorf("old file %s should not exist in output", oldFile)
-		}
+		_, err := os.Stat(filepath.Join(dest, oldFile))
+		assert.Error(t, err, "old file %s should not exist in output", oldFile)
 	}
-	if _, err := os.Stat(filepath.Join(dest, "types")); err == nil {
-		t.Error("old types/ directory should not exist in output")
-	}
+	_, err = os.Stat(filepath.Join(dest, "types"))
+	assert.Error(t, err, "old types/ directory should not exist in output")
 
 	// Verify go.mod has provider-sdk tool dependency.
-	if !strings.Contains(string(content), "tool github.com/openeverest/provider-sdk") {
-		t.Error("go.mod does not contain provider-sdk tool dependency")
-	}
+	assert.Contains(t, string(content), "tool github.com/openeverest/provider-sdk")
 
 	// Verify file count.
 	count, err := CountFiles(dest)
-	if err != nil {
-		t.Fatalf("CountFiles() error: %v", err)
-	}
-	if count < 35 {
-		t.Errorf("expected at least 35 files, got %d", count)
-	}
+	require.NoError(t, err)
+	assert.GreaterOrEqual(t, count, 35, "expected at least 35 files")
 
 	// Verify README has correct content.
 	readme, err := os.ReadFile(filepath.Join(dest, "README.md"))
-	if err != nil {
-		t.Fatalf("reading README.md: %v", err)
-	}
-	if !strings.Contains(string(readme), "# provider-test-db") {
-		t.Error("README.md does not contain expected heading")
-	}
+	require.NoError(t, err)
+	assert.Contains(t, string(readme), "# provider-test-db")
 
 	// Verify dotfiles are present.
 	for _, dotfile := range []string{".gitignore", ".dockerignore"} {
-		if _, err := os.Stat(filepath.Join(dest, dotfile)); err != nil {
-			t.Errorf("dotfile %s not found: %v", dotfile, err)
-		}
+		_, err := os.Stat(filepath.Join(dest, dotfile))
+		assert.NoError(t, err, "dotfile %s not found", dotfile)
 	}
 
 	// Verify .github/workflows/ are present.
 	workflowDir := filepath.Join(dest, ".github", "workflows")
-	if _, err := os.Stat(workflowDir); err != nil {
-		t.Errorf(".github/workflows/ not found: %v", err)
-	}
+	_, err = os.Stat(workflowDir)
+	assert.NoError(t, err, ".github/workflows/ not found")
 
 	// Verify executable permissions on .sh files.
 	varsSh := filepath.Join(dest, "test", "vars.sh")
 	info, err := os.Stat(varsSh)
-	if err != nil {
-		t.Fatalf("test/vars.sh not found: %v", err)
-	}
-	if info.Mode()&0o111 == 0 {
-		t.Error("test/vars.sh should be executable")
-	}
+	require.NoError(t, err, "test/vars.sh not found")
+	assert.NotZero(t, info.Mode()&0o111, "test/vars.sh should be executable")
 }
 
 func TestScaffoldOutputDirExists(t *testing.T) {
@@ -284,12 +228,8 @@ func TestScaffoldOutputDirExists(t *testing.T) {
 	}
 
 	err := Scaffold(cfg, outputDir)
-	if err == nil {
-		t.Error("expected error when output directory exists")
-	}
-	if !strings.Contains(err.Error(), "already exists") {
-		t.Errorf("unexpected error message: %v", err)
-	}
+	require.Error(t, err, "expected error when output directory exists")
+	assert.Contains(t, err.Error(), "already exists")
 }
 
 func TestScaffoldValidation(t *testing.T) {
@@ -307,9 +247,7 @@ func TestScaffoldValidation(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			cfg := tt.cfg
 			err := Scaffold(&cfg, dest)
-			if err == nil {
-				t.Error("expected validation error")
-			}
+			assert.Error(t, err, "expected validation error")
 		})
 	}
 }
@@ -324,40 +262,30 @@ func TestScaffoldCustomTopologyName(t *testing.T) {
 		TopologyName: "replicaSet",
 	}
 
-	if err := Scaffold(cfg, dest); err != nil {
-		t.Fatalf("Scaffold() error: %v", err)
-	}
+	err := Scaffold(cfg, dest)
+	require.NoError(t, err)
 
 	// Verify the custom topology directory was created.
 	topoDir := filepath.Join(dest, "definition", "topologies", "replicaSet")
-	if _, err := os.Stat(topoDir); err != nil {
-		t.Errorf("custom topology directory not created: %v", err)
-	}
+	_, err = os.Stat(topoDir)
+	assert.NoError(t, err, "custom topology directory not created")
 
 	// Verify the default standalone does NOT exist.
 	standaloneDir := filepath.Join(dest, "definition", "topologies", "standalone")
-	if _, err := os.Stat(standaloneDir); err == nil {
-		t.Error("default standalone topology should not exist when custom topology is specified")
-	}
+	_, err = os.Stat(standaloneDir)
+	assert.Error(t, err, "default standalone topology should not exist when custom topology is specified")
 
 	// Verify topology types.go has correct package and type name.
 	typesFile := filepath.Join(topoDir, "types.go")
 	typesContent, err := os.ReadFile(typesFile)
-	if err != nil {
-		t.Fatalf("reading topology types.go: %v", err)
-	}
-	if !strings.Contains(string(typesContent), "package replicaset") {
-		t.Error("topology types.go does not contain correct package name 'replicaset'")
-	}
-	if !strings.Contains(string(typesContent), "ReplicaSetTopologyParameters") {
-		t.Error("topology types.go does not contain correct type name 'ReplicaSetTopologyParameters'")
-	}
+	require.NoError(t, err)
+	assert.Contains(t, string(typesContent), "package replicaset")
+	assert.Contains(t, string(typesContent), "ReplicaSetTopologyParameters")
 
 	// Verify provider-spec.yaml exists in chart (content is a placeholder).
 	specFile := filepath.Join(dest, "charts", "provider-test", "generated", "provider-spec.yaml")
-	if _, err := os.Stat(specFile); err != nil {
-		t.Errorf("generated/provider-spec.yaml not found in chart: %v", err)
-	}
+	_, err = os.Stat(specFile)
+	assert.NoError(t, err, "generated/provider-spec.yaml not found in chart")
 }
 
 func TestToPascalCase(t *testing.T) {
@@ -374,9 +302,7 @@ func TestToPascalCase(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {
 			result := toPascalCase(tt.input)
-			if result != tt.expected {
-				t.Errorf("toPascalCase(%q) = %q, want %q", tt.input, result, tt.expected)
-			}
+			assert.Equal(t, tt.expected, result)
 		})
 	}
 }

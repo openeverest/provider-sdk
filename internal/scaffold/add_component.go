@@ -32,11 +32,12 @@ type AddComponentConfig struct {
 // It updates definition/provider.yaml, definition/versions.yaml,
 // definition/components/types.go, and internal/common/spec.go.
 func AddComponent(cfg *AddComponentConfig) error {
-	if cfg.ComponentName == "" {
-		return fmt.Errorf("component name is required")
+	if err := validateIdentifier(cfg.ComponentName); err != nil {
+		return fmt.Errorf("invalid component name for Go: %w", err)
 	}
-	if cfg.ComponentType == "" {
-		return fmt.Errorf("component type is required")
+
+	if err := validateIdentifier(cfg.ComponentType); err != nil {
+		return fmt.Errorf("invalid component type for Go: %w", err)
 	}
 
 	// Ensure we're in a provider project.
@@ -167,7 +168,7 @@ func addComponentTypeStruct(cfg *AddComponentConfig) error {
 	}
 
 	content := string(data)
-	structName := toExportedName(cfg.ComponentType) + "Parameters"
+	structName := toPascalCase(cfg.ComponentType) + "Parameters"
 
 	// Check if struct already exists.
 	if strings.Contains(content, "type "+structName+" struct") {
@@ -198,8 +199,8 @@ func addComponentConstants(cfg *AddComponentConfig) error {
 	content := string(data)
 
 	// Build the constant names.
-	nameConst := "Component" + toExportedName(cfg.ComponentName)
-	typeConst := "ComponentType" + toExportedName(cfg.ComponentType)
+	nameConst := "Component" + toPascalCase(cfg.ComponentName)
+	typeConst := "ComponentType" + toPascalCase(cfg.ComponentType)
 
 	// Check if constants already exist.
 	nameExists := strings.Contains(content, nameConst+" ")
@@ -236,13 +237,4 @@ func writeYAMLWithHeader(path string, data any, header string) error {
 		return fmt.Errorf("marshaling YAML: %w", err)
 	}
 	return os.WriteFile(path, []byte(header+"\n"+string(out)), 0o644)
-}
-
-// toExportedName converts the first letter to uppercase.
-// E.g., "backupAgent" → "BackupAgent", "mongod" → "Mongod".
-func toExportedName(s string) string {
-	if s == "" {
-		return ""
-	}
-	return strings.ToUpper(s[:1]) + s[1:]
 }
