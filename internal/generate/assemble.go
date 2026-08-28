@@ -39,6 +39,13 @@ type AssembledConfig struct {
 	// Versions maps bundle names to their VersionBundle spec.
 	Versions []any
 
+	// MinUpgradableFrom is the lowest provider release from which a
+	// single-step upgrade to this release is permitted, from the optional
+	// release block in definition/versions.yaml. The release version itself
+	// is not authored here: it is the chart appVersion, injected at generate
+	// time.
+	MinUpgradableFrom string
+
 	// Topologies maps topology names to their Provider CR spec representation.
 	Topologies map[string]any
 
@@ -103,6 +110,13 @@ func Assemble(defDir string) (*AssembledConfig, error) {
 			if err := validateVersionBundles(cfg.ComponentTypes, cfg.Components, list); err != nil {
 				return nil, fmt.Errorf("invalid version bundles: %w", err)
 			}
+		}
+	}
+
+	// Optional release block from versions.yaml.
+	if rel, ok := versions["release"].(map[string]any); ok {
+		if from, ok := rel["minUpgradableFrom"].(string); ok {
+			cfg.MinUpgradableFrom = from
 		}
 	}
 
