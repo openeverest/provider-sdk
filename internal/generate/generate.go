@@ -139,6 +139,17 @@ func Run(opts Options) error {
 	// 4. Build the Provider CR spec map with schemas injected.
 	specMap := buildSpecMap(cfg, schemas, secrets, configMaps)
 
+	// 4b. Inject the release identity: version from the chart appVersion (the
+	//     single source of truth for the provider release), upgrade floor from
+	//     the release block in definition/versions.yaml.
+	appVersion, err := chartAppVersion(opts.ChartDir)
+	if err != nil {
+		return fmt.Errorf("reading chart appVersion: %w", err)
+	}
+	if release := buildReleaseSpec(appVersion, cfg.MinUpgradableFrom); release != nil {
+		specMap["release"] = release
+	}
+
 	// 5. Write to chart generated directory.
 	outputDir := filepath.Join(opts.ChartDir, "generated")
 	if err := os.MkdirAll(outputDir, 0o755); err != nil {
@@ -173,6 +184,33 @@ func Run(opts Options) error {
 	}
 
 	return nil
+}
+
+// chartAppVersion returns the appVersion from the chart's Chart.yaml, or ""
+// when the chart does not declare one.
+func chartAppVersion(chartDir string) (string, error) {
+	chart, err := readYAML(filepath.Join(chartDir, "Chart.yaml"))
+	if err != nil {
+		return "", err
+	}
+	appVersion, _ := chart["appVersion"].(string)
+	return appVersion, nil
+}
+
+// buildReleaseSpec assembles the spec.release group, or nil when neither
+// field is set.
+func buildReleaseSpec(version, minUpgradableFrom string) map[string]any {
+	release := make(map[string]any)
+	if version != "" {
+		release["version"] = version
+	}
+	if minUpgradableFrom != "" {
+		release["minUpgradableFrom"] = minUpgradableFrom
+	}
+	if len(release) == 0 {
+		return nil
+	}
+	return release
 }
 
 // detectChartDir finds the Helm chart directory by scanning charts/ for
