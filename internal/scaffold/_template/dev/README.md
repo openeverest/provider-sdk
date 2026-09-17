@@ -75,7 +75,7 @@ All settings live in `dev/.env` (see `dev/.env.example`). Common options:
 | `K8S_CONTEXT` | _(unset)_ | Restrict Tilt to a specific Kubernetes context. |
 | `DOCKER_REGISTRY_URL` | _(unset)_ | Push images here instead of the cluster's local registry. |
 
-> **Note:** v2 currently ships only as pre-releases (e.g. `2.0.0-dev.2`), which
+> **Note:** v2 currently ships only as pre-releases (e.g. `2.0.0-dev.3`), which
 > Helm's default "latest" resolution skips — it would install v1, whose CRDs a v2
 > provider cannot use. `OPENEVEREST_VERSION` therefore defaults to a constraint
 > rather than being empty. Override it to pin an exact version.
