@@ -1,0 +1,84 @@
+# In-cluster S3 for Tilt (ENABLE_SEAWEEDFS=true), served at
+# http://seaweedfs.seaweedfs.svc.cluster.local.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: seaweedfs
+  labels:
+    name: seaweedfs
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: seaweedfs-data
+  namespace: seaweedfs
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 512Mi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: seaweedfs
+  name: seaweedfs
+  namespace: seaweedfs
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: seaweedfs
+  template:
+    metadata:
+      labels:
+        app: seaweedfs
+    spec:
+      containers:
+        - name: seaweedfs
+          image: chrislusf/seaweedfs:4.47
+          args:
+            - mini
+            - -dir=/data
+            - -webdav=false
+            - -admin.ui=false
+            - -s3.port.iceberg=0
+            - -s3.port.lance=0
+            - -master.telemetry=false
+          env:
+            - name: S3_BUCKET
+              value: "backups"
+            - name: AWS_ACCESS_KEY_ID
+              value: seaweedfsadmin
+            - name: AWS_SECRET_ACCESS_KEY
+              value: seaweedfsadmin
+          ports:
+            - name: s3
+              containerPort: 8333
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: s3
+          volumeMounts:
+            - mountPath: /data
+              name: seaweedfs-data-vol
+      volumes:
+        - name: seaweedfs-data-vol
+          persistentVolumeClaim:
+            claimName: seaweedfs-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: seaweedfs
+  namespace: seaweedfs
+spec:
+  type: ClusterIP
+  selector:
+    app: seaweedfs
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: s3
