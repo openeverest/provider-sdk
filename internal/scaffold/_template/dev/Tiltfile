@@ -53,8 +53,8 @@ openeverest_helm_repo = os.getenv(
 everest_namespace = os.getenv('EVEREST_NAMESPACE', 'everest-system')
 provider_namespace = os.getenv('PROVIDER_NAMESPACE', 'default')
 
-# Whether to deploy MinIO + a BackupStorage CR for testing backups/restores.
-enable_minio = str2bool(os.getenv('ENABLE_MINIO', 'false'))
+# Whether to deploy SeaweedFS + a BackupStorage CR for testing backups/restores.
+enable_seaweedfs = str2bool(os.getenv('ENABLE_SEAWEEDFS', 'false'))
 
 # Go build environment for the provider binary.
 provider_build_env = os.getenv('PROVIDER_BUILD_ENV', 'CGO_ENABLED=0 GOOS=linux')
@@ -198,14 +198,17 @@ helm_resource(
 )
 
 # ===========================
-# Backup storage (MinIO) — optional
+# Backup storage (SeaweedFS) — optional
 # ===========================
-if enable_minio:
-    k8s_yaml('{0}/dev/resources/minio.yaml'.format(config.main_dir))
+if enable_seaweedfs:
+    k8s_yaml('{0}/dev/resources/seaweedfs.yaml'.format(config.main_dir))
     k8s_resource(
-        workload='minio',
-        objects=['minio:namespace'],
-        port_forwards=[port_forward(9090, 9090, 'MinIO Console')],
+        workload='seaweedfs',
+        objects=[
+            'seaweedfs:namespace',
+            'seaweedfs-data:persistentvolumeclaim',
+        ],
+        port_forwards=[port_forward(9090, 8888, 'SeaweedFS Filer UI')],
         labels=['backup-storage'],
     )
 
@@ -218,8 +221,8 @@ if enable_minio:
     k8s_yaml(blob(backupstorage_yaml))
     k8s_resource(
         objects=[
-            'minio-credentials:secret:{0}'.format(provider_namespace),
-            'minio-s3:backupstorage:{0}'.format(provider_namespace),
+            'seaweedfs-credentials:secret:{0}'.format(provider_namespace),
+            'seaweedfs-s3:backupstorage:{0}'.format(provider_namespace),
         ],
         new_name='backup-storage',
         resource_deps=['[[ .ProjectName ]]'],

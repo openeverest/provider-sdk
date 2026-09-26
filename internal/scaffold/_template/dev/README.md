@@ -71,7 +71,7 @@ All settings live in `dev/.env` (see `dev/.env.example`). Common options:
 | `INSTALL_OPENEVEREST` | `true` | Install the released OpenEverest core. |
 | `OPENEVEREST_VERSION` | `>=2.0.0-0 <3.0.0` | Pin a specific core chart version. |
 | `PROVIDER_NAMESPACE` | `default` | Namespace for the provider + operator. |
-| `ENABLE_MINIO` | `false` | Deploy MinIO + a `BackupStorage` CR for backups. |
+| `ENABLE_SEAWEEDFS` | `false` | Deploy SeaweedFS + a `BackupStorage` CR for backups. |
 | `K8S_CONTEXT` | _(unset)_ | Restrict Tilt to a specific Kubernetes context. |
 | `DOCKER_REGISTRY_URL` | _(unset)_ | Push images here instead of the cluster's local registry. |
 

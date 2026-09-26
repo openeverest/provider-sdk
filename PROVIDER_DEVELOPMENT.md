@@ -208,7 +208,7 @@ dev/                                 # ← LOCAL DEV (Tilt)
   .env.example                       # Tilt configuration template
   k3d_config.yaml                    # Local k3d cluster definition
   provider.Dockerfile                # `dev` image target used by Tilt live-update
-  resources/                         # MinIO + BackupStorage manifests (optional)
+  resources/                         # SeaweedFS + BackupStorage manifests (optional)
 ```
 
 
@@ -1841,7 +1841,7 @@ options:
 | `INSTALL_OPENEVEREST` | `true` | Install the released OpenEverest core. |
 | `OPENEVEREST_VERSION` | `>=2.0.0-0 <3.0.0` | Pin a specific core chart version. |
 | `PROVIDER_NAMESPACE` | `default` | Namespace for the provider + DB operator. |
-| `ENABLE_MINIO` | `false` | Deploy MinIO + a `BackupStorage` CR for backups. |
+| `ENABLE_SEAWEEDFS` | `false` | Deploy SeaweedFS + a `BackupStorage` CR for backups. |
 
 > **Note:** While OpenEverest v2 is in pre-release, the Helm repository only
 > publishes pre-release tags (e.g. `2.0.0-dev.3`), which Helm's default "latest"
