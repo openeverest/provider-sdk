@@ -141,11 +141,11 @@ func addTypeToVersionsYAML(cfg *AddComponentConfig) error {
 
 	// Add placeholder version entry.
 	ct[cfg.ComponentType] = map[string]any{
+		"defaultVersion": "1.0.0",
 		"versions": []any{
 			map[string]any{
 				"version": "1.0.0",
 				"image":   fmt.Sprintf("example/%s:1.0.0", cfg.ComponentType),
-				"default": true,
 			},
 		},
 	}
@@ -155,7 +155,7 @@ func addTypeToVersionsYAML(cfg *AddComponentConfig) error {
 		versions,
 		"# Component type version catalog.\n"+
 			"# Add new versions here when operator releases are available.\n"+
-			"# Mark exactly one version per type as `default: true`.\n",
+			"# Name the default version per type via `defaultVersion`.\n",
 	)
 }
 

@@ -21,6 +21,92 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestAssembleParsesDefaultVersion(t *testing.T) {
+	t.Parallel()
+
+	cfg, err := Assemble(writeDefinition(t, `
+componentTypes:
+  mongod:
+    defaultVersion: "8.0.12-4"
+    versions:
+      - version: "8.0.12-4"
+        image: percona/psmdb:8.0.12-4
+defaultVersion: "8.0"
+versions:
+  - name: "8.0"
+    components:
+      engine: "8.0.12-4"
+`))
+
+	require.NoError(t, err)
+	assert.Equal(t, "8.0", cfg.DefaultVersion)
+
+	spec := buildSpecMap(cfg, nil, nil, nil)
+	assert.Equal(t, "8.0", spec["defaultVersion"])
+}
+
+func TestAssembleRejectsUnknownDefaultVersionBundle(t *testing.T) {
+	t.Parallel()
+
+	_, err := Assemble(writeDefinition(t, `
+componentTypes:
+  mongod:
+    versions:
+      - version: "8.0.12-4"
+        image: percona/psmdb:8.0.12-4
+defaultVersion: "9.0"
+versions:
+  - name: "8.0"
+    components:
+      engine: "8.0.12-4"
+`))
+
+	require.ErrorContains(t, err, `defaultVersion "9.0" not found in versions`)
+}
+
+func TestAssembleRejectsUnknownComponentTypeDefaultVersion(t *testing.T) {
+	t.Parallel()
+
+	_, err := Assemble(writeDefinition(t, `
+componentTypes:
+  mongod:
+    defaultVersion: "9.9.9"
+    versions:
+      - version: "8.0.12-4"
+        image: percona/psmdb:8.0.12-4
+`))
+
+	require.ErrorContains(t, err, `componentTypes["mongod"]: defaultVersion "9.9.9" not found in versions`)
+}
+
+func TestAssembleRejectsRemovedPerEntryDefaultFlag(t *testing.T) {
+	t.Parallel()
+
+	_, err := Assemble(writeDefinition(t, `
+componentTypes:
+  mongod:
+    versions:
+      - version: "8.0.12-4"
+        image: percona/psmdb:8.0.12-4
+        default: true
+`))
+	require.ErrorContains(t, err, "per-entry `default` was removed")
+
+	_, err = Assemble(writeDefinition(t, `
+componentTypes:
+  mongod:
+    versions:
+      - version: "8.0.12-4"
+        image: percona/psmdb:8.0.12-4
+versions:
+  - name: "8.0"
+    default: true
+    components:
+      engine: "8.0.12-4"
+`))
+	require.ErrorContains(t, err, "per-entry `default` was removed")
+}
+
 func TestBuildTopologySpecSelectsCRFields(t *testing.T) {
 	t.Parallel()
 

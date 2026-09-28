@@ -38,10 +38,10 @@ func TestAssembleParsesReleaseBlock(t *testing.T) {
 	cfg, err := Assemble(writeDefinition(t, `
 componentTypes:
   mongod:
+    defaultVersion: "8.0.12-4"
     versions:
       - version: "8.0.12-4"
         image: percona/psmdb:8.0.12-4
-        default: true
 release:
   minUpgradableFrom: "0.2"
 `))
@@ -96,6 +96,7 @@ func TestBuildSpecMapPassesThroughDeprecationFlags(t *testing.T) {
 	cfg, err := Assemble(writeDefinition(t, `
 componentTypes:
   mongod:
+    defaultVersion: "8.0.12-4"
     versions:
       - version: "6.0.19-16"
         image: percona/psmdb:6.0.19-16
@@ -103,7 +104,6 @@ componentTypes:
         removedInVersion: "0.3"
       - version: "8.0.12-4"
         image: percona/psmdb:8.0.12-4
-        default: true
 `))
 	require.NoError(t, err)
 
