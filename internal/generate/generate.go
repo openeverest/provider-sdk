@@ -251,6 +251,10 @@ func buildSpecMap(cfg *AssembledConfig, schemas map[string]any, secrets []Secret
 		spec["componentTypes"] = cfg.ComponentTypes
 	}
 
+	if cfg.DefaultVersion != "" {
+		spec["defaultVersion"] = cfg.DefaultVersion
+	}
+
 	if cfg.Versions != nil {
 		spec["versions"] = cfg.Versions
 	}

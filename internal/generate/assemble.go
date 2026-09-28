@@ -36,6 +36,10 @@ type AssembledConfig struct {
 	// Components maps logical component names to their spec (type, optional parametersSchema).
 	Components map[string]any
 
+	// DefaultVersion names the bundle in Versions used when an Instance
+	// omits spec.version.
+	DefaultVersion string
+
 	// Versions maps bundle names to their VersionBundle spec.
 	Versions []any
 
@@ -111,6 +115,15 @@ func Assemble(defDir string) (*AssembledConfig, error) {
 				return nil, fmt.Errorf("invalid version bundles: %w", err)
 			}
 		}
+	}
+
+	// Top-level default version bundle from versions.yaml.
+	if dv, ok := versions["defaultVersion"].(string); ok {
+		cfg.DefaultVersion = dv
+	}
+
+	if err := validateDefaults(cfg.ComponentTypes, cfg.Versions, cfg.DefaultVersion); err != nil {
+		return nil, fmt.Errorf("invalid versions.yaml: %w", err)
 	}
 
 	// Optional release block from versions.yaml.
@@ -311,6 +324,66 @@ func validateVersionBundles(componentTypes, components map[string]any, bundles [
 			if !versions[verStr] {
 				return fmt.Errorf("bundle %q: component %q version %q not found in componentTypes[%q]", bundleName, compName, verStr, compType)
 			}
+		}
+	}
+	return nil
+}
+
+// validateDefaults checks that every defaultVersion names an existing entry
+// and that no list entry still carries the removed per-entry `default` flag.
+func validateDefaults(componentTypes map[string]any, bundles []any, defaultVersion string) error {
+	if defaultVersion != "" {
+		found := false
+		for _, bundleRaw := range bundles {
+			if m, ok := bundleRaw.(map[string]any); ok {
+				if name, _ := m["name"].(string); name == defaultVersion {
+					found = true
+					break
+				}
+			}
+		}
+		if !found {
+			return fmt.Errorf("defaultVersion %q not found in versions", defaultVersion)
+		}
+	}
+
+	for _, bundleRaw := range bundles {
+		if m, ok := bundleRaw.(map[string]any); ok {
+			if _, has := m["default"]; has {
+				name, _ := m["name"].(string)
+				return fmt.Errorf("version bundle %q: per-entry `default` was removed; set the top-level `defaultVersion` field instead", name)
+			}
+		}
+	}
+
+	for typeName, raw := range componentTypes {
+		m, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		versionsList, _ := m["versions"].([]any)
+		for _, v := range versionsList {
+			if vm, ok := v.(map[string]any); ok {
+				if _, has := vm["default"]; has {
+					return fmt.Errorf("componentTypes[%q]: per-entry `default` was removed; set `defaultVersion` on the component type instead", typeName)
+				}
+			}
+		}
+		dv, _ := m["defaultVersion"].(string)
+		if dv == "" {
+			continue
+		}
+		found := false
+		for _, v := range versionsList {
+			if vm, ok := v.(map[string]any); ok {
+				if ver, _ := vm["version"].(string); ver == dv {
+					found = true
+					break
+				}
+			}
+		}
+		if !found {
+			return fmt.Errorf("componentTypes[%q]: defaultVersion %q not found in versions", typeName, dv)
 		}
 	}
 	return nil

@@ -340,29 +340,29 @@ This is the source of truth for what can be installed.
 ```yaml
 componentTypes:
   mongod:
+    defaultVersion: "8.0.12-4"     # Names the default entry below
     versions:
     - version: "8.0.12-4"
       image: percona/percona-server-mongodb:8.0.12-4
-      default: true                    # Exactly one version must be default
     - version: "7.0.18-11"
       image: percona/percona-server-mongodb:7.0.18-11
     - version: "6.0.21-18"
       image: percona/percona-server-mongodb:6.0.21-18
   backup:
+    defaultVersion: "2.11.0"
     versions:
     - version: "2.11.0"
       image: percona/percona-backup-mongodb:2.11.0
-      default: true
   pmm:
+    defaultVersion: "2.44.1"
     versions:
     - version: "2.44.1"
       image: percona/pmm-server:2.44.1
-      default: true
 ```
 
 **Rules:**
 - Each component type must have at least one version
-- Exactly one version per type must be marked `default: true`
+- Each type's `defaultVersion` must name one of its version entries
 - Images should be fully qualified (registry/repository:tag)
 - Add new versions when operator releases are available
 
@@ -373,12 +373,13 @@ mutually compatible. Users set a single `spec.version` field on an Instance
 instead of specifying versions for every component individually.
 
 Bundles are defined in the same `definition/versions.yaml` file, under a
-top-level `versions:` key:
+top-level `versions:` key, with the default named by a sibling
+`defaultVersion:` key:
 
 ```yaml
+defaultVersion: "8.0.12"               # Used when spec.version is omitted
 versions:
 - name: "8.0.12"                       # Bundle name — shown to users
-  default: true                        # Used when spec.version is omitted
   components:
     engine: "8.0.12-4"
     configServer: "8.0.12-4"
@@ -404,13 +405,13 @@ Resolution order for each component's version:
 
 1. `ComponentSpec.Version` — explicitly set by the user on that component (wins)
 2. Version bundle — from `spec.version` or the default bundle
-3. Per-type `default: true` in the catalog — fallback if no bundle applies
+3. Per-type `defaultVersion` in the catalog — fallback if no bundle applies
 
 The reconciler operates on a **deep copy** of the Instance. The stored spec in
 etcd is never mutated, so the user's original intent is always preserved.
 
 **Rules:**
-- Exactly one bundle should have `default: true`
+- The top-level `defaultVersion` must name one of the bundles
 - Every component name and version referenced in a bundle must exist in
   `provider.yaml` and in the corresponding `componentTypes` catalog
   respectively — `provider-sdk generate` validates this at build time
@@ -423,7 +424,7 @@ etcd is never mutated, so the user's original intent is always preserved.
 
 1. Add the new component versions to `componentTypes` in `versions.yaml`
 2. Add a new bundle entry under `versions:` referencing those new versions
-3. Move `default: true` to the new bundle
+3. Point the top-level `defaultVersion` at the new bundle
 4. Run `make generate` — the generator validates all bundle references and
    emits the updated `Provider` CR spec
 
@@ -2445,7 +2446,7 @@ Use this checklist to track your progress:
 
 - [ ] **Components defined** in `definition/provider.yaml`
 - [ ] **Version catalog** filled in `definition/versions.yaml`
-- [ ] **Version bundles** defined in `definition/versions.yaml` with one marked `default: true`
+- [ ] **Version bundles** defined in `definition/versions.yaml` with the default named by `defaultVersion`
 - [ ] **At least one topology** in `definition/topologies/`
 - [ ] **UI schema** configured in each topology's `topology.yaml`
 - [ ] **Provider interface** implemented in `internal/provider/provider.go`:

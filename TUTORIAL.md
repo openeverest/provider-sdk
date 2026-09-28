@@ -127,16 +127,16 @@ general one.
 ```yaml
 componentTypes:
   memcached:
+    defaultVersion: "1.6.38"
     versions:
       - version: "1.6.38"
         image: memcached:1.6.38-alpine
-        default: true
       - version: "1.6.31"
         image: memcached:1.6.31-alpine
 
+defaultVersion: "1.6.38"
 versions:
   - name: "1.6.38"
-    default: true
     components:
       engine: "1.6.38"
 ```
