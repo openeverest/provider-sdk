@@ -1845,7 +1845,7 @@ options:
 | `ENABLE_SEAWEEDFS` | `false` | Deploy SeaweedFS + a `BackupStorage` CR for backups. |
 
 > **Note:** While OpenEverest v2 is in pre-release, the Helm repository only
-> publishes pre-release tags (e.g. `2.0.0-dev.3`), which Helm's default "latest"
+> publishes pre-release tags (e.g. `2.0.0-dev.4`), which Helm's default "latest"
 > resolution skips — it would install v1, whose CRDs a v2 provider cannot use.
 > `OPENEVEREST_VERSION` therefore defaults to a constraint rather than being
 > empty. Override it to pin an exact version.
