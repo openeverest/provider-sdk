@@ -60,6 +60,10 @@ func Run(opts Options) error {
 		return fmt.Errorf("assembling definition files: %w", err)
 	}
 
+	// 1a. Point version pickers at the declared default so the UI can
+	//     pre-select it.
+	InjectDefaultValuePaths(cfg)
+
 	// 1b. Assemble BackupClasses, collecting any additional type references
 	//     into the same TypeRefs set so a single ResolveSchemas pass picks
 	//     them up alongside topology and component schemas.

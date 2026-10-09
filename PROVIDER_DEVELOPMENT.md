@@ -752,10 +752,18 @@ Supported `fieldParams`:
 | `defaultValue` | string | Pre-selected value |
 | `options` | array | Inline options: `[{ label, value }]` |
 | `optionsPath` | string | Path in the Provider spec to load options from |
-| `optionsPathConfig` | object | Maps object fields to label/value: `{ labelPath, valuePath }` |
+| `optionsPathConfig` | object | Maps object fields to label/value: `{ labelPath, valuePath, defaultValuePath }` |
 | `displayEmpty` | bool | Adds an empty "None" option for optional fields |
 | `disabled` | bool | Field is non-interactive |
 | `modes` | object | Per-mode overrides (see [Mode-Aware Overrides](#mode-aware-overrides)) |
+
+`optionsPathConfig.defaultValuePath` names a Provider spec field whose value the
+UI pre-selects. You rarely write it yourself: when `optionsPath` points at a
+version list (`spec.versions` or `spec.componentTypes.<type>.versions`) and the
+list declares a default in `versions.yaml`, `generate` injects the matching
+`defaultValuePath` (`spec.defaultVersion` /
+`spec.componentTypes.<type>.defaultVersion`) automatically. An explicitly
+authored value is left untouched.
 
 #### Text Field
 
