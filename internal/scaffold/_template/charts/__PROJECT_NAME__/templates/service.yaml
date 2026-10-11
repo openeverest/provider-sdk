@@ -11,5 +11,9 @@ spec:
       targetPort: http
       protocol: TCP
       name: http
+    - port: 443
+      targetPort: admission
+      protocol: TCP
+      name: admission
   selector:
     {{- include "[[ .ProjectName ]].selectorLabels" . | nindent 4 }}
