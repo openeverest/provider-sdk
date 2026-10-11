@@ -37,29 +37,13 @@ func New() *Provider {
 	}
 }
 
-// Validate checks if the Instance spec is valid.
-//
-// Add your provider-specific validation logic here.
-// Return an error if the spec is invalid.
-//
-// +kubebuilder:rbac:groups=[[ .OperatorAPIGroup ]],resources=[[ .OperatorResource ]],verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=[[ .OperatorAPIGroup ]],resources=[[ .OperatorResource ]]/status,verbs=get
-func (p *Provider) Validate(c *controller.Context) error {
-	l := log.FromContext(c.Context())
-	l.Info("Validating instance", "name", c.Name())
-
-	// TODO: Implement validation logic.
-	// Examples:
-	//   - Check that required components are present
-	//   - Validate storage sizes, replica counts
-	//   - Ensure version compatibility
-	return nil
-}
-
 // Sync ensures all required resources exist and are configured correctly.
 //
 // This is the main reconciliation logic. Create or update your
 // operator's custom resource(s) based on the Instance spec.
+//
+// +kubebuilder:rbac:groups=[[ .OperatorAPIGroup ]],resources=[[ .OperatorResource ]],verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=[[ .OperatorAPIGroup ]],resources=[[ .OperatorResource ]]/status,verbs=get
 func (p *Provider) Sync(c *controller.Context) error {
 	l := log.FromContext(c.Context())
 	l.Info("Syncing instance", "name", c.Name())
