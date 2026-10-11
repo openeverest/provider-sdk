@@ -7,16 +7,20 @@ require (
 	github.com/charmbracelet/bubbles v1.0.0
 	github.com/charmbracelet/bubbletea v1.3.10
 	github.com/charmbracelet/lipgloss v1.1.0
+	github.com/google/cel-go v0.29.2
 	github.com/openeverest/openeverest/v2 v2.0.0-dev.2.0.20261029121954-02a02d35d69a
 	github.com/spf13/cobra v1.10.2
 	github.com/stretchr/testify v1.12.1
-	golang.org/x/tools v0.50.0
+	golang.org/x/tools v0.51.0
 	gopkg.in/yaml.v3 v3.0.1
 	k8s.io/apimachinery v0.37.1
+	sigs.k8s.io/controller-tools v0.23.0
 	sigs.k8s.io/yaml v1.6.0
 )
 
 require (
+	cel.dev/expr v0.25.2 // indirect
+	github.com/antlr4-go/antlr/v4 v4.13.1 // indirect
 	github.com/atotto/clipboard v0.1.4 // indirect
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
 	github.com/charmbracelet/colorprofile v0.4.3 // indirect
@@ -28,6 +32,7 @@ require (
 	github.com/erikgeiser/coninput v0.0.0-20211004153227-1c3628e74d0f // indirect
 	github.com/fxamacker/cbor/v2 v2.9.2 // indirect
 	github.com/go-logr/logr v1.4.4 // indirect
+	github.com/gobuffalo/flect v1.0.3 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/kr/text v0.2.0 // indirect
@@ -49,11 +54,15 @@ require (
 	github.com/xo/terminfo v1.0.0 // indirect
 	go.yaml.in/yaml/v2 v2.4.4 // indirect
 	go.yaml.in/yaml/v3 v3.0.5 // indirect
+	golang.org/x/exp v0.0.0-20260611194520-c48552f49976 // indirect
 	golang.org/x/mod v0.41.0 // indirect
 	golang.org/x/net v0.59.0 // indirect
 	golang.org/x/sync v0.23.0 // indirect
 	golang.org/x/sys v0.48.0 // indirect
 	golang.org/x/text v0.42.0 // indirect
+	google.golang.org/genproto/googleapis/api v0.0.0-20260803160001-6ac0973c030d // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20260819154853-08b0e4226688 // indirect
+	google.golang.org/protobuf v1.36.12 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	k8s.io/api v0.37.1 // indirect
 	k8s.io/apiextensions-apiserver v0.37.1 // indirect
