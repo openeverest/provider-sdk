@@ -17,15 +17,19 @@ package generate
 import (
 	"encoding/json"
 	"fmt"
-	"go/types"
-	"reflect"
 	"strings"
 
 	"golang.org/x/tools/go/packages"
+	"sigs.k8s.io/controller-tools/pkg/crd"
+	crdmarkers "sigs.k8s.io/controller-tools/pkg/crd/markers"
+	"sigs.k8s.io/controller-tools/pkg/loader"
+	"sigs.k8s.io/controller-tools/pkg/markers"
 )
 
-// ResolveSchemas loads Go packages and generates OpenAPI JSON schemas for the
-// given type names using static type analysis (go/packages).
+// ResolveSchemas generates the OpenAPI schema of each named Go type with
+// controller-tools, the parser controller-gen uses for CRDs, so every
+// +kubebuilder:validation marker and every doc comment ends up in the schema
+// as it would on a CRD.
 //
 // Types are searched across packages in declaration order; the first match wins.
 // The returned map keys are type names and values are map[string]any representations
@@ -35,20 +39,86 @@ func ResolveSchemas(pkgPatterns []string, typeNames []string) (map[string]any, e
 		return nil, nil
 	}
 
-	pkgs, err := loadPackages(pkgPatterns)
+	roots, err := loader.LoadRoots(pkgPatterns...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load type packages: %w", err)
 	}
 
+	registry := &markers.Registry{}
+	if err := crdmarkers.Register(registry); err != nil {
+		return nil, fmt.Errorf("registering kubebuilder markers: %w", err)
+	}
+	parser := &crd.Parser{
+		Collector:           &markers.Collector{Registry: registry},
+		Checker:             &loader.TypeChecker{},
+		AllowDangerousTypes: true,
+	}
+	crd.AddKnownTypes(parser)
+	for _, root := range roots {
+		parser.NeedPackage(root)
+	}
+
 	schemas := make(map[string]any, len(typeNames))
 	for _, name := range typeNames {
-		schema, err := typeSchemaFromPackages(pkgs, name)
-		if err != nil {
-			return nil, fmt.Errorf("failed to generate schema for type %q: %w", name, err)
+		ident, ok := lookupIdent(parser, roots, name)
+		if !ok {
+			return nil, fmt.Errorf("type %q not found in packages: %s", name, strings.Join(pkgPatterns, ", "))
 		}
-		schemas[name] = schema
+		parser.NeedFlattenedSchemaFor(ident)
+		schema := parser.FlattenedSchemata[ident]
+		// Convert to map[string]any via JSON round-trip for clean YAML output.
+		jsonBytes, err := json.Marshal(schema)
+		if err != nil {
+			return nil, fmt.Errorf("marshaling schema for type %q: %w", name, err)
+		}
+		var result any
+		if err := json.Unmarshal(jsonBytes, &result); err != nil {
+			return nil, fmt.Errorf("unmarshaling schema for type %q: %w", name, err)
+		}
+		schemas[name] = result
+	}
+
+	if err := packageErrors(roots); err != nil {
+		return nil, err
 	}
 	return schemas, nil
+}
+
+// lookupIdent finds the first root package that declares name.
+func lookupIdent(parser *crd.Parser, roots []*loader.Package, name string) (crd.TypeIdent, bool) {
+	for _, root := range roots {
+		ident := crd.TypeIdent{Package: root, Name: name}
+		if parser.LookupType(root, name) != nil {
+			return ident, true
+		}
+	}
+	return crd.TypeIdent{}, false
+}
+
+// packageErrors returns every error recorded while generating schemas: any
+// error in the root packages, and anything but type-checking errors in the
+// packages they import, as controller-gen does.
+func packageErrors(roots []*loader.Package) error {
+	isRoot := make(map[*packages.Package]bool, len(roots))
+	raw := make([]*packages.Package, 0, len(roots))
+	for _, root := range roots {
+		isRoot[root.Package] = true
+		raw = append(raw, root.Package)
+	}
+
+	var errs []string
+	packages.Visit(raw, nil, func(pkg *packages.Package) {
+		for _, err := range pkg.Errors {
+			if err.Kind == packages.TypeError && !isRoot[pkg] {
+				continue
+			}
+			errs = append(errs, err.Error())
+		}
+	})
+	if len(errs) > 0 {
+		return fmt.Errorf("generating schemas: %s", strings.Join(errs, "; "))
+	}
+	return nil
 }
 
 // loadPackages loads one or more Go packages for type inspection using go/packages.
@@ -78,142 +148,4 @@ func loadPackages(pkgPatterns []string) ([]*packages.Package, error) {
 		}
 	}
 	return result, nil
-}
-
-// typeSchemaFromPackages searches the given packages in order for typeName and
-// generates an OpenAPI JSON schema from the first match found.
-// Returns a map[string]any suitable for YAML marshaling.
-func typeSchemaFromPackages(pkgs []*packages.Package, typeName string) (any, error) {
-	for _, pkg := range pkgs {
-		obj := pkg.Types.Scope().Lookup(typeName)
-		if obj != nil {
-			schema := goTypeToSchema(obj.Type())
-			// Convert to map[string]any via JSON round-trip for clean YAML output.
-			jsonBytes, err := json.Marshal(schema)
-			if err != nil {
-				return nil, fmt.Errorf("marshaling schema: %w", err)
-			}
-			var result any
-			if err := json.Unmarshal(jsonBytes, &result); err != nil {
-				return nil, fmt.Errorf("unmarshaling schema: %w", err)
-			}
-			return result, nil
-		}
-	}
-	pkgPaths := make([]string, len(pkgs))
-	for i, p := range pkgs {
-		pkgPaths[i] = p.PkgPath
-	}
-	return nil, fmt.Errorf("type %q not found in packages: %s", typeName, strings.Join(pkgPaths, ", "))
-}
-
-// openAPISchema is a minimal OpenAPI 3.x schema representation for JSON marshaling.
-type openAPISchema struct {
-	Type                 string                    `json:"type,omitempty"`
-	Format               string                    `json:"format,omitempty"`
-	Properties           map[string]*openAPISchema `json:"properties,omitempty"`
-	Items                *openAPISchema            `json:"items,omitempty"`
-	AdditionalProperties *openAPISchema            `json:"additionalProperties,omitempty"`
-	Description          string                    `json:"description,omitempty"`
-}
-
-// goTypeToSchema converts a go/types.Type into an OpenAPI schema.
-func goTypeToSchema(t types.Type) *openAPISchema {
-	switch u := t.Underlying().(type) {
-	case *types.Struct:
-		return structToSchema(u)
-	case *types.Basic:
-		return basicToSchema(u)
-	case *types.Slice:
-		return &openAPISchema{
-			Type:  "array",
-			Items: goTypeToSchema(u.Elem()),
-		}
-	case *types.Map:
-		return &openAPISchema{
-			Type:                 "object",
-			AdditionalProperties: goTypeToSchema(u.Elem()),
-		}
-	case *types.Pointer:
-		return goTypeToSchema(u.Elem())
-	case *types.Interface:
-		// interface{} / any → no type constraint.
-		return &openAPISchema{}
-	default:
-		return &openAPISchema{Type: "object"}
-	}
-}
-
-// structToSchema converts a go/types.Struct into an OpenAPI object schema.
-func structToSchema(s *types.Struct) *openAPISchema {
-	schema := &openAPISchema{Type: "object"}
-	if s.NumFields() == 0 {
-		return schema
-	}
-
-	schema.Properties = make(map[string]*openAPISchema)
-	for i := range s.NumFields() {
-		field := s.Field(i)
-		if !field.Exported() {
-			continue
-		}
-		tag := s.Tag(i)
-		name := jsonFieldName(field.Name(), tag)
-		if name == "-" {
-			continue
-		}
-		fieldSchema := goTypeToSchema(field.Type())
-
-		// Apply description from struct tag if present.
-		st := reflect.StructTag(tag)
-		if desc := st.Get("description"); desc != "" {
-			fieldSchema.Description = desc
-		}
-
-		schema.Properties[name] = fieldSchema
-	}
-	return schema
-}
-
-// basicToSchema converts a go/types.Basic into an OpenAPI schema with type and format.
-func basicToSchema(b *types.Basic) *openAPISchema {
-	switch b.Kind() {
-	case types.String:
-		return &openAPISchema{Type: "string"}
-	case types.Bool:
-		return &openAPISchema{Type: "boolean"}
-	case types.Int, types.Int64:
-		return &openAPISchema{Type: "integer", Format: "int64"}
-	case types.Int32:
-		return &openAPISchema{Type: "integer", Format: "int32"}
-	case types.Int16, types.Int8:
-		return &openAPISchema{Type: "integer"}
-	case types.Uint, types.Uint64:
-		return &openAPISchema{Type: "integer", Format: "uint64"}
-	case types.Uint32:
-		return &openAPISchema{Type: "integer", Format: "uint32"}
-	case types.Uint16, types.Uint8:
-		return &openAPISchema{Type: "integer"}
-	case types.Float32:
-		return &openAPISchema{Type: "number", Format: "float"}
-	case types.Float64:
-		return &openAPISchema{Type: "number", Format: "double"}
-	default:
-		return &openAPISchema{Type: "string"}
-	}
-}
-
-// jsonFieldName extracts the JSON field name from a struct tag.
-// Falls back to lowercasing the first letter of the Go field name.
-func jsonFieldName(goName, tag string) string {
-	st := reflect.StructTag(tag)
-	jsonTag := st.Get("json")
-	if jsonTag == "" {
-		return strings.ToLower(goName[:1]) + goName[1:]
-	}
-	parts := strings.SplitN(jsonTag, ",", 2)
-	if parts[0] == "" {
-		return strings.ToLower(goName[:1]) + goName[1:]
-	}
-	return parts[0]
 }

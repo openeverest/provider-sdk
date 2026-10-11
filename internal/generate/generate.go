@@ -107,6 +107,21 @@ func Run(opts Options) error {
 		}
 	}
 
+	// 2b. Reject CEL rules the UI cannot evaluate, so a form never accepts
+	//     what the server then rejects.
+	celIssues, err := ValidateCELRules(cfg, schemas)
+	if err != nil {
+		return fmt.Errorf("validating CEL rules: %w", err)
+	}
+	if len(celIssues) > 0 {
+		var b strings.Builder
+		fmt.Fprintf(&b, "%d x-kubernetes-validations rule(s) the UI cannot evaluate:", len(celIssues))
+		for _, issue := range celIssues {
+			fmt.Fprintf(&b, "\n  - %s", issue)
+		}
+		return errors.New(b.String())
+	}
+
 	// 3. Reject UI schema paths that do not address a real Instance field. The
 	//    schemas are copied verbatim into the Provider CR, so emitting an
 	//    unresolvable path publishes a broken form to every cluster.

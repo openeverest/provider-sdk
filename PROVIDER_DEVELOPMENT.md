@@ -537,6 +537,9 @@ of shards), create a Go type:
 package sharded
 
 type ShardedTopologyParameters struct {
+    // NumShards is the number of shards.
+    // +kubebuilder:validation:Minimum=1
+    // +optional
     NumShards int32 `json:"numShards,omitempty"`
 }
 ```
@@ -549,7 +552,8 @@ config:
 ```
 
 The `provider-sdk generate` command converts the Go struct to an OpenAPI schema
-and embeds it in the Provider CR.
+and embeds it in the Provider CR. See [Schema markers](#schema-markers) for
+the constraints it can carry.
 
 **Accessing topology parameters in your provider:**
 
@@ -592,6 +596,36 @@ components:
   engine:
     type: mongod
     parametersSchema: MongodParameters
+```
+
+### Schema markers
+
+`provider-sdk generate` builds parameter schemas with controller-gen's parser,
+so a parameter type behaves exactly like a CRD type:
+
+- Doc comments become `description`s.
+- `+kubebuilder:validation:` markers become constraints: `Minimum`, `Maximum`,
+  `Enum`, `Pattern`, `MinLength`, `MaxLength`, `MinItems`, `MaxItems`,
+  `Required`/`Optional` and `XValidation` (CEL). `+kubebuilder:default` sets
+  a default the form can pre-fill.
+- A field is required unless it has `omitempty` or `+optional`.
+
+The runtime enforces the schema before every `Sync()`, and rejects fields the
+schema does not declare, so a misspelt parameter is an error rather than a
+silent no-op. The UI checks the same schema as the user types.
+
+CEL rules may use only the standard CEL library, because that is all the UI
+evaluates. `generate` rejects a rule that calls a Kubernetes CEL library, such
+as `quantity()`, `isURL()` or `format.*`.
+
+```go
+// +kubebuilder:validation:XValidation:rule="!has(self.cacheSizeGB) || self.cacheSizeGB <= 64",message="cacheSizeGB must be at most 64"
+type MongodParameters struct {
+    // CacheSizeGB is the WiredTiger cache size, in gigabytes.
+    // +kubebuilder:validation:Minimum=1
+    // +optional
+    CacheSizeGB *int32 `json:"cacheSizeGB,omitempty"`
+}
 ```
 
 ### Shared Types
