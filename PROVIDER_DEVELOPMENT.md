@@ -119,10 +119,8 @@ image and a Helm chart, and runs as a Deployment beside the core:
 ```mermaid
 flowchart TB
     U([User, UI or CLI]) -->|creates| API[OpenEverest API server]
-    API -->|POST /validate| SRV
     API -->|persists| I["Instance<br/>core.openeverest.io"]
     subgraph P["your provider (a Deployment)"]
-        SRV[HTTP server]
         REC[reconciler]
     end
     I -.->|watch| REC
@@ -140,17 +138,15 @@ parameter schemas from it, never from your Go code.
 The provider watches every `Instance` and ignores any whose `spec.providerRef.name` is not its
 own name, so several providers coexist in one cluster without knowing about each other.
 
-Your code has **two entry points**, which is worth internalising early:
+The reconciler in your own binary calls your code on every reconcile: `Validate`, then
+`Sync` and `Status`, or `Cleanup` on deletion. Before `Validate`, the runtime checks the
+Instance against what your `Provider` declares — topology, components, versions, parameter
+schemas and `supportedFields` — so `Validate` only sees Instances that already match them.
 
-| Entry point | Called by | When |
-|---|---|---|
-| `Validate` over HTTP (`/validate`) | the OpenEverest API server | before an Instance is persisted |
-| `Validate` → `Sync` → `Status`, or `Cleanup` | the reconciler in your own binary | on every reconcile, and on deletion |
-
-The same `Validate` function serves both, at two different moments. An Instance created
-through the API or the UI is rejected before it exists. One created with `kubectl apply` or by
-a GitOps controller bypasses that path: it is persisted, and the reconciler then rejects it by
-setting `phase: Failed`. Write validation messages that read well in both situations.
+A rejected Instance keeps its phase and reports `Ready=False` with reason `ValidationFailed`
+and the errors as `field: detail`, which `kubectl wait --for=condition=Ready`, Argo CD and
+Flux all read. It is checked again when the Instance or the `Provider` changes. Return
+errors with field paths that make sense to the person who wrote the Instance.
 
 ---
 
@@ -185,7 +181,8 @@ definition/                          # ← YOU EDIT THESE
 
 internal/                            # ← YOU IMPLEMENT THESE
   provider/
-    provider.go                      # ProviderInterface methods (Validate/Sync/Status/Cleanup)
+    provider.go                      # ProviderInterface methods (Sync/Status/Cleanup)
+    validate.go                      # Validate, and its table test in validate_test.go
     rbac.go                          # Kubebuilder RBAC markers
   common/
     spec.go                          # Component name/type constants
@@ -1217,30 +1214,57 @@ ui:
 
 ## Implement the provider interface
 
-The core of your provider is in `internal/provider/provider.go`. You must
-implement four methods:
+The core of your provider is in `internal/provider/`. You must implement four
+methods:
 
 ### Validate
 
-Called before Sync. Validate the Instance spec and return an error for
-invalid configurations.
+Checks the rules about the Instance alone and returns every error with its
+field path. It gets the Instance and the `Provider`, and no client:
 
 ```go
-func (p *Provider) Validate(c *controller.Context) error {
-    spec := c.Instance().Spec
-
-    engine := spec.Components["engine"]
-    if engine.Replicas != nil && *engine.Replicas < 1 {
-        return fmt.Errorf("engine replicas must be at least 1")
+func (p *Provider) Validate(in controller.ValidationInput) controller.ValidationResult {
+    if in.Instance.GetTopologyType() != "sharded" {
+        return controller.ValidationResult{}
     }
-
-    if spec.Topology != nil && spec.Topology.Type == "sharded" {
-        if _, ok := spec.Components["proxy"]; !ok {
-            return fmt.Errorf("sharded topology requires a proxy component")
-        }
+    components := field.NewPath("spec", "components")
+    engine := in.Instance.Spec.Components["engine"]
+    cfg := in.Instance.Spec.Components["configServer"]
+    if engine.Replicas != nil && cfg.Replicas != nil && *engine.Replicas > 1 && *cfg.Replicas < 3 {
+        return controller.ValidationResult{Errors: field.ErrorList{field.Invalid(
+            components.Key("configServer").Child("replicas"), *cfg.Replicas,
+            "must be at least 3 when spec.components[engine].replicas is greater than 1",
+        )}}
     }
+    return controller.ValidationResult{}
+}
+```
 
-    return nil
+Where a rule goes:
+
+| Rule | Where |
+|---|---|
+| Anything the `Provider` CR declares: topology, components, versions, parameter types, unknown fields, `supportedFields` and any declared bound | Nothing to write: the runtime checks it before `Validate`, so `Validate` can rely on it |
+| A single-field bound or enum | A [schema marker](#schema-markers) on the parameters type, or a keyword in `supportedFields` |
+| Any other rule about the Instance, including rules across components and topologies | `Validate` |
+| A rule about another object's contents, such as the keys of the user Secret | The optional `ValidateReferences(c *controller.Context) error`, which runs after `Validate` and before `Sync` |
+
+Errors from the runtime's checks or from `Validate` set `Ready=False` with
+reason `ValidationFailed`, keep the phase, skip `Sync`, and are checked again
+when the Instance or the `Provider` changes. Errors from `ValidateReferences`
+report the same way and are retried with backoff, since the other object can
+change without an event on the Instance. Warnings are recorded as a Warning
+Event.
+
+Test `Validate` the way the runtime runs it, with `validationtest` and the
+`provider-spec.yaml` your chart ships:
+
+```go
+func TestValidate(t *testing.T) {
+    v := validationtest.New(t, New(), "../../charts/my-provider/generated/provider-spec.yaml")
+    res := v.Run(validationtest.Load(t, "testdata/validate/sharded-one-config-server.yaml"), nil)
+    require.Len(t, res.Errors, 1)
+    assert.Equal(t, "spec.components[configServer].replicas", res.Errors[0].Field)
 }
 ```
 
@@ -1261,13 +1285,16 @@ designing a field:
   bundles, `parameters` against `parametersSchema`. Unsupported means
   undeclared, so rejection is automatic and cannot be forgotten. Prefer this
   wherever it fits.
-- **Imperative** — for fields with no catalog, reject in `Validate()` with a
-  message naming both the field and the provider, so the user knows where the
+- **Imperative** — for fields with no catalog, reject in `Validate()` with an
+  error on the field that names the provider, so the user knows where the
   limitation comes from:
 
   ```go
   if engine.SchedulingPolicy != nil && len(engine.SchedulingPolicy.Tolerations) > 0 {
-      return fmt.Errorf("provider %q does not support .schedulingPolicy.tolerations", p.Name())
+      errs = append(errs, field.Forbidden(
+          field.NewPath("spec", "components").Key("engine").Child("schedulingPolicy", "tolerations"),
+          fmt.Sprintf("provider %q does not support tolerations", in.Provider.Name),
+      ))
   }
   ```
 

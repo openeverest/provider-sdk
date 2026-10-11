@@ -312,22 +312,29 @@ entry becomes a key in the connection Secret.
 
 ## 6. Say no early: Validate
 
-`Validate` is called from two places, and the difference matters. The OpenEverest API server
-calls it over HTTP before it persists an Instance, so a bad spec submitted through the API or
-the UI is rejected and never exists. An Instance applied with `kubectl` bypasses that path: it
-is persisted, and the reconciler calls the same function and sets `phase: Failed`.
-
-Either way, this is where you catch anything that would otherwise reconcile forever.
+Before every `Sync`, the runtime checks the Instance against what your `Provider` declares —
+topologies, components, versions, parameter schemas and `supportedFields` — and then calls
+`Validate` with the Instance and the `Provider`. `Validate` gets no client: it judges the
+Instance alone and returns every error with its field path.
 
 ```go
-case replicas > maxPoolNodes:
-	return fmt.Errorf("a pool supports at most %d nodes, got %d", maxPoolNodes, replicas)
+if replicas > maxPoolNodes {
+	errs = append(errs, field.Invalid(
+		field.NewPath("spec", "components").Key("engine").Child("replicas"), replicas,
+		fmt.Sprintf("a pool supports at most %d nodes", maxPoolNodes),
+	))
+}
 ```
 
-The form in the next section stops most bad input client-side. `Validate` is what stops the
-rest, because an Instance can also arrive by `kubectl apply` or from a Git commit. Say what is
-wrong *and* what to do instead — that message is the entire user experience of a rejection,
-whether it lands in a form or in `kubectl describe`.
+A rejected Instance keeps its phase and reports `Ready=False` with reason `ValidationFailed`
+and your errors, so `kubectl wait`, Argo CD and Flux all see the rejection, and nothing is
+synced until the Instance or the `Provider` changes. Say what is wrong *and* what to do
+instead — that message is the entire user experience of a rejection, whether it lands in a
+form or in `kubectl describe`.
+
+A single-field bound like this one can also be declared, as `maximum` on the field in the
+component's `supportedFields`, and then the form enforces it as the user types as well.
+Declare what you can; write in `Validate` what spans fields.
 
 ---
 
@@ -365,8 +372,8 @@ modes:
         message: Nodes cannot be removed from a running pool.
 ```
 
-Anything the form enforces should also be enforced in `Validate`. The form is a courtesy;
-`Validate` is the contract.
+Anything the form enforces should also be enforced on the server, declared in a schema or
+written in `Validate`. The form is a courtesy; the server is the contract.
 
 The full vocabulary — field types, groups, modes, data sources, validation rules — is in
 [the guide](PROVIDER_DEVELOPMENT.md#configure-the-ui-schema).
