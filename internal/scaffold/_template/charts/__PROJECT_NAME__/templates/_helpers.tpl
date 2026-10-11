@@ -75,3 +75,37 @@ Container image
 {{- $tag := default .Chart.AppVersion .Values.image.tag -}}
 {{- printf "%s:%s" .Values.image.repository $tag -}}
 {{- end }}
+
+{{/*
+Name of the Secret holding the admission webhook's serving certificate
+*/}}
+{{- define "[[ .ProjectName ]].admissionSecretName" -}}
+{{- printf "%s-admission-cert" (include "[[ .ProjectName ]].fullname" .) | trunc 63 | trimSuffix "-" }}
+{{- end }}
+
+{{/*
+The admission webhook's serving certificate: from values, else the Secret the
+previous release created, else a new CA and certificate.
+*/}}
+{{- define "[[ .ProjectName ]].admissionCerts" -}}
+{{- $certs := .Values.admission.certs }}
+{{- $current := lookup "v1" "Secret" .Release.Namespace (include "[[ .ProjectName ]].admissionSecretName" .) }}
+{{- if and (index $certs "tls.crt") (index $certs "tls.key") (index $certs "ca.crt") }}
+tls.crt: {{ index $certs "tls.crt" | b64enc }}
+tls.key: {{ index $certs "tls.key" | b64enc }}
+ca.crt: {{ index $certs "ca.crt" | b64enc }}
+{{- else if and $current (index $current.data "ca.crt") }}
+tls.crt: {{ index $current.data "tls.crt" }}
+tls.key: {{ index $current.data "tls.key" }}
+ca.crt: {{ index $current.data "ca.crt" }}
+{{- else }}
+{{- $service := include "[[ .ProjectName ]].fullname" . }}
+{{- $dnsName := printf "%s.%s.svc" $service .Release.Namespace }}
+{{- $altNames := list $service (printf "%s.%s" $service .Release.Namespace) $dnsName (printf "%s.cluster.local" $dnsName) }}
+{{- $ca := genCA (printf "%s-admission-ca" $service) 3650 }}
+{{- $cert := genSignedCert $dnsName nil $altNames 3650 $ca }}
+tls.crt: {{ $cert.Cert | b64enc }}
+tls.key: {{ $cert.Key | b64enc }}
+ca.crt: {{ $ca.Cert | b64enc }}
+{{- end }}
+{{- end }}
