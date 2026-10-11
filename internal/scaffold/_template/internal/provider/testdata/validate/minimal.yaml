@@ -1,0 +1,9 @@
+# The smallest Instance of this provider. Copy it per case and change what the
+# case is about.
+apiVersion: core.openeverest.io/v1alpha1
+kind: Instance
+metadata:
+  name: example
+spec:
+  providerRef:
+    name: [[ .ProviderName ]]
