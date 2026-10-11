@@ -62,7 +62,7 @@ securityContext:
 service:
   # -- Service type
   type: ClusterIP
-  # -- Service port for the HTTP server (validation/health endpoints)
+  # -- Service port for the HTTP server (health endpoints)
   port: 8082
   # -- The address the metrics endpoint binds to. Use "0" to disable.
   metricsBindAddress: ":8081"
@@ -157,6 +157,17 @@ extraVolumeMounts: []
 
 # -- Additional volumes to add to the pod
 extraVolumes: []
+
+admission:
+  # -- PEM serving certificate for the Instance admission webhook. Left empty,
+  # the chart generates one and keeps it across upgrades.
+  certs:
+    tls.crt: ""
+    tls.key: ""
+    ca.crt: ""
+  certManager:
+    # -- Issue the serving certificate with cert-manager, which must be installed.
+    enabled: false
 
 # -- Leader election configuration
 leaderElection:
