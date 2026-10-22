@@ -22,6 +22,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/openeverest/openeverest/v2/provider-runtime/uischema"
 	"gopkg.in/yaml.v3"
 )
 
@@ -135,6 +136,19 @@ func Run(opts Options) error {
 		var b strings.Builder
 		fmt.Fprintf(&b, "%d supportedFields problem(s):", len(fieldIssues))
 		for _, issue := range fieldIssues {
+			fmt.Fprintf(&b, "\n  - %s", issue)
+		}
+		return errors.New(b.String())
+	}
+
+	// 3c. Reject UI schemas the UI would only render through a fallback.
+	//     Providers run the SDK via `go tool`, which builds it with the
+	//     provider's module graph, so these are the rules of the openeverest
+	//     version the provider pins.
+	if uiIssues := uischema.Validate(uischema.Input{UISchema: cfg.UISchema}); len(uiIssues) > 0 {
+		var b strings.Builder
+		fmt.Fprintf(&b, "%d UI schema problem(s):", len(uiIssues))
+		for _, issue := range uiIssues {
 			fmt.Fprintf(&b, "\n  - %s", issue)
 		}
 		return errors.New(b.String())
