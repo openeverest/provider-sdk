@@ -149,11 +149,11 @@ Watch it come up and read the connection details:
 
 ```bash
 kubectl get instance my-instance -w
-kubectl get instance my-instance -o jsonpath='{.status.connection}'
+kubectl get instance my-instance -o jsonpath='{.status.connectionSecretRef.name}'
 ```
 
-Credentials, when the technology has any, are in the secret named by
-`.status.connection.credentialsSecretRef`.
+Connection details, when the technology has any, are in the Secret named by
+`.status.connectionSecretRef.name`.
 
 ## Topologies
 
