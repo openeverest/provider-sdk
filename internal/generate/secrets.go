@@ -108,7 +108,10 @@ func buildSecretsSpec(secrets []SecretDefinitionAssembled, schemas map[string]an
 
 	result := make(map[string]any, len(secrets))
 	for _, s := range secrets {
-		entry := make(map[string]any)
+		entry := map[string]any{}
+		if t, ok := s.Definition["type"].(string); ok && t != "" {
+			entry["type"] = t
+		}
 
 		// Resolve parametersSchema reference.
 		if cfg, ok := s.Definition["parametersSchema"].(map[string]any); ok {

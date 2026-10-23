@@ -78,6 +78,7 @@ func TestAddSecret(t *testing.T) {
 			require.NoError(t, err)
 
 			expected := fmt.Sprintf(`
+type: Opaque
 parametersSchema:
   openAPIV3Schema: %s`, tt.expectedSecretType)
 			assert.YAMLEq(t, expected, string(defYAML))
