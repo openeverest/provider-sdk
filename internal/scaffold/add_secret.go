@@ -66,6 +66,7 @@ func createSecretDefinitionYAML(secretDir string, cfg *AddSecretConfig) error {
 	typeName := toPascalCase(cfg.Name) + "SecretData"
 
 	def := map[string]any{
+		"type": "Opaque",
 		"parametersSchema": map[string]any{
 			"openAPIV3Schema": typeName,
 		},
@@ -75,6 +76,7 @@ func createSecretDefinitionYAML(secretDir string, cfg *AddSecretConfig) error {
 # This file is the source of truth for the provider's secret type definition.
 #
 # Fields:
+#   type: Kubernetes Secret type (e.g. Opaque, kubernetes.io/dockerconfigjson).
 #   parametersSchema.openAPIV3Schema: Go type name (in this package) describing
 #     the expected secret data keys. Resolved to an OpenAPI schema at generation time.
 #

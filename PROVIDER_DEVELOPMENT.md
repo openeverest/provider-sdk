@@ -2208,6 +2208,9 @@ This creates:
 
 ```yaml
 # definition/secrets/credentials/definition.yaml
+# Kubernetes Secret type; defaults to Opaque. Set it when the consumer needs
+# a specific type, e.g. kubernetes.io/dockerconfigjson.
+type: Opaque
 parametersSchema:
   openAPIV3Schema: CredentialsSecretData
 ```
@@ -2323,6 +2326,7 @@ spec:
   # ... other fields ...
   secrets:
     credentials:
+      type: Opaque
       parametersSchema:
         openAPIV3Schema:
           properties:

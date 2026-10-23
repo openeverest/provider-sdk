@@ -98,6 +98,17 @@ func TestBuildSecretsSpec(t *testing.T) {
 	assert.Contains(t, creds, "uiSchema")
 }
 
+func TestBuildSecretsSpec_DeclaredType(t *testing.T) {
+	secrets := []SecretDefinitionAssembled{{
+		Name:       "registry",
+		Definition: map[string]any{"type": "kubernetes.io/dockerconfigjson"},
+	}}
+	spec := buildSecretsSpec(secrets, nil)
+	registry, ok := spec["registry"].(map[string]any)
+	require.True(t, ok, "registry not found")
+	assert.Equal(t, "kubernetes.io/dockerconfigjson", registry["type"])
+}
+
 func TestBuildConfigMapsSpec(t *testing.T) {
 	cms := []ConfigMapDefinitionAssembled{{
 		Name: "cfg",
