@@ -81,7 +81,7 @@ helm-sync-rbac: yq ## Sync generated RBAC rules into the Helm chart.
 	@echo "Done."
 
 .PHONY: generate
-generate: manifests helm-sync-rbac ## Run all code generation (RBAC + Helm sync + provider spec from definition/).
+generate: manifests helm-sync-rbac ## Run all code generation (RBAC + Helm sync + provider spec, incl. spec.monitoring, from definition/).
 	go generate ./...
 	@echo "All generation complete."
 

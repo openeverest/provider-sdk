@@ -34,6 +34,7 @@ requires the previous one.
 - [Define topologies](#define-topologies)
 - [Define parameter types](#define-parameter-types)
 - [Configure the UI schema](#configure-the-ui-schema)
+- [Declare monitoring support](#declare-monitoring-support)
 
 **Implement it**
 - [Implement the provider interface](#implement-the-provider-interface)
@@ -160,6 +161,7 @@ setting `phase: Failed`. Write validation messages that read well in both situat
 definition/                          # ← YOU EDIT THESE
   provider.yaml                      # Provider name + component→type mapping
   versions.yaml                      # Component type version/image catalog
+  monitoring.yaml                    # Monitoring contract (optional)
   types.go                           # Shared Go types (e.g. TopologyType)
   components/
     types.go                         # Component parameter types (Parameters structs)
@@ -1178,6 +1180,72 @@ ui:
     - resources
     - advanced
 ```
+
+---
+
+## Declare monitoring support
+
+`definition/monitoring.yaml` tells OpenEverest what monitoring can collect from your
+Instances. `provider-sdk generate` publishes it as `spec.monitoring` on the `Provider`, where
+core reads it to decide which monitoring backends can serve your Instances. The file is
+optional: without it, or while every line is commented out, the provider declares no
+monitoring support. `provider-sdk init` writes a commented-out example.
+
+The file has two blocks.
+
+**`integrations`** lists the operator-native monitoring integrations your provider renders
+itself in `Sync`, keyed by integration name. A `MonitoringClass` whose
+`providerManaged.integration` names one is rendered by your provider instead of by the
+class's own controller. `agentVersions` is the semver range of agent versions you can
+render, written as space-separated comparators with full versions (`>=3.0.0 <4.0.0`).
+
+**`componentTypes`** declares what each component type exposes, keyed by the component
+*type* from `provider.yaml` (`pxc`, `mongod`), not by component name:
+
+| Field | Meaning |
+|---|---|
+| `kind` | The engine kind (`mysql`, `mongodb`, `postgresql`, `haproxy`). Well-known values follow OpenTelemetry `db.system.name`; other values are allowed and match no backend that filters on kind. Lowercase letters, digits and hyphens, optionally prefixed by a domain and a slash (`example.com/vectordb`). Required. |
+| `metrics` | `Native` when the process serves OpenMetrics itself, `Exporter` when your provider runs an exporter for it, `None` otherwise. Defaults to `None`. |
+| `credentialProfiles` | Monitoring users your provider can create on demand (`metrics`, `queryAnalytics`). |
+| `features` | Engine switches your provider can enable on demand (`queryAnalytics`). |
+
+A provider whose operator has a native PMM integration, which runs an exporter sidecar
+for the database and whose proxy serves its own metrics (Percona XtraDB Cluster):
+
+```yaml
+# definition/monitoring.yaml
+integrations:
+  pmm:
+    agentVersions: ">=3.0.0 <4.0.0"
+componentTypes:
+  pxc:
+    kind: mysql
+    metrics: Exporter
+    credentialProfiles: [metrics, queryAnalytics]
+    features: [queryAnalytics]
+  haproxy:
+    kind: haproxy
+    metrics: Native
+```
+
+A provider that renders no integration and whose engine serves metrics itself:
+
+```yaml
+# definition/monitoring.yaml
+componentTypes:
+  clickhouse:
+    kind: clickhouse
+    metrics: Native
+```
+
+`make generate` fails, naming the field, when a `componentTypes` key is not the type of a
+component in `provider.yaml`, when `kind` or `metrics` holds a value the `Provider` CRD
+would reject, or when `agentVersions` is not a valid range.
+
+Declaring a capability is a promise to deliver it: each integration must be rendered in
+`Sync`, and component types with `Native` or `Exporter` metrics must be published for every
+Instance through provider-runtime's `MonitoringIntegrationsProvider` and
+`MonitoringSourcesProvider` interfaces.
 
 ---
 
@@ -2444,7 +2512,9 @@ Usually invoked via `go generate ./...` (see `gen.go`) or `make generate`.
 The generator also validates version bundles at build time — it ensures every
 component name and version referenced in a bundle exists in `provider.yaml` and
 the `componentTypes` catalog. An invalid bundle produces a fatal error rather
-than silently emitting a broken Provider CR.
+than silently emitting a broken Provider CR. It validates
+`definition/monitoring.yaml` the same way, when present (see
+[Declare monitoring support](#declare-monitoring-support)).
 
 ---
 
@@ -2473,3 +2543,4 @@ Use this checklist to track your progress:
 - [ ] **Presets** defined in `charts/<provider-name>/values.yaml` (optional, but recommended)
 - [ ] **Secret types** defined in `definition/secrets/` (optional)
 - [ ] **ConfigMap types** defined in `definition/configmaps/` (optional)
+- [ ] **Monitoring contract** declared in `definition/monitoring.yaml` (optional)

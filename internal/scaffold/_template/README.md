@@ -217,7 +217,7 @@ code generation, and the backup/restore interfaces are documented once for all p
 | `cmd/provider/` | Entry point |
 | `internal/provider/` | `ProviderInterface` implementation, backup interfaces, RBAC markers |
 | `internal/common/` | Component name constants |
-| `definition/` | Provider identity, component types, versions, topologies, backup classes |
+| `definition/` | Provider identity, component types, versions, topologies, backup classes, monitoring contract |
 | `charts/[[ .ProjectName ]]/` | Helm chart (`generated/` is produced by `make generate`) |
 | `config/rbac/role.yaml` | Generated `ClusterRole` — do not edit |
 | `test/integration/` | Chainsaw suites (see its `README.md`) |

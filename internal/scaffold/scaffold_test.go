@@ -17,6 +17,7 @@ package scaffold
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -157,6 +158,7 @@ func TestScaffold(t *testing.T) {
 		"definition/types.go",
 		"definition/README.md",
 		"definition/components/types.go",
+		"definition/monitoring.yaml",
 	} {
 		_, err := os.Stat(filepath.Join(dest, defFile))
 		assert.NoError(t, err, "definition file %s not found", defFile)
@@ -174,6 +176,15 @@ func TestScaffold(t *testing.T) {
 	assert.Contains(t, string(providerYAML), "name: test-db")
 	assert.NotContains(t, string(providerYAML), "\n  engine:", "definition/provider.yaml should not have a hardcoded engine component")
 	assert.Contains(t, string(providerYAML), "components: {}", "definition/provider.yaml should have an empty components map")
+
+	// definition/monitoring.yaml is an example only: a fresh provider must not
+	// publish a monitoring contract it does not implement.
+	monitoringYAML, err := os.ReadFile(filepath.Join(dest, "definition", "monitoring.yaml"))
+	require.NoError(t, err)
+	assert.Contains(t, string(monitoringYAML), "#     metrics: None")
+	for _, line := range strings.Split(string(monitoringYAML), "\n") {
+		assert.True(t, line == "" || strings.HasPrefix(line, "#"), "uncommented line in definition/monitoring.yaml: %q", line)
+	}
 
 	// Verify generated/provider-spec.yaml exists in chart.
 	providerSpec := filepath.Join(chartDir, "generated", "provider-spec.yaml")
