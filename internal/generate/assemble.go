@@ -59,6 +59,10 @@ type AssembledConfig struct {
 	// ParametersSchema is the Go type name reference for provider-level parameters, if any.
 	ParametersSchema string
 
+	// Monitoring is Provider.spec.monitoring from the optional
+	// definition/monitoring.yaml, or nil when the provider declares none.
+	Monitoring map[string]any
+
 	// TypeRefs collects all Go type name references found during assembly
 	// (e.g., parametersSchema values on the provider, components, and topologies).
 	TypeRefs map[string]bool
@@ -69,6 +73,7 @@ type AssembledConfig struct {
 // It reads:
 //   - definition/provider.yaml    — provider name and component→type mapping
 //   - definition/versions.yaml    — component type version catalogs
+//   - definition/monitoring.yaml  — monitoring contract (optional)
 //   - definition/topologies/*/topology.yaml — topology configs and UI schemas
 //
 // Type name references (parametersSchema values on the provider, components,
@@ -137,6 +142,11 @@ func Assemble(defDir string) (*AssembledConfig, error) {
 	if ps, ok := provider["parametersSchema"].(string); ok && ps != "" {
 		cfg.ParametersSchema = ps
 		cfg.TypeRefs[ps] = true
+	}
+
+	cfg.Monitoring, err = assembleMonitoring(defDir, cfg.Components)
+	if err != nil {
+		return nil, err
 	}
 
 	// Topologies and UI schema from topology directories.

@@ -54,7 +54,8 @@ Usage via go:generate (in gen.go):
   //go:generate go tool provider-sdk generate
 
 The command reads definition/provider.yaml, definition/versions.yaml,
-and definition/topologies/*/topology.yaml to build the Provider CR spec.
+the optional definition/monitoring.yaml, and
+definition/topologies/*/topology.yaml to build the Provider CR spec.
 
 If any topology or component references a Go type via parametersSchema, the
 command loads the specified Go packages and performs

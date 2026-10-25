@@ -340,6 +340,10 @@ func buildSpecMap(cfg *AssembledConfig, schemas map[string]any, secrets []Secret
 		spec["uiSchema"] = cfg.UISchema
 	}
 
+	if cfg.Monitoring != nil {
+		spec["monitoring"] = cfg.Monitoring
+	}
+
 	// Secrets — build from assembled secret definitions.
 	if secretsSpec := buildSecretsSpec(secrets, schemas); secretsSpec != nil {
 		spec["secrets"] = secretsSpec
