@@ -4,20 +4,23 @@
 # the file is deleted), the provider declares no monitoring support.
 #
 # integrations: operator-native monitoring integrations this provider renders
-# itself in Sync, keyed by integration name (e.g. pmm). agentVersions is the
-# semver range of agent versions it can render, e.g. ">=3.0.0 <4.0.0".
+# itself in Sync (ProviderManaged), keyed by integration name, a DNS label such
+# as pmm. agentVersions is the semver range of agent versions it can render,
+# e.g. ">=3.0.0 <4.0.0"; omit it to accept any version.
 #
 # componentTypes: keyed by a component type from provider.yaml (the software,
-# not the component name), one entry per type that exposes monitoring signals.
+# not the component name), one entry per type that exposes monitoring signals
+# to ExtensionManaged classes.
 #   kind                Engine kind, e.g. mysql, mongodb, postgresql, haproxy.
 #                       Well-known values follow OpenTelemetry db.system.name.
 #   metrics             Native (the process serves OpenMetrics itself),
-#                       Exporter (the provider runs an exporter for it) or None.
-#   credentialProfiles  Monitoring users the provider can create on demand.
-#   features            Engine switches the provider can enable on demand,
-#                       e.g. queryAnalytics.
+#                       Exporter (the provider can run an exporter for it on
+#                       demand) or None.
+#   credentialProfiles  Reserved for a later release; leave unset.
+#   features            Reserved for a later release; leave unset.
 #
-# For more details, see github.com/openeverest/provider-sdk/blob/main/PROVIDER_DEVELOPMENT.md.
+# Declaring something means implementing it: see "Implement it" in
+# github.com/openeverest/provider-sdk/blob/main/PROVIDER_DEVELOPMENT.md.
 #
 # Example:
 #
