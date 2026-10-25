@@ -145,7 +145,7 @@ func Run(opts Options) error {
 	//     Providers run the SDK via `go tool`, which builds it with the
 	//     provider's module graph, so these are the rules of the openeverest
 	//     version the provider pins.
-	if uiIssues := uischema.Validate(uischema.Input{UISchema: cfg.UISchema}); len(uiIssues) > 0 {
+	if uiIssues := validateUISchema(cfg); len(uiIssues) > 0 {
 		var b strings.Builder
 		fmt.Fprintf(&b, "%d UI schema problem(s):", len(uiIssues))
 		for _, issue := range uiIssues {
@@ -258,6 +258,12 @@ func detectChartDir() (string, error) {
 	default:
 		return "", fmt.Errorf("multiple Helm charts found in charts/: %v", candidates)
 	}
+}
+
+// validateUISchema checks cfg.UISchema against the rules the UI applies when
+// rendering it. Topologies let it resolve the paths widgets write.
+func validateUISchema(cfg *AssembledConfig) []uischema.Issue {
+	return uischema.Validate(uischema.Input{UISchema: cfg.UISchema, Topologies: cfg.Topologies})
 }
 
 // buildSpecMap constructs the Provider CR spec as a map, with type references
