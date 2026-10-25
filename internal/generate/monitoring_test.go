@@ -90,6 +90,42 @@ componentTypes:
     metrics: Native
 `,
 		},
+		"metrics omitted is left to the CRD default": {
+			monitoringYAML: new(`
+componentTypes:
+  haproxy:
+    kind: haproxy
+`),
+			want: `
+componentTypes:
+  haproxy:
+    kind: haproxy
+`,
+		},
+		"integration without agentVersions": {
+			monitoringYAML: new(`
+integrations:
+  pmm: {}
+`),
+			want: `
+integrations:
+  pmm: {}
+`,
+		},
+		"kind with the dots and underscores of OpenTelemetry db.system.name": {
+			monitoringYAML: new(`
+componentTypes:
+  pxc:
+    kind: microsoft.sql_server
+    metrics: Exporter
+`),
+			want: `
+componentTypes:
+  pxc:
+    kind: microsoft.sql_server
+    metrics: Exporter
+`,
+		},
 		"no monitoring.yaml": {},
 		"monitoring.yaml with every line commented out": {
 			monitoringYAML: new(`
@@ -141,7 +177,15 @@ func TestAssembleRejectsInvalidMonitoring(t *testing.T) {
 	}{
 		"component type not declared in provider.yaml": {
 			monitoringYAML: "componentTypes: {mongod: {kind: mongodb, metrics: Exporter}}",
-			wantErrs:       []string{`componentTypes["mongod"]: no component in provider.yaml has type "mongod"`},
+			wantErrs:       []string{`componentTypes["mongod"]: no component in provider.yaml has type "mongod" (declared types: haproxy, pxc)`},
+		},
+		"integration key that is not a DNS label": {
+			monitoringYAML: "integrations: {PMM_3: {}}",
+			wantErrs:       []string{`integrations["PMM_3"]: a lowercase RFC 1123 label must consist of`},
+		},
+		"file wrapped in a top-level monitoring key": {
+			monitoringYAML: "monitoring:\n  integrations: {pmm: {}}\n",
+			wantErrs:       []string{`this file is spec.monitoring itself; remove the top-level monitoring key`},
 		},
 		"metrics outside the enum": {
 			monitoringYAML: "componentTypes: {pxc: {kind: mysql, metrics: Prometheus}}",

@@ -21,17 +21,17 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strings"
 
 	"github.com/blang/semver/v4"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/util/validation"
 	"sigs.k8s.io/yaml"
 
 	corev1alpha1 "github.com/openeverest/openeverest/v2/api/core/v1alpha1"
 )
 
-// monitoringKindPattern mirrors the Pattern marker on
-// corev1alpha1.MonitoringComponentType.Kind.
-var monitoringKindPattern = regexp.MustCompile(`^([a-z0-9.-]+/)?[a-z0-9-]+$`)
+var monitoringKindPattern = regexp.MustCompile(corev1alpha1.MonitoringKindPattern)
 
 // assembleMonitoring reads the optional definition/monitoring.yaml and returns
 // it as Provider.spec.monitoring. It returns nil when the file is absent or
@@ -50,6 +50,12 @@ func assembleMonitoring(defDir string, components map[string]any) (map[string]an
 
 	var monitoring corev1alpha1.ProviderMonitoring
 	if err := yaml.UnmarshalStrict(data, &monitoring); err != nil {
+		var topLevel map[string]any
+		if yaml.Unmarshal(data, &topLevel) == nil {
+			if _, wrapped := topLevel["monitoring"]; wrapped {
+				return nil, errors.New("parsing monitoring.yaml: this file is spec.monitoring itself; remove the top-level monitoring key")
+			}
+		}
 		return nil, fmt.Errorf("parsing monitoring.yaml: %w", err)
 	}
 	if len(monitoring.Integrations) == 0 && len(monitoring.ComponentTypes) == 0 {
@@ -72,6 +78,10 @@ func validateMonitoring(monitoring *corev1alpha1.ProviderMonitoring, declaredTyp
 	var errs []error
 
 	for _, name := range sortedKeys(monitoring.Integrations) {
+		for _, msg := range validation.IsDNS1123Label(name) {
+			errs = append(errs, fmt.Errorf("integrations[%q]: %s", name, msg))
+		}
+
 		agentVersions := monitoring.Integrations[name].AgentVersions
 		if agentVersions == "" {
 			continue
@@ -81,11 +91,16 @@ func validateMonitoring(monitoring *corev1alpha1.ProviderMonitoring, declaredTyp
 		}
 	}
 
+	declared := "none"
+	if len(declaredTypes) > 0 {
+		declared = strings.Join(sortedKeys(declaredTypes), ", ")
+	}
+
 	for _, typeName := range sortedKeys(monitoring.ComponentTypes) {
 		componentType := monitoring.ComponentTypes[typeName]
 
 		if !declaredTypes[typeName] {
-			errs = append(errs, fmt.Errorf("componentTypes[%q]: no component in provider.yaml has type %q", typeName, typeName))
+			errs = append(errs, fmt.Errorf("componentTypes[%q]: no component in provider.yaml has type %q (declared types: %s)", typeName, typeName, declared))
 		}
 
 		switch {

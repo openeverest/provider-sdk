@@ -7,7 +7,7 @@ require (
 	github.com/charmbracelet/bubbles v1.0.0
 	github.com/charmbracelet/bubbletea v1.3.10
 	github.com/charmbracelet/lipgloss v1.1.0
-	github.com/openeverest/openeverest/v2 v2.0.0-dev.2.0.20261025151536-e1e773068981
+	github.com/openeverest/openeverest/v2 v2.0.0-dev.2.0.20261025180056-031a8cf067d5
 	github.com/spf13/cobra v1.10.2
 	github.com/stretchr/testify v1.12.1
 	golang.org/x/tools v0.50.0
