@@ -55,8 +55,6 @@ componentTypes:
   pxc:
     kind: mysql
     metrics: Exporter
-    credentialProfiles: [metrics, queryAnalytics]
-    features: [queryAnalytics]
   haproxy:
     kind: haproxy
     metrics: Native
@@ -69,8 +67,6 @@ componentTypes:
   pxc:
     kind: mysql
     metrics: Exporter
-    credentialProfiles: [metrics, queryAnalytics]
-    features: [queryAnalytics]
   haproxy:
     kind: haproxy
     metrics: Native
@@ -206,6 +202,10 @@ func TestAssembleRejectsInvalidMonitoring(t *testing.T) {
 		"misspelled field": {
 			monitoringYAML: "componentTypes: {pxc: {kind: mysql, metric: Exporter}}",
 			wantErrs:       []string{`parsing monitoring.yaml`, `unknown field "metric"`},
+		},
+		"field outside the contract": {
+			monitoringYAML: "componentTypes: {pxc: {kind: mysql, metrics: Exporter, credentialProfiles: [metrics]}}",
+			wantErrs:       []string{`parsing monitoring.yaml`, `unknown field "credentialProfiles"`},
 		},
 		"every problem reported at once": {
 			monitoringYAML: "componentTypes: {mongod: {kind: MongoDB}, pxc: {kind: mysql, metrics: Prometheus}}",

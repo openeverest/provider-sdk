@@ -1181,12 +1181,12 @@ modes:
 
 - **ProviderManaged**: your provider renders the engine operator's native integration (for
   example `spec.pmm` on a Percona operator CR) in `Sync`.
-- **ExtensionManaged**: the class's own controller wires the backend (a `PodMonitor`, a
+- **ExtensionManaged**: the class's extension wires the backend (a `PodMonitor`, a
   `VMPodScrape`) from the endpoints and credentials your provider publishes on the Instance.
 
 When a class fits your provider in both modes, core picks ProviderManaged; a destination entry
-can pin `executionMode` to choose the other. In both modes the class's controller still claims
-the class and checks its destinations.
+can pin `executionMode` to choose the other. In both modes the extension still claims the class
+named by its `--class-name` and checks the class's destinations.
 
 `definition/monitoring.yaml` declares which of these your provider supports.
 `provider-sdk generate` publishes it as `spec.monitoring` on the `Provider`, where core reads it
@@ -1210,7 +1210,6 @@ keyed by the component *type* from `provider.yaml` (`pxc`, `mongod`), not by com
 |---|---|
 | `kind` | The engine kind (`mysql`, `mongodb`, `postgresql`, `haproxy`). Well-known values follow OpenTelemetry `db.system.name`; other values are allowed and match no backend that filters on kind. Must match the `Provider` CRD pattern, which `make generate` prints when it does not. Required. |
 | `metrics` | `Native` when the process serves OpenMetrics itself, `Exporter` when your provider can run an exporter for it on demand, `None` otherwise. Defaults to `None`. |
-| `credentialProfiles`, `features` | Reserved for a later release (see below). Leave them unset. |
 
 A provider whose operator has a native PMM integration, which can run an exporter sidecar for
 the database and whose proxy serves its own metrics (Percona XtraDB Cluster):
@@ -1228,10 +1227,6 @@ componentTypes:
     kind: haproxy
     metrics: Native
 ```
-
-Dedicated monitoring users (`credentialProfiles`) and engine features such as query analytics
-(`features`) come in a later release; until then exporters and agents reuse the operator's own
-monitor user.
 
 A provider that renders no integration and whose engine serves metrics itself:
 
