@@ -2075,7 +2075,7 @@ The `spec` field is the full `ClusterInstancePresetSpec` — the same structure 
 `Instance.spec`. 
 
 **Important distinction:**
-- **Cluster-scoped resources** (like `storageClass`) CAN be set directly in the preset
+- **Cluster-scoped resources** CAN be set directly in the preset
 - **Namespace-scoped resources** (like secret names, ConfigMap names) MUST be left empty
 
 **Example preset spec:**
@@ -2099,49 +2099,10 @@ presets:
               memory: 8Gi
           storage:
             size: 100Gi
-            storageClass: "fast-ssd"  # Cluster-scoped - CAN be set in preset
           configuration:
             secretRef:
               name: ""                # Namespace-scoped - MUST be empty
 ```
-
-### Setting Default Annotations for StorageClass
-
-When a preset is applied to create an Instance, if storageClass is empty,
-the name is resolved from default annotation.
-
-`storageclass.kubernetes.io/is-default-class: "true"`
-
-**Example: Annotating a default StorageClass**
-
-StorageClass uses the standard Kubernetes annotation:
-
-```bash
-kubectl annotate StorageClass fast-ssd \
-  storageclass.kubernetes.io/is-default-class="true" \
-  --overwrite
-```
-
-Or in a YAML manifest:
-
-```yaml
-apiVersion: storage.k8s.io/v1
-kind: StorageClass
-metadata:
-  name: fast-ssd
-  annotations:
-    storageclass.kubernetes.io/is-default-class: "true"
-provisioner: kubernetes.io/aws-ebs
-parameters:
-  type: gp3
-  iops: "3000"
-  throughput: "125"
-```
-
-**Resolution behavior:**
-- For StorageClass, defaults are resolved using the standard Kubernetes annotation
-- If multiple resources have the default annotation, the most recently created one is used
-- If no default is found, the field remains empty and validation may fail
 
 ---
 
