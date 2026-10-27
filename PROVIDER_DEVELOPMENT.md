@@ -2022,7 +2022,7 @@ local-dev default (`ghcr.io/openeverest`) and is overridden by the workflow.
 
 ## Define ClusterInstancePresets
 
-  Presets are optional. They are cluster-scoped `ClusterInstancePreset` CRs that ship with your provider's Helm chart,
+Presets are optional. They are cluster-scoped `ClusterInstancePreset` CRs that ship with your provider's Helm chart,
 giving users ready-made configurations they can select when creating an Instance
 instead of filling in every field manually. Each preset is rendered from
 `charts/<provider-name>/templates/clusterinstancepresets.yaml` using entries in `values.yaml`.
