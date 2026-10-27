@@ -34,6 +34,7 @@ requires the previous one.
 - [Define topologies](#define-topologies)
 - [Define parameter types](#define-parameter-types)
 - [Configure the UI schema](#configure-the-ui-schema)
+- [Declare monitoring support](#declare-monitoring-support)
 
 **Implement it**
 - [Implement the provider interface](#implement-the-provider-interface)
@@ -68,8 +69,8 @@ contract is identical.
 
 | Concept | Description | Example (MongoDB) |
 |---------|-------------|-------------------|
-| **Component** | A role within a deployment | `engine`, `proxy`, `backupAgent`, `monitoring` |
-| **Component Type** | The software a component runs | `mongod`, `backup`, `pmm` |
+| **Component** | A role within a deployment | `engine`, `proxy`, `configServer`, `backupAgent` |
+| **Component Type** | The software a component runs | `mongod`, `backup` |
 | **Topology** | A deployment architecture: a distinct set of components, or a distinct way of wiring them | `replicaSet`, `sharded` |
 | **Component version** | A release of one component type, and the image that implements it | `8.0.12-4` (mongod), `2.11.0` (backup) |
 | **Version bundle** | A named set of component versions known to work together. This is the "version" users pick, as `spec.version` on the Instance | `8.0.12` |
@@ -160,6 +161,7 @@ setting `phase: Failed`. Write validation messages that read well in both situat
 definition/                          # ← YOU EDIT THESE
   provider.yaml                      # Provider name + component→type mapping
   versions.yaml                      # Component type version/image catalog
+  monitoring.yaml                    # Monitoring contract (optional)
   types.go                           # Shared Go types (e.g. TopologyType)
   components/
     types.go                         # Component parameter types (Parameters structs)
@@ -286,7 +288,6 @@ a logical part of the database deployment.
 # The init command creates one component ("engine") automatically.
 # Add more components:
 provider-sdk add component --name backupAgent --type backup
-provider-sdk add component --name monitoring --type pmm
 provider-sdk add component --name proxy --type mongod
 provider-sdk add component --name configServer --type mongod
 ```
@@ -308,8 +309,6 @@ components:
     type: mongod
   backupAgent:
     type: backup
-  monitoring:
-    type: pmm
 ```
 
 ### What Gets Updated
@@ -353,11 +352,6 @@ componentTypes:
     versions:
     - version: "2.11.0"
       image: percona/percona-backup-mongodb:2.11.0
-  pmm:
-    defaultVersion: "2.44.1"
-    versions:
-    - version: "2.44.1"
-      image: percona/pmm-server:2.44.1
 ```
 
 **Rules:**
@@ -385,14 +379,12 @@ versions:
     configServer: "8.0.12-4"
     proxy: "8.0.12-4"
     backupAgent: "2.11.0"
-    monitoring: "2.44.1"
 - name: "8.0.8"
   components:
     engine: "8.0.8-3"
     configServer: "8.0.8-3"
     proxy: "8.0.8-3"
     backupAgent: "2.9.1"
-    monitoring: "2.44.1"
 ```
 
 **How bundles are resolved**
@@ -417,7 +409,7 @@ etcd is never mutated, so the user's original intent is always preserved.
   respectively — `provider-sdk generate` validates this at build time
 - Bundle names are arbitrary strings but should follow a human-friendly
   convention (e.g., the operator's minor version)
-- You do not need to include optional components (e.g., `monitoring`) in
+- You do not need to include optional components (e.g., `backupAgent`) in
   a bundle; the user can still specify their version explicitly
 
 **Adding a new bundle when a new operator version is released**
@@ -487,8 +479,6 @@ config:
     configServer: {}                   # Required, no defaults
     backupAgent:
       optional: true                   # User can choose to enable/disable
-    monitoring:
-      optional: true
 
 # ui section: rendering hints for the frontend form
 ui:
@@ -995,7 +985,7 @@ storageClass:
     label: Storage class
 ```
 
-Available providers: `storageClasses`, `monitoringConfigs`. The field
+Available providers: `storageClasses`. The field
 auto-selects the first option, shows loading/error states, and renders an
 empty-state fallback when the provider supports one. Everything else
 (`validation`, `modes`, `fieldParams`) works identically to a regular select.
@@ -1177,6 +1167,158 @@ ui:
     - databaseVersion
     - resources
     - advanced
+```
+
+---
+
+## Declare monitoring support
+
+Users send an Instance's monitoring data somewhere by listing `MonitoringDestination`s in
+`spec.monitoring.destinations[]`. A destination is one backend server (a PMM server, a
+Prometheus) and references the `MonitoringClass` that the backend's extension installs. Core
+creates one `MonitoringBinding` per entry, and the binding is rendered in one of two execution
+modes:
+
+- **ProviderManaged**: your provider renders the engine operator's native integration (for
+  example `spec.pmm` on a Percona operator CR) in `Sync`.
+- **ExtensionManaged**: the class's extension wires the backend (a `PodMonitor`, a
+  `VMPodScrape`) from the endpoints and credentials your provider publishes on the Instance.
+
+When a class fits your provider in both modes, core picks ProviderManaged and records the
+mode on the binding once. In both modes the extension still claims the class
+named by its `--class-name` and checks the class's destinations.
+
+`definition/monitoring.yaml` declares which of these your provider supports.
+`provider-sdk generate` publishes it as `spec.monitoring` on the `Provider`, where core reads it
+to decide which classes can serve your Instances. The file is optional: without it, or while
+every line is commented out, the provider declares no monitoring support. `provider-sdk init`
+writes a commented-out example.
+
+The file has two blocks.
+
+**`integrations`** lists the operator-native integrations your provider renders itself, keyed
+by integration name, a DNS label such as `pmm`. A `MonitoringClass` whose
+`providerManaged.integration` has that name is ProviderManaged for your Instances when its
+agent version is in `agentVersions`: a semver range of full versions, where space-separated
+comparators must all hold (`>=3.0.0 <4.0.0`) and `||` separates alternatives
+(`>=2.41.0 <3.0.0 || >=3.1.0 <4.0.0`). Omitting `agentVersions` accepts any agent version.
+
+**`componentTypes`** declares what each component type exposes to ExtensionManaged classes,
+keyed by the component *type* from `provider.yaml` (`pxc`, `mongod`), not by component name:
+
+| Field | Meaning |
+|---|---|
+| `kind` | The engine kind (`mysql`, `mongodb`, `postgresql`, `haproxy`). Well-known values follow OpenTelemetry `db.system.name`; other values are allowed and match no backend that filters on kind. Must match the `Provider` CRD pattern, which `make generate` prints when it does not. Required. |
+| `metrics` | `Native` when the process serves OpenMetrics itself, `Exporter` when your provider can run an exporter for it on demand, `None` otherwise. Defaults to `None`. |
+
+A provider whose operator has a native PMM integration, which can run an exporter sidecar for
+the database and whose proxy serves its own metrics (Percona XtraDB Cluster):
+
+```yaml
+# definition/monitoring.yaml
+integrations:
+  pmm:
+    agentVersions: ">=3.0.0 <4.0.0"
+componentTypes:
+  pxc:
+    kind: mysql
+    metrics: Exporter
+  haproxy:
+    kind: haproxy
+    metrics: Native
+```
+
+A provider that renders no integration and whose engine serves metrics itself:
+
+```yaml
+# definition/monitoring.yaml
+componentTypes:
+  clickhouse:
+    kind: clickhouse
+    metrics: Native
+```
+
+`make generate` fails, naming the field, when an integration name is not a DNS label, when
+`agentVersions` is not a valid range, when a `componentTypes` key is not the type of a
+component in `provider.yaml`, or when `kind` or `metrics` holds a value the `Provider` CRD
+would reject.
+
+### Implement it
+
+Core treats your provider as compatible with every class the declaration fits, so implement
+each capability you declare with provider-runtime's two optional interfaces. Once your provider
+implements either, the runtime watches the Instance's bindings and the destinations and classes
+they reference, writes `Instance.status.monitoring` and the `MonitoringConfigured` condition
+after every `Sync`, and writes the `Configured` condition of ProviderManaged bindings. Grant it
+that access in `internal/provider/rbac.go`, then run `make generate`:
+
+```go
+// +kubebuilder:rbac:groups=monitoring.openeverest.io,resources=monitoringclasses;monitoringdestinations;monitoringbindings,verbs=get;list;watch
+// +kubebuilder:rbac:groups=monitoring.openeverest.io,resources=monitoringbindings/status,verbs=patch
+// +kubebuilder:rbac:groups="",resources=namespaces,verbs=get
+```
+
+The `namespaces` rule reads the UID of `kube-system`, which identifies the cluster to the
+backends.
+
+**Integrations** (`controller.MonitoringIntegrationsProvider`). `MonitoringIntegrations()`
+returns the names under `integrations`; a binding for any other integration is reported
+`RenderFailed`. Render the integration inside `Sync`, in the same `c.Apply` as the rest of the
+engine CR (a second apply of that CR would prune what the first one set), from
+`c.MonitoringBindings()`. The ProviderManaged binding whose `Apply` is true resolves everything
+the integration needs: the server address from `Destination.Spec.Parameters`, the token from
+the destination's credentials Secret, the agent image from
+`Class.Spec.ProviderManaged.AgentImage` and per-Instance settings from `Binding.Spec.Parameters`.
+`c.RequiredSources()` turns the bindings into one `Requirement` per integration, so the gate is
+one line, `req.Integrations["pmm"].Else(livePMMEnabled)`: `Required` renders from the `Apply`
+binding, `NotRequired` removes the integration, and `Unresolved` (a destination or class is
+missing or not accepted yet, often only during an upgrade) keeps every live integration exactly
+as the engine CR carries it.
+
+A binding you cannot render, such as one with a missing token or an invalid parameter, is
+staged with
+`c.SetMonitoringBindingResult(bindingName, monitoringv1alpha1.ReasonRenderFailed, message)`
+and left out of the CR. Never return it as a `Sync` error, which would fail the whole Instance
+over one destination. The runtime reports the staged result on the binding, and `Configured` on
+the others once `Sync` succeeds.
+
+**Sources** (`controller.MonitoringSourcesProvider`). `MonitoringSources(c)` returns the
+`corev1alpha1.MonitoringSources` that ExtensionManaged classes scrape, one `metrics` entry per
+component that serves an endpoint:
+
+- `Exporter` means your provider *can* run an exporter on demand, not that it always does. Run
+  it only while a bound class needs metrics: `req.Metrics.Else(hasExporter(live))`. `Required`
+  starts it, `NotRequired` stops it, and `Unresolved` keeps what is live, so pods do not restart
+  while a class is reinstalled. A PMM-only Instance runs no exporter.
+- Publish only endpoints that are serving: nothing before the engine CR is Ready, and an
+  exporter's endpoint only while it runs.
+- `podSelector` must contain `controller.InstanceLabel` set to the Instance name.
+- An endpoint that needs authentication names a profile in `auth.credentialProfile`, listed in
+  `credentials`. Credential Secrets live in the Instance's namespace, are controlled by the
+  Instance (`c.Apply` sets that) and hold the keys `username` and `password`
+  (`corev1alpha1.CredentialSecretKeyUsername` and `CredentialSecretKeyPassword`).
+
+The runtime validates the result before publishing it. It drops endpoints of component types
+`componentTypes` does not declare, selectors without the Instance label, and credentials the
+Instance does not control along with the endpoints that use them, and it stamps the identity
+labels itself. An error keeps the previous sources and shows in `MonitoringConfigured`.
+
+Both gates in one `Sync`, with `live` the engine CR as the cluster holds it:
+
+```go
+req, err := c.RequiredSources()
+if err != nil {
+    return err
+}
+cluster := buildCluster(c)
+if req.Integrations["pmm"].Else(pmmEnabled(live)) {
+    // From the Apply binding, else copied from live; stages RenderFailed on bad input.
+    cluster.Spec.PMM = renderPMM(c, live)
+}
+if req.Metrics.Else(hasExporter(live)) {
+    cluster.Spec.Sidecars = append(cluster.Spec.Sidecars, exporterSidecar(c))
+}
+return c.Apply(cluster)
 ```
 
 ---
@@ -2371,7 +2513,9 @@ Usually invoked via `go generate ./...` (see `gen.go`) or `make generate`.
 The generator also validates version bundles at build time — it ensures every
 component name and version referenced in a bundle exists in `provider.yaml` and
 the `componentTypes` catalog. An invalid bundle produces a fatal error rather
-than silently emitting a broken Provider CR.
+than silently emitting a broken Provider CR. It validates
+`definition/monitoring.yaml` the same way, when present (see
+[Declare monitoring support](#declare-monitoring-support)).
 
 ---
 
@@ -2400,3 +2544,4 @@ Use this checklist to track your progress:
 - [ ] **Presets** defined in `charts/<provider-name>/values.yaml` (optional, but recommended)
 - [ ] **Secret types** defined in `definition/secrets/` (optional)
 - [ ] **ConfigMap types** defined in `definition/configmaps/` (optional)
+- [ ] **Monitoring contract** declared in `definition/monitoring.yaml` and [implemented](#implement-it) (optional)

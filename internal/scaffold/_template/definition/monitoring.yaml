@@ -1,0 +1,30 @@
+# Monitoring contract: what OpenEverest monitoring can collect from this
+# provider's Instances. `provider-sdk generate` publishes it as
+# Provider.spec.monitoring. Optional: while every line stays commented out (or
+# the file is deleted), the provider declares no monitoring support.
+#
+# integrations: operator-native monitoring integrations this provider renders
+# itself in Sync (ProviderManaged), keyed by integration name, a DNS label such
+# as pmm. agentVersions is the semver range of agent versions it can render,
+# e.g. ">=3.0.0 <4.0.0"; omit it to accept any version.
+#
+# componentTypes: keyed by a component type from provider.yaml (the software,
+# not the component name), one entry per type that exposes monitoring signals
+# to ExtensionManaged classes.
+#   kind     Engine kind, e.g. mysql, mongodb, postgresql, haproxy. Well-known
+#            values follow OpenTelemetry db.system.name.
+#   metrics  Native (the process serves OpenMetrics itself), Exporter (the
+#            provider can run an exporter for it on demand) or None.
+#
+# Declaring something means implementing it: see "Implement it" in
+# github.com/openeverest/provider-sdk/blob/main/PROVIDER_DEVELOPMENT.md.
+#
+# Example:
+#
+# integrations:
+#   pmm:
+#     agentVersions: ">=3.0.0 <4.0.0"
+# componentTypes:
+#   mydb:
+#     kind: mydb
+#     metrics: None

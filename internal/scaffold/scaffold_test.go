@@ -17,10 +17,13 @@ package scaffold
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/openeverest/provider-sdk/internal/generate"
 )
 
 func TestDeriveProjectName(t *testing.T) {
@@ -157,6 +160,7 @@ func TestScaffold(t *testing.T) {
 		"definition/types.go",
 		"definition/README.md",
 		"definition/components/types.go",
+		"definition/monitoring.yaml",
 	} {
 		_, err := os.Stat(filepath.Join(dest, defFile))
 		assert.NoError(t, err, "definition file %s not found", defFile)
@@ -174,6 +178,12 @@ func TestScaffold(t *testing.T) {
 	assert.Contains(t, string(providerYAML), "name: test-db")
 	assert.NotContains(t, string(providerYAML), "\n  engine:", "definition/provider.yaml should not have a hardcoded engine component")
 	assert.Contains(t, string(providerYAML), "components: {}", "definition/provider.yaml should have an empty components map")
+
+	// A fresh provider must not publish a monitoring contract it does not
+	// implement.
+	assembled, err := generate.Assemble(filepath.Join(dest, "definition"))
+	require.NoError(t, err)
+	assert.Nil(t, assembled.Monitoring)
 
 	// Verify generated/provider-spec.yaml exists in chart.
 	providerSpec := filepath.Join(chartDir, "generated", "provider-spec.yaml")
@@ -217,6 +227,31 @@ func TestScaffold(t *testing.T) {
 	info, err := os.Stat(varsSh)
 	require.NoError(t, err, "test/vars.sh not found")
 	assert.NotZero(t, info.Mode()&0o111, "test/vars.sh should be executable")
+}
+
+func TestScaffoldMonitoringExampleIsValid(t *testing.T) {
+	t.Parallel()
+
+	dest := filepath.Join(t.TempDir(), "provider-test-db")
+	require.NoError(t, Scaffold(&Config{ProviderName: "test-db", ModulePath: "github.com/example/provider-test-db"}, dest))
+	defDir := filepath.Join(dest, "definition")
+
+	scaffolded, err := os.ReadFile(filepath.Join(defDir, "monitoring.yaml"))
+	require.NoError(t, err)
+	_, example, found := strings.Cut(string(scaffolded), "# Example:\n")
+	require.True(t, found, "definition/monitoring.yaml has no example")
+	var uncommented strings.Builder
+	for _, line := range strings.Split(example, "\n") {
+		uncommented.WriteString(strings.TrimPrefix(strings.TrimPrefix(line, "#"), " ") + "\n")
+	}
+	require.NoError(t, os.WriteFile(filepath.Join(defDir, "monitoring.yaml"), []byte(uncommented.String()), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(defDir, "provider.yaml"),
+		[]byte("name: test-db\ncomponents:\n  engine:\n    type: mydb\n"), 0o600))
+
+	assembled, err := generate.Assemble(defDir)
+	require.NoError(t, err)
+	require.NotNil(t, assembled.Monitoring)
+	assert.Contains(t, assembled.Monitoring["componentTypes"], "mydb")
 }
 
 func TestScaffoldOutputDirExists(t *testing.T) {

@@ -30,8 +30,8 @@ var addComponentOpts struct {
 
 func init() {
 	f := addComponentCmd.Flags()
-	f.StringVar(&addComponentOpts.name, "name", "", "Component name (e.g., backupAgent, proxy, monitoring)")
-	f.StringVar(&addComponentOpts.componentType, "type", "", "Component type (e.g., backup, mongos, pmm)")
+	f.StringVar(&addComponentOpts.name, "name", "", "Component name (e.g., backupAgent, proxy, configServer)")
+	f.StringVar(&addComponentOpts.componentType, "type", "", "Component type (e.g., backup, mongos, mongod)")
 
 	addCmd.AddCommand(addComponentCmd)
 }
@@ -53,9 +53,6 @@ Examples:
   # Add a backup agent component
   provider-sdk add component --name backupAgent --type backup
 
-  # Add a monitoring component
-  provider-sdk add component --name monitoring --type pmm
-
   # Add a proxy component (reusing an existing type)
   provider-sdk add component --name proxy --type mongod`,
 	RunE: runAddComponent,
@@ -67,11 +64,11 @@ func runAddComponent(_ *cobra.Command, _ []string) error {
 	fmt.Println()
 
 	if err := promptTUI(&addComponentOpts.name,
-		"Component name", "backupAgent, proxy, monitoring…", "", true); err != nil {
+		"Component name", "backupAgent, proxy, configServer…", "", true); err != nil {
 		return err
 	}
 	if err := promptTUI(&addComponentOpts.componentType,
-		"Component type", "backup, mongos, pmm…", "", true); err != nil {
+		"Component type", "backup, mongos, mongod…", "", true); err != nil {
 		return err
 	}
 
