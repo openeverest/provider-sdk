@@ -1184,8 +1184,8 @@ modes:
 - **ExtensionManaged**: the class's extension wires the backend (a `PodMonitor`, a
   `VMPodScrape`) from the endpoints and credentials your provider publishes on the Instance.
 
-When a class fits your provider in both modes, core picks ProviderManaged; a destination entry
-can pin `executionMode` to choose the other. In both modes the extension still claims the class
+When a class fits your provider in both modes, core picks ProviderManaged and records the
+mode on the binding once. In both modes the extension still claims the class
 named by its `--class-name` and checks the class's destinations.
 
 `definition/monitoring.yaml` declares which of these your provider supports.
