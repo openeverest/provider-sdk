@@ -31,7 +31,10 @@ import (
 	corev1alpha1 "github.com/openeverest/openeverest/v2/api/core/v1alpha1"
 )
 
-var monitoringKindPattern = regexp.MustCompile(corev1alpha1.MonitoringKindPattern)
+var (
+	monitoringKindPattern = regexp.MustCompile(corev1alpha1.MonitoringKindPattern)
+	authModePattern       = regexp.MustCompile(`^[A-Z][A-Za-z0-9]{0,62}$`)
+)
 
 // assembleMonitoring reads the optional definition/monitoring.yaml and returns
 // it as Provider.spec.monitoring. It returns nil when the file is absent or
@@ -82,7 +85,22 @@ func validateMonitoring(monitoring *corev1alpha1.ProviderMonitoring, declaredTyp
 			errs = append(errs, fmt.Errorf("integrations[%q]: %s", name, msg))
 		}
 
-		agentVersions := monitoring.Integrations[name].AgentVersions
+		integration := monitoring.Integrations[name]
+		if len(integration.AuthModes) == 0 {
+			errs = append(errs, fmt.Errorf("integrations[%q].authModes: required, list the authentication modes of the class the provider renders", name))
+		}
+		seen := make(map[string]bool, len(integration.AuthModes))
+		for _, mode := range integration.AuthModes {
+			switch {
+			case !authModePattern.MatchString(mode):
+				errs = append(errs, fmt.Errorf("integrations[%q].authModes: %q does not match %s", name, mode, authModePattern))
+			case seen[mode]:
+				errs = append(errs, fmt.Errorf("integrations[%q].authModes: %q is listed twice", name, mode))
+			}
+			seen[mode] = true
+		}
+
+		agentVersions := integration.AgentVersions
 		if agentVersions == "" {
 			continue
 		}

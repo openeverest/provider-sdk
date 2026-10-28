@@ -1202,6 +1202,9 @@ by integration name, a DNS label such as `pmm`. A `MonitoringClass` whose
 agent version is in `agentVersions`: a semver range of full versions, where space-separated
 comparators must all hold (`>=3.0.0 <4.0.0`) and `||` separates alternatives
 (`>=2.41.0 <3.0.0 || >=3.1.0 <4.0.0`). Omitting `agentVersions` accepts any agent version.
+`authModes` lists the class's authentication modes your provider renders (`ServiceAccountToken`
+for PMM); a destination using any other mode is not bound to your Instances. It is required:
+list only modes whose credentials you actually hand to the agent.
 
 **`componentTypes`** declares what each component type exposes to ExtensionManaged classes,
 keyed by the component *type* from `provider.yaml` (`pxc`, `mongod`), not by component name:
@@ -1219,6 +1222,7 @@ the database and whose proxy serves its own metrics (Percona XtraDB Cluster):
 integrations:
   pmm:
     agentVersions: ">=3.0.0 <4.0.0"
+    authModes: [ServiceAccountToken]
 componentTypes:
   pxc:
     kind: mysql
@@ -1239,9 +1243,9 @@ componentTypes:
 ```
 
 `make generate` fails, naming the field, when an integration name is not a DNS label, when
-`agentVersions` is not a valid range, when a `componentTypes` key is not the type of a
-component in `provider.yaml`, or when `kind` or `metrics` holds a value the `Provider` CRD
-would reject.
+`agentVersions` is not a valid range, when an integration lists no `authModes` or a mode that
+is not PascalCase, when a `componentTypes` key is not the type of a component in
+`provider.yaml`, or when `kind` or `metrics` holds a value the `Provider` CRD would reject.
 
 ### Implement it
 
@@ -1266,9 +1270,14 @@ returns the names under `integrations`; a binding for any other integration is r
 `RenderFailed`. Render the integration inside `Sync`, in the same `c.Apply` as the rest of the
 engine CR (a second apply of that CR would prune what the first one set), from
 `c.MonitoringBindings()`. The ProviderManaged binding whose `Apply` is true resolves everything
-the integration needs: the server address from `Destination.Spec.Parameters`, the token from
-the destination's credentials Secret, the agent image from
-`Class.Spec.ProviderManaged.AgentImage` and per-Instance settings from `Binding.Spec.Parameters`.
+the integration needs: the server address from `Destination.Spec.URL`, the credentials from
+`c.MonitoringCredentials(binding)` (the destination's authentication mode and its credentials
+Secret data, already checked against the keys the class requires for that mode), the agent
+image from `Class.Spec.ProviderManaged.AgentImage` and per-Instance settings from
+`Binding.Spec.Parameters`. Honour `Destination.Spec.TLS` if your agent can; if it cannot
+verify the server certificate at all, stage
+`c.SetMonitoringBindingResult(bindingName, monitoringv1alpha1.ReasonAgentTLSNotVerified, message)`
+so users see that the connection is not verified, whatever `spec.tls` says.
 `c.RequiredSources()` turns the bindings into one `Requirement` per integration, so the gate is
 one line, `req.Integrations["pmm"].Else(livePMMEnabled)`: `Required` renders from the `Apply`
 binding, `NotRequired` removes the integration, and `Unresolved` (a destination or class is
