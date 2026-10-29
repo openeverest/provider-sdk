@@ -51,6 +51,7 @@ func TestGenerateEmitsMonitoring(t *testing.T) {
 integrations:
   pmm:
     agentVersions: ">=3.0.0 <4.0.0"
+    authModes: [ServiceAccountToken]
 componentTypes:
   pxc:
     kind: mysql
@@ -63,6 +64,7 @@ componentTypes:
 integrations:
   pmm:
     agentVersions: ">=3.0.0 <4.0.0"
+    authModes: [ServiceAccountToken]
 componentTypes:
   pxc:
     kind: mysql
@@ -101,11 +103,13 @@ componentTypes:
 		"integration without agentVersions": {
 			monitoringYAML: new(`
 integrations:
-  pmm: {}
+  pmm:
+    authModes: [ServiceAccountToken]
 `),
 			want: `
 integrations:
-  pmm: {}
+  pmm:
+    authModes: [ServiceAccountToken]
 `,
 		},
 		"kind with the dots and underscores of OpenTelemetry db.system.name": {
@@ -186,6 +190,17 @@ func TestAssembleRejectsInvalidMonitoring(t *testing.T) {
 		"metrics outside the enum": {
 			monitoringYAML: "componentTypes: {pxc: {kind: mysql, metrics: Prometheus}}",
 			wantErrs:       []string{`componentTypes["pxc"].metrics: "Prometheus" is not one of Native, Exporter, None`},
+		},
+		"integration without authModes": {
+			monitoringYAML: `integrations: {pmm: {agentVersions: ">=3.0.0 <4.0.0"}}`,
+			wantErrs:       []string{`integrations["pmm"].authModes: required`},
+		},
+		"authModes that are not PascalCase or are repeated": {
+			monitoringYAML: `integrations: {pmm: {authModes: [api-key, ServiceAccountToken, ServiceAccountToken]}}`,
+			wantErrs: []string{
+				`integrations["pmm"].authModes: "api-key" does not match`,
+				`integrations["pmm"].authModes: "ServiceAccountToken" is listed twice`,
+			},
 		},
 		"agentVersions that core cannot evaluate": {
 			monitoringYAML: `integrations: {pmm: {agentVersions: ">=3.0 <4.0"}}`,

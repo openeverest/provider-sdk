@@ -6,7 +6,9 @@
 # integrations: operator-native monitoring integrations this provider renders
 # itself in Sync (ProviderManaged), keyed by integration name, a DNS label such
 # as pmm. agentVersions is the semver range of agent versions it can render,
-# e.g. ">=3.0.0 <4.0.0"; omit it to accept any version.
+# e.g. ">=3.0.0 <4.0.0"; omit it to accept any version. authModes (required)
+# lists the authentication modes of the class it renders, e.g.
+# ServiceAccountToken for PMM.
 #
 # componentTypes: keyed by a component type from provider.yaml (the software,
 # not the component name), one entry per type that exposes monitoring signals
@@ -24,6 +26,7 @@
 # integrations:
 #   pmm:
 #     agentVersions: ">=3.0.0 <4.0.0"
+#     authModes: [ServiceAccountToken]
 # componentTypes:
 #   mydb:
 #     kind: mydb
