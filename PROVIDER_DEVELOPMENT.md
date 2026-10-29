@@ -1270,7 +1270,8 @@ returns the names under `integrations`; a binding for any other integration is r
 `RenderFailed`. Render the integration inside `Sync`, in the same `c.Apply` as the rest of the
 engine CR (a second apply of that CR would prune what the first one set), from
 `c.MonitoringBindings()`. The ProviderManaged binding whose `Apply` is true resolves everything
-the integration needs: the server address from `Destination.Spec.URL`, the credentials from
+the integration needs: the server address from the destination's parameters
+(`Destination.Spec.Parameters`, e.g. `url` for the `pmm` class), the credentials from
 `c.MonitoringCredentials(binding)` (the destination's authentication mode and its credentials
 Secret data, already checked against the keys the class requires for that mode), the agent
 image from `Class.Spec.ProviderManaged.AgentImage` and per-Instance settings from
