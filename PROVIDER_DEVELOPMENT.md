@@ -1213,6 +1213,7 @@ keyed by the component *type* from `provider.yaml` (`pxc`, `mongod`), not by com
 |---|---|
 | `kind` | The engine kind (`mysql`, `mongodb`, `postgresql`, `haproxy`). Well-known values follow OpenTelemetry `db.system.name`; other values are allowed and match no backend that filters on kind. Must match the `Provider` CRD pattern, which `make generate` prints when it does not. Required. |
 | `metrics` | `Native` when the process serves OpenMetrics itself, `Exporter` when your provider can run an exporter for it on demand, `None` otherwise. Defaults to `None`. |
+| `connection` | `Supported` when monitoring agents can connect to the component over its native protocol with the `monitor` credential (see [Connections and pod metadata](#implement-it)), `None` otherwise. Defaults to `None`. |
 
 A provider whose operator has a native PMM integration, which can run an exporter sidecar for
 the database and whose proxy serves its own metrics (Percona XtraDB Cluster):
@@ -1245,7 +1246,7 @@ componentTypes:
 `make generate` fails, naming the field, when an integration name is not a DNS label, when
 `agentVersions` is not a valid range, when an integration lists no `authModes` or a mode that
 is not PascalCase, when a `componentTypes` key is not the type of a component in
-`provider.yaml`, or when `kind` or `metrics` holds a value the `Provider` CRD would reject.
+`provider.yaml`, or when `kind`, `metrics` or `connection` holds a value the `Provider` CRD would reject.
 
 ### Implement it
 
@@ -1329,6 +1330,36 @@ if req.Metrics.Else(hasExporter(live)) {
     cluster.Spec.Sidecars = append(cluster.Spec.Sidecars, exporterSidecar(c))
 }
 return c.Apply(cluster)
+```
+
+**Connections and pod metadata.** Some backends (Coroot, Datadog) do not scrape an HTTP
+endpoint: their agent connects to the database over its native protocol and finds it through
+annotations on the database pods. Declare `connection: Supported` on the component types that
+accept such connections, then:
+
+- Publish one `connections` entry per serving component, reached on each pod directly: `podSelector`
+  with `controller.InstanceLabel`, `container`, `port`, and `auth.credentialProfile: monitor`.
+- Publish the `monitor` credential (`corev1alpha1.CredentialProfileMonitor`): an Instance-owned
+  Secret with `username`/`password` of a read-only monitoring user (MongoDB `clusterMonitor`
+  plus `read` on `local`, PostgreSQL `pg_monitor`). Never point at your operator's system-users
+  Secret, which holds admin credentials. Create it while `req.Connections` is `Required`.
+- Set `tls` whenever the endpoint *accepts* TLS, not only when it requires it (`required: true`
+  then), with the CA and, if the server asks for one, a client certificate Secret. Agents are
+  then configured the same way before and after TLS is tightened, so tightening it does not
+  roll the pods a second time.
+- On every `Sync`, merge `c.MonitoringPodAnnotations(component)` into the pod template
+  annotations of each component, in the same `c.Apply` as the rest of the engine CR. The
+  runtime returns only keys under the prefixes the bound class declares, holds them while a
+  binding is pending and drops them once it is removed or rejected. Every change rolls the
+  pods, which core reports as `RollingRestart` on the class.
+
+```yaml
+# definition/monitoring.yaml
+componentTypes:
+  mongod:
+    kind: mongodb
+    metrics: Exporter
+    connection: Supported
 ```
 
 ---
