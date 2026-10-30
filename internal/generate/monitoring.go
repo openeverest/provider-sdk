@@ -134,6 +134,13 @@ func validateMonitoring(monitoring *corev1alpha1.ProviderMonitoring, declaredTyp
 			errs = append(errs, fmt.Errorf("componentTypes[%q].metrics: %q is not one of %s, %s, %s", typeName, componentType.Metrics,
 				corev1alpha1.MetricsSourceNative, corev1alpha1.MetricsSourceExporter, corev1alpha1.MetricsSourceNone))
 		}
+
+		switch componentType.Connection {
+		case "", corev1alpha1.ConnectionSupported, corev1alpha1.ConnectionNone:
+		default:
+			errs = append(errs, fmt.Errorf("componentTypes[%q].connection: %q is not one of %s, %s", typeName, componentType.Connection,
+				corev1alpha1.ConnectionSupported, corev1alpha1.ConnectionNone))
+		}
 	}
 
 	return errors.Join(errs...)
