@@ -1561,7 +1561,9 @@ This creates:
 
 **`class.yaml`** example:
 
-Update `class.yaml` to set `displayName`, `description`, `supportsPITR`, and `limits`
+Update `class.yaml` to set `displayName`, `description`, `supportsPITR`, `limits`, and `backupStorageClasses`.
+
+`backupStorageClasses` is required: it lists the `BackupStorageClass`es (object storage technologies) your engine can write to, each with the authentication modes it supports. Core publishes on every `BackupStorage` which `BackupClass`es can use it, and the UI only offers those storages. `provider-sdk generate` refuses a class without it.
 
 ```yaml
 displayName: "Percona Backup for MongoDB"
@@ -1569,6 +1571,9 @@ description: "Native backup using Percona Server for MongoDB operator"
 supportedProviders:
   - percona-server-mongodb
 executionMode: ProviderManaged
+backupStorageClasses:
+  - name: s3
+    authModes: [AccessKey]
 providerManaged:
   supportsPITR: true
   limits:
@@ -1645,6 +1650,59 @@ to enable OpenEverest's backup management.
 Implement `BackupProvider`, `BackupWatcher`, and `RestoreWatcher` for basic
 backup/restore support. Add `BackupMirror` if your operator creates backups
 independently (e.g., scheduled backups) and you want them reflected in OpenEverest.
+
+#### Backup storages
+
+Render the Instance's backup storages into the engine CR during `Sync`. `c.BackupStorages()` returns one `ResolvedBackupStorage` per entry of `spec.backup.storages`, with the runtime's verdict on it:
+
+- `Storage` is the `BackupStorage`, nil when it does not exist.
+- `Path` is where the engine writes this Instance's backups inside `Storage.Spec.Location.Bucket`: `<prefix>/backups/<namespace>/<instance>/<instance-uid>/<storage>`. Write every backup under it (for example a bucket plus a prefix, or `repoN-path: /<path>`), so two Instances, or two storages of one Instance, never share a directory. Never build the path yourself.
+- `Apply()` is true when the entry must be rendered. When it is false, keep whatever the live engine CR already has for the entry, so schedules and PITR keep running against the last configuration that worked (**hold rule**), and don't add an entry the engine does not have yet. The runtime reports the reason in `BackupConfigured` and `status.backup.storages[]`.
+
+Decode the storage with `c.BackupStorageS3(bs)` for the `s3` class. It returns the typed parameters (`Region`, `EndpointURL` and `Endpoint()`, `ForcePathStyle`, `EffectiveImplementation()`) and the credentials of the storage's auth mode. It fails with `storageclasses.ErrUnsupportedParameter` when the storage sets a parameter this build does not know. Read TLS with `c.BackupStorageTLS(bs, controller.TLSSupport{CustomCA: ..., SkipVerify: ...})`, declaring what your engine can do. When the engine cannot honour something, call `c.RejectBackupStorage(name, err)` and hold the entry. Reject with `controller.ErrImplementationUnsupported` for an `implementation` the engine has no client for. `BackupStorageTLS` already returns `controller.ErrTLSOptionUnsupported`.
+
+```go
+func (p *Provider) renderStorages(c *controller.Context, live, desired *operatorv1.MyDatabase) error {
+    storages, err := c.BackupStorages()
+    if err != nil {
+        return err
+    }
+    for _, s := range storages {
+        if s.Apply() {
+            err := p.renderStorage(c, s, desired)
+            if err == nil {
+                continue
+            }
+            c.RejectBackupStorage(s.Name(), err)
+        }
+        // Hold rule: copy the entry from the live engine CR, if it is there.
+        if block, ok := live.Spec.Backup.Storages[s.Name()]; ok {
+            desired.Spec.Backup.Storages[s.Name()] = block
+        }
+    }
+    return nil
+}
+
+func (p *Provider) renderStorage(c *controller.Context, s controller.ResolvedBackupStorage, desired *operatorv1.MyDatabase) error {
+    s3, creds, err := c.BackupStorageS3(s.Storage)
+    if err != nil {
+        return err
+    }
+    tls, err := c.BackupStorageTLS(s.Storage, controller.TLSSupport{CustomCA: true, SkipVerify: true})
+    if err != nil {
+        return err
+    }
+    _ = creds // mirror into the Secret your operator reads, if it needs other keys
+    desired.Spec.Backup.Storages[s.Name()] = operatorv1.BackupStorageSpec{
+        Bucket:             s.Storage.Spec.Location.Bucket,
+        Prefix:             s.Path,
+        Region:             s3.Region,
+        EndpointURL:        s3.EndpointURL,
+        InsecureSkipVerify: tls.InsecureSkipVerify,
+    }
+    return nil
+}
+```
 
 #### SyncBackup
 

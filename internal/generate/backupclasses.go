@@ -71,6 +71,9 @@ func AssembleBackupClasses(defDir string, typeRefs map[string]bool) ([]BackupCla
 		if err != nil {
 			return nil, fmt.Errorf("reading backupclass %s: %w", name, err)
 		}
+		if storages, _ := classData["backupStorageClasses"].([]any); len(storages) == 0 {
+			return nil, fmt.Errorf("backupclass %s: class.yaml must list the backupStorageClasses it can write to", name)
+		}
 		collectBackupClassTypeRefs(classData, typeRefs)
 
 		var uiData map[string]any
