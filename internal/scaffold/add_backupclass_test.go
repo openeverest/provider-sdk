@@ -89,6 +89,10 @@ func TestAddBackupClass(t *testing.T) {
 			// check that the generated types.go is valid Go code
 			_, err = format.Source(typesContent)
 			assert.NoError(t, err, "invalid types.go"+string(typesContent))
+
+			classContent, err := os.ReadFile(filepath.Join(bcDir, "class.yaml"))
+			require.NoError(t, err)
+			assert.Contains(t, string(classContent), "backupStorageClasses:\n    - authModes:\n        - AccessKey\n      name: s3\n")
 		})
 	}
 }
