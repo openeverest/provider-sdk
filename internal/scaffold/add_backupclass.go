@@ -106,6 +106,9 @@ func createBackupClassYAML(bcDir string, cfg *AddBackupClassConfig, providerName
 		"description":        "TODO: describe what this BackupClass does.",
 		"supportedProviders": []any{providerName},
 		"executionMode":      cfg.ExecutionMode,
+		"backupStorageClasses": []any{
+			map[string]any{"name": "s3", "authModes": []any{"AccessKey"}},
+		},
 		"parametersSchema": map[string]any{
 			"openAPIV3Schema": configTypeName,
 		},
@@ -133,6 +136,8 @@ func createBackupClassYAML(bcDir string, cfg *AddBackupClassConfig, providerName
 #   displayName/description: human-readable metadata.
 #   supportedProviders: providers this class can be used with.
 #   executionMode: "ProviderManaged" (operator-native) or "Job".
+#   backupStorageClasses: the BackupStorageClasses this class can write to,
+#     each with the authentication modes it supports. Required.
 #   providerManaged.supportsPITR: advertise PITR capability to Restore validation.
 #   providerManaged.limits: caps the runtime enforces against Instance.spec.backup.
 #     maxStorages, maxPITREnabledStorages, maxSchedulesPerStorage — unset means unlimited.

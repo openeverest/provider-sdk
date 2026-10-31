@@ -5,7 +5,7 @@
 apiVersion: v1
 kind: Secret
 metadata:
-  name: seaweedfs-credentials
+  name: backup-storage-seaweedfs-s3-credentials
   namespace: __NAMESPACE__
 type: Opaque
 data:
@@ -19,12 +19,16 @@ metadata:
   name: seaweedfs-s3
   namespace: __NAMESPACE__
 spec:
-  type: s3
-  s3:
+  backupStorageClassRef:
+    name: s3
+  location:
     bucket: backups
+  parameters:
     region: us-east-1
     endpointURL: http://seaweedfs.seaweedfs.svc.cluster.local
     forcePathStyle: true
-    verifyTLS: false
+    implementation: other
+  authentication:
+    mode: AccessKey
     credentialsSecretRef:
-      name: seaweedfs-credentials
+      name: backup-storage-seaweedfs-s3-credentials
