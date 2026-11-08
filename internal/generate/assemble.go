@@ -30,7 +30,8 @@ type AssembledConfig struct {
 	// Name is the provider name from definition/provider.yaml.
 	Name string
 
-	// ComponentTypes maps component type names to their version catalogs.
+	// ComponentTypes maps component type names to their version catalogs
+	// from versions.yaml, with the kind provider.yaml declares for each type.
 	ComponentTypes map[string]any
 
 	// Components maps logical component names to their spec (type, optional parametersSchema).
@@ -71,7 +72,8 @@ type AssembledConfig struct {
 // Assemble reads the definition directory and builds an assembled provider configuration.
 //
 // It reads:
-//   - definition/provider.yaml    — provider name and component→type mapping
+//   - definition/provider.yaml    — provider name, component→type mapping and
+//     the kind of each component type
 //   - definition/versions.yaml    — component type version catalogs
 //   - definition/monitoring.yaml  — monitoring contract (optional)
 //   - definition/topologies/*/topology.yaml — topology configs and UI schemas
@@ -111,6 +113,15 @@ func Assemble(defDir string) (*AssembledConfig, error) {
 			cfg.ComponentTypes = m
 		}
 	}
+	if err := checkVersionsDeclareNoKind(cfg.ComponentTypes); err != nil {
+		return nil, fmt.Errorf("invalid versions.yaml: %w", err)
+	}
+
+	// Component type kinds from provider.yaml.
+	kinds, err := componentKinds(provider, cfg.Components)
+	if err != nil {
+		return nil, fmt.Errorf("invalid provider.yaml: %w", err)
+	}
 
 	// Version bundles from versions.yaml.
 	if vb, ok := versions["versions"]; ok {
@@ -144,10 +155,14 @@ func Assemble(defDir string) (*AssembledConfig, error) {
 		cfg.TypeRefs[ps] = true
 	}
 
-	cfg.Monitoring, err = assembleMonitoring(defDir, cfg.Components)
+	cfg.Monitoring, err = assembleMonitoring(defDir, cfg.Components, kinds)
 	if err != nil {
 		return nil, err
 	}
+
+	// Kinds are added after the version catalog checks, which expect every
+	// entry to carry versions.
+	cfg.ComponentTypes = withKinds(cfg.ComponentTypes, kinds)
 
 	// Topologies and UI schema from topology directories.
 	topologiesDir := filepath.Join(defDir, "topologies")

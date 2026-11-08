@@ -26,12 +26,14 @@ import (
 var addComponentOpts struct {
 	name          string
 	componentType string
+	kind          string
 }
 
 func init() {
 	f := addComponentCmd.Flags()
 	f.StringVar(&addComponentOpts.name, "name", "", "Component name (e.g., backupAgent, proxy, configServer)")
 	f.StringVar(&addComponentOpts.componentType, "type", "", "Component type (e.g., backup, mongos, mongod)")
+	f.StringVar(&addComponentOpts.kind, "kind", "", "Optional kind of the component type (e.g., mongodb, mysql, haproxy)")
 
 	addCmd.AddCommand(addComponentCmd)
 }
@@ -42,7 +44,7 @@ var addComponentCmd = &cobra.Command{
 	Long: `Add a new component to an existing provider project.
 
 This command updates the following files:
-  - definition/provider.yaml       (adds the component entry)
+  - definition/provider.yaml       (adds the component entry, and the type's kind with --kind)
   - definition/versions.yaml       (adds the component type if new)
   - definition/components/types.go (adds a Parameters struct)
   - internal/common/spec.go        (adds name/type constants)
@@ -52,6 +54,9 @@ Run from the provider project root directory.
 Examples:
   # Add a backup agent component
   provider-sdk add component --name backupAgent --type backup
+
+  # Add the engine component and declare the kind of its type
+  provider-sdk add component --name engine --type mongod --kind mongodb
 
   # Add a proxy component (reusing an existing type)
   provider-sdk add component --name proxy --type mongod`,
@@ -75,6 +80,7 @@ func runAddComponent(_ *cobra.Command, _ []string) error {
 	cfg := &scaffold.AddComponentConfig{
 		ComponentName: addComponentOpts.name,
 		ComponentType: addComponentOpts.componentType,
+		Kind:          addComponentOpts.kind,
 	}
 
 	if err := scaffold.AddComponent(cfg); err != nil {
