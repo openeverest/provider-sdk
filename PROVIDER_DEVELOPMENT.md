@@ -517,7 +517,59 @@ ui:
 |-------|-------------|
 | `defaults.replicas` | Default replica count for this topology |
 | `optional: true` | Component can be enabled/disabled by the user |
+| `supportedFields` | OpenAPI schema of the component fields the provider honours in this topology; a field it does not declare is rejected |
 | `{}` | Required component with no special defaults |
+
+### Offering a Choice of Component Type
+
+An Instance's `spec.components.<name>.type` must be the type `provider.yaml`
+declares for that component, unless the topology lets the user choose. To offer
+a choice, declare `type` in the component's `supportedFields` and list the
+choices as its `enum`:
+
+```yaml
+# definition/topologies/<topology>/topology.yaml
+config:
+  components:
+    proxy:
+      supportedFields:
+        properties:
+          type:
+            enum: [haproxy, proxysql]
+          replicas:
+            minimum: 1
+```
+
+The runtime then accepts any type in the enum, or without an enum any key of
+`componentTypes`, and checks the component's `version` against the chosen
+type's versions. An Instance that does not set `spec.topology.type` can only
+use the declared type.
+
+- Every type in the enum must be a key of `componentTypes` in `versions.yaml`,
+  with its own versions and images.
+- `supportedFields` is an allow-list: once a component declares it, any field
+  it leaves out is rejected. List every field the component honours, as
+  `replicas` is here.
+- `Sync` must handle each choice. An empty `type` means the declared one.
+  `GetImageForVersion` and `GetDefaultImageForComponent` look the image up
+  under the declared type, so pick it from the chosen type's catalog instead.
+  Version bundles name versions of the declared type, so when the user picks
+  another type without setting `version`, use that type's `defaultVersion`.
+- A [select](#select-field) offering the types must list only values in the
+  enum. The two declare the same list; keep them in step.
+
+```yaml
+proxyType:
+  uiType: select
+  path: spec.components.proxy.type
+  fieldParams:
+    label: Proxy type
+    options:
+    - label: HAProxy
+      value: haproxy
+    - label: ProxySQL
+      value: proxysql
+```
 
 ### Topology Parameter Types
 
