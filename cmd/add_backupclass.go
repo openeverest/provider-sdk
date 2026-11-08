@@ -30,7 +30,7 @@ var addBackupClassOpts struct {
 func init() {
 	f := addBackupClassCmd.Flags()
 	f.StringVar(&addBackupClassOpts.name, "name", "", "BackupClass name (used for both metadata.name and directory)")
-	f.StringVar(&addBackupClassOpts.executionMode, "execution-mode", "ProviderManaged", "BackupClass execution mode: ProviderManaged or Job")
+	f.StringVar(&addBackupClassOpts.executionMode, "execution-mode", "ProviderManaged", "BackupClass execution mode: ProviderManaged")
 
 	addCmd.AddCommand(addBackupClassCmd)
 }
@@ -53,10 +53,7 @@ Run from the provider project root directory.
 
 Examples:
   # Add a ProviderManaged BackupClass
-  provider-sdk add backupclass --name psmdb
-
-  # Add a Job-based BackupClass
-  provider-sdk add backupclass --name pg-dump --execution-mode Job`,
+  provider-sdk add backupclass --name psmdb`,
 	RunE: runAddBackupClass,
 }
 

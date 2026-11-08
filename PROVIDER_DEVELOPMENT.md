@@ -1489,7 +1489,7 @@ field path, before the Instance is stored, `--dry-run=server` included.
   does not block the update, so an Instance written under an older release of
   your provider stays editable.
 - If your provider handles backups, the webhook also rejects a backup class
-  that exists but doesn't fit the Instance: one that runs backups as Jobs,
+  that exists but doesn't fit the Instance: one that isn't ProviderManaged,
   doesn't list your provider, or whose limits or PITR schema the Instance's
   backup configuration breaks.
 - Objects the Instance names never block a write, since they may be created
@@ -1697,9 +1697,6 @@ Each BackupClass maps to a specific backup method (e.g., logical dump, physical 
 ```bash
 # Add a ProviderManaged BackupClass
 provider-sdk add backupclass --name everest-percona-psmdb-operator
-
-# Add a Job-based BackupClass
-provider-sdk add backupclass --name pg-dump --execution-mode Job
 ```
 
 This creates:
@@ -1707,17 +1704,15 @@ This creates:
 - `definition/backupclasses/<name>/ui.yaml` - UI rendering schema, grouped by modal
 - `definition/backupclasses/<name>/types.go` - Go types for backup/restore/PITR config
 
-#### Execution Modes
+#### Execution Mode
 
-- **ProviderManaged** (default): Your provider's `SyncBackup`/`SyncRestore` handle the lifecycle
+Every BackupClass is **ProviderManaged**: your provider's `SyncBackup`/`SyncRestore`
+handle the lifecycle.
   - Supports PITR configuration
   - Supports per-BackupClass limits (maxStorages, maxSchedulesPerStorage, etc.)
-  - Most operator-native backups use this mode
 
-- **Job**: OpenEverest runtime creates Kubernetes Jobs to execute backup/restore
-  - For CLI-based tools (pg_dump, mongodump, etc.)
-  - No PITR support
-  - No provider-side implementation needed (Job spec in BackupClass)
+OpenEverest no longer runs backups as Kubernetes Jobs; `executionMode` stays in
+`class.yaml` so that other modes can be added later.
 
 #### BackupClass Structure
 
