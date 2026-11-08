@@ -92,7 +92,9 @@ func TestAddBackupClass(t *testing.T) {
 
 			classContent, err := os.ReadFile(filepath.Join(bcDir, "class.yaml"))
 			require.NoError(t, err)
-			assert.Contains(t, string(classContent), "backupStorageClasses:\n    - authModes:\n        - AccessKey\n      name: s3\n")
+			assert.Contains(t, string(classContent), "backupStorageClasses:\n    - authModes:\n        - AccessKey\n      name: s3\n      tls:\n        customCA: None\n        insecureSkipVerify: None\n")
+			assert.NotContains(t, string(classContent), "supportedProviders:")
+			assert.NotContains(t, string(classContent), "executionMode:")
 		})
 	}
 }

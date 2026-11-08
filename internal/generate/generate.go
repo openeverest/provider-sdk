@@ -208,12 +208,18 @@ func Run(opts Options) error {
 
 	fmt.Fprintf(os.Stderr, "Generated: %s\n", outputFile)
 
-	// 6. Emit BackupClass manifests, one per definition/backupclasses/<name>/.
+	// 6. Emit BackupClass manifests, one per definition/backupclasses/<name>/,
+	//    and embed them in the provider binary, which claims them.
+	var backupClassDocs [][]byte
 	if len(backupClasses) > 0 {
 		bcOutDir := filepath.Join(opts.ChartDir, "generated", "backupclasses")
-		if err := writeBackupClassManifests(bcOutDir, backupClasses, schemas); err != nil {
+		backupClassDocs, err = writeBackupClassManifests(bcOutDir, backupClasses, schemas, cfg.Name)
+		if err != nil {
 			return fmt.Errorf("writing backup class manifests: %w", err)
 		}
+	}
+	if err := writeShippedBackupClasses(opts.DefinitionDir, backupClassDocs); err != nil {
+		return fmt.Errorf("writing shipped backup classes: %w", err)
 	}
 
 	return nil

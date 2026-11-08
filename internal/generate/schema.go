@@ -17,6 +17,8 @@ package generate
 import (
 	"encoding/json"
 	"fmt"
+	"path/filepath"
+	"slices"
 	"strings"
 
 	"golang.org/x/tools/go/packages"
@@ -43,6 +45,7 @@ func ResolveSchemas(pkgPatterns []string, typeNames []string) (map[string]any, e
 	if err != nil {
 		return nil, fmt.Errorf("failed to load type packages: %w", err)
 	}
+	roots = slices.DeleteFunc(roots, isShippedBackupClassesPackage)
 
 	registry := &markers.Registry{}
 	if err := crdmarkers.Register(registry); err != nil {
@@ -93,6 +96,14 @@ func lookupIdent(parser *crd.Parser, roots []*loader.Package, name string) (crd.
 		}
 	}
 	return crd.TypeIdent{}, false
+}
+
+// isShippedBackupClassesPackage reports whether pkg is the package generate
+// writes into definition/backupclasses. It holds no parameter types, and the
+// type checker that renders markers, which loads imports lazily, does not
+// resolve its imports.
+func isShippedBackupClassesPackage(pkg *loader.Package) bool {
+	return slices.ContainsFunc(pkg.GoFiles, func(f string) bool { return filepath.Base(f) == shippedBackupClassesGo })
 }
 
 // packageErrors returns every error recorded while generating schemas: any
