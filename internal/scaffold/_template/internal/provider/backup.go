@@ -8,6 +8,16 @@ import (
 	// operatorv1 "github.com/example/my-operator/api/v1"
 )
 
+// RBAC the runtime needs to run backups and to claim the BackupClasses the
+// provider ships. Run `make generate` to regenerate the role.
+// +kubebuilder:rbac:groups=backup.openeverest.io,resources=backups,verbs=get;list;watch;create;update;patch
+// +kubebuilder:rbac:groups=backup.openeverest.io,resources=backups/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=backup.openeverest.io,resources=backupclasses;backupstorageclasses,verbs=get;list;watch
+// +kubebuilder:rbac:groups=backup.openeverest.io,resources=backupclasses/status,verbs=patch
+// +kubebuilder:rbac:groups=backup.openeverest.io,resources=backupstorages,verbs=get;list;watch
+// +kubebuilder:rbac:groups=backup.openeverest.io,resources=restores,verbs=get;list;watch;update;patch
+// +kubebuilder:rbac:groups=backup.openeverest.io,resources=restores/status,verbs=get;update;patch
+
 // TODO: If your operator supports backups and restores, implement the backup interfaces
 // to enable OpenEverest's backup management. All backup interfaces are optional.
 //
