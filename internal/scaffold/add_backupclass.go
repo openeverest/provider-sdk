@@ -28,9 +28,10 @@ type AddBackupClassConfig struct {
 	// Name is the BackupClass metadata.name and directory name under
 	// definition/backupclasses/.
 	Name string
-	// ExecutionMode selects between "ProviderManaged" (default) and "Job".
-	// Only ProviderManaged classes carry providerManaged.limits / pitrParametersSchema
-	// stubs in the generated class.yaml.
+	// ExecutionMode is the BackupClass execution mode. "ProviderManaged" (the
+	// default) is the only mode OpenEverest supports; ProviderManaged classes
+	// carry providerManaged.limits / pitrParametersSchema stubs in the
+	// generated class.yaml.
 	ExecutionMode string
 }
 
@@ -48,8 +49,8 @@ func AddBackupClass(cfg *AddBackupClassConfig) error {
 	if cfg.ExecutionMode == "" {
 		cfg.ExecutionMode = "ProviderManaged"
 	}
-	if cfg.ExecutionMode != "ProviderManaged" && cfg.ExecutionMode != "Job" {
-		return fmt.Errorf("invalid execution mode %q: must be ProviderManaged or Job", cfg.ExecutionMode)
+	if cfg.ExecutionMode != "ProviderManaged" {
+		return fmt.Errorf("invalid execution mode %q: must be ProviderManaged", cfg.ExecutionMode)
 	}
 
 	if _, err := os.Stat("definition/provider.yaml"); err != nil {
@@ -132,7 +133,7 @@ func createBackupClassYAML(bcDir string, cfg *AddBackupClassConfig, providerName
 # Fields:
 #   displayName/description: human-readable metadata.
 #   supportedProviders: providers this class can be used with.
-#   executionMode: "ProviderManaged" (operator-native) or "Job".
+#   executionMode: "ProviderManaged" (operator-native), the only mode.
 #   providerManaged.supportsPITR: advertise PITR capability to Restore validation.
 #   providerManaged.limits: caps the runtime enforces against Instance.spec.backup.
 #     maxStorages, maxPITREnabledStorages, maxSchedulesPerStorage — unset means unlimited.

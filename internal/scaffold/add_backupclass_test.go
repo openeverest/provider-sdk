@@ -92,3 +92,11 @@ func TestAddBackupClass(t *testing.T) {
 		})
 	}
 }
+
+func TestAddBackupClass_RejectsJobExecutionMode(t *testing.T) {
+	setupMinimalProvider(t)
+
+	err := AddBackupClass(&AddBackupClassConfig{Name: "pg-dump", ExecutionMode: "Job"})
+
+	require.EqualError(t, err, `invalid execution mode "Job": must be ProviderManaged`)
+}
