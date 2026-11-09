@@ -28,7 +28,7 @@ import (
 	// builds it with this module's graph.
 	_ "k8s.io/apimachinery/pkg/util/yaml"
 
-	_ "github.com/openeverest/openeverest/v2/api/backup/v1alpha1"
+	backupv1alpha1 "github.com/openeverest/openeverest/v2/api/backup/v1alpha1"
 	"github.com/openeverest/openeverest/v2/backupstorageclasses/s3"
 	_ "github.com/openeverest/openeverest/v2/provider-runtime/controller"
 )
@@ -201,7 +201,7 @@ backupStorageClasses:
 
 			var class map[string]any
 			require.NoError(t, yaml.Unmarshal([]byte(tt.class), &class))
-			got, err := buildBackupClassManifest(BackupClassAssembled{Name: "pbm", Class: class}, nil, "percona-server-mongodb")
+			got, err := buildBackupClassManifest(BackupClassAssembled{Name: "pbm", Class: class}, nil, "percona-server-mongodb", "")
 			if tt.wantErr != "" {
 				require.EqualError(t, err, tt.wantErr)
 				return
@@ -233,6 +233,22 @@ backupStorageClasses:
 			assert.Equal(t, map[string]any{"name": "pbm"}, got["metadata"])
 		})
 	}
+}
+
+func TestBuildBackupClassManifestStampsTheRelease(t *testing.T) {
+	t.Parallel()
+
+	class := map[string]any{"backupStorageClasses": []any{map[string]any{"name": "s3", "authModes": []any{"AccessKey"}}}}
+	got, err := buildBackupClassManifest(BackupClassAssembled{Name: "pbm", Class: class}, nil, "mongo", "1.2.0")
+	require.NoError(t, err)
+	assert.Equal(t, map[string]any{
+		"name":        "pbm",
+		"annotations": map[string]any{backupv1alpha1.ProviderVersionAnnotation: "1.2.0"},
+	}, got["metadata"])
+
+	got, err = buildBackupClassManifest(BackupClassAssembled{Name: "pbm", Class: class}, nil, "mongo", "")
+	require.NoError(t, err)
+	assert.Equal(t, map[string]any{"name": "pbm"}, got["metadata"], "a chart without appVersion stamps nothing")
 }
 
 func TestNarrowSchemaRequiredAndType(t *testing.T) {
@@ -295,7 +311,7 @@ backupStorageClasses:
     authModes: [AccessKey]
     tls: {customCA: Supported}
 `), &class))
-	manifest, err := buildBackupClassManifest(BackupClassAssembled{Name: "pbm", Class: class}, nil, "mongo")
+	manifest, err := buildBackupClassManifest(BackupClassAssembled{Name: "pbm", Class: class}, nil, "mongo", "1.2.0")
 	require.NoError(t, err)
 	doc, err := yaml.Marshal(manifest)
 	require.NoError(t, err)
@@ -313,6 +329,8 @@ backupStorageClasses:
 import (
 	"testing"
 
+	backupv1alpha1 "github.com/openeverest/openeverest/v2/api/backup/v1alpha1"
+
 	"github.com/openeverest/provider-sdk/internal/generate/`+dir+`/definition/backupclasses"
 )
 
@@ -320,6 +338,9 @@ func TestShipped(t *testing.T) {
 	classes := backupclasses.Shipped()
 	if len(classes) != 1 || classes[0].Spec.ExecutorProvider() != "mongo" {
 		t.Fatalf("shipped %+v", classes)
+	}
+	if got := classes[0].Annotations[backupv1alpha1.ProviderVersionAnnotation]; got != "1.2.0" {
+		t.Fatalf("shipped class stamped %q, want 1.2.0", got)
 	}
 	if got := backupclasses.TLSSupport("pbm", "s3"); !got.CustomCA || got.SkipVerify {
 		t.Fatalf("TLSSupport(pbm, s3) = %+v", got)

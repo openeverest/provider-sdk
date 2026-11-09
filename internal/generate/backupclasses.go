@@ -23,6 +23,8 @@ import (
 	"sort"
 
 	"gopkg.in/yaml.v3"
+
+	backupv1alpha1 "github.com/openeverest/openeverest/v2/api/backup/v1alpha1"
 )
 
 // BackupClassAssembled is the assembled form of a single
@@ -170,8 +172,13 @@ func collectBackupClassTypeRefs(class map[string]any, typeRefs map[string]bool) 
 // schemas (placeholder strings remain in place when the schema is missing so
 // failures surface loudly), and each backupStorageClasses entry of a storage
 // class whose contract provider-sdk knows gets that contract's schema,
-// narrowed by the entry's parametersSchema.
-func buildBackupClassManifest(bc BackupClassAssembled, schemas map[string]any, provider string) (map[string]any, error) {
+// narrowed by the entry's parametersSchema. The class is stamped with
+// release, the provider release it belongs to, in the
+// openeverest.io/provider-version annotation unless release is empty: the
+// provider compares the stamp before the capabilities when it claims the
+// class, so a class of another release is pending during an upgrade instead
+// of drifted.
+func buildBackupClassManifest(bc BackupClassAssembled, schemas map[string]any, provider, release string) (map[string]any, error) {
 	spec := resolveBackupClassRefs(bc.Class, schemas)
 	spec["executionMode"] = "ProviderManaged"
 	pm, _ := spec["providerManaged"].(map[string]any)
@@ -188,10 +195,14 @@ func buildBackupClassManifest(bc BackupClassAssembled, schemas map[string]any, p
 	if bc.UI != nil {
 		spec["uiSchema"] = bc.UI
 	}
+	metadata := map[string]any{"name": bc.Name}
+	if release != "" {
+		metadata["annotations"] = map[string]any{backupv1alpha1.ProviderVersionAnnotation: release}
+	}
 	return map[string]any{
 		"apiVersion": "backup.openeverest.io/v1alpha1",
 		"kind":       "BackupClass",
-		"metadata":   map[string]any{"name": bc.Name},
+		"metadata":   metadata,
 		"spec":       spec,
 	}, nil
 }
@@ -279,11 +290,13 @@ func resolveProviderManagedRefs(v any, schemas map[string]any) any {
 	return resolved
 }
 
-// writeBackupClassManifests writes each BackupClass of provider as its own
-// YAML document under outputDir and returns the documents. Existing files in
-// outputDir not corresponding to a current definition are removed so the
-// chart directory mirrors the source of truth.
-func writeBackupClassManifests(outputDir string, classes []BackupClassAssembled, schemas map[string]any, provider string) ([][]byte, error) {
+// writeBackupClassManifests writes each BackupClass of provider, stamped
+// with release, as its own YAML document under outputDir and returns the
+// documents. Existing files in outputDir not corresponding to a current
+// definition are removed so the chart directory mirrors the source of truth.
+func writeBackupClassManifests(
+	outputDir string, classes []BackupClassAssembled, schemas map[string]any, provider, release string,
+) ([][]byte, error) {
 	if err := os.MkdirAll(outputDir, 0o755); err != nil {
 		return nil, fmt.Errorf("creating backupclasses output directory: %w", err)
 	}
@@ -292,7 +305,7 @@ func writeBackupClassManifests(outputDir string, classes []BackupClassAssembled,
 	desired := make(map[string]bool, len(classes))
 	docs := make([][]byte, 0, len(classes))
 	for _, bc := range classes {
-		manifest, err := buildBackupClassManifest(bc, schemas, provider)
+		manifest, err := buildBackupClassManifest(bc, schemas, provider, release)
 		if err != nil {
 			return nil, err
 		}

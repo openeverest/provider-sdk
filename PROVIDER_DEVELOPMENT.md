@@ -1580,6 +1580,8 @@ func (p *Provider) Sync(c *controller.Context) error {
 
 Read the operator resource status and translate it to an Instance status.
 
+The runtime writes `Instance.status` for you, with server-side apply under the field manager `openeverest-provider/<provider name>`: it applies only the fields it owns, so a status field another writer, such as core, applies on the Instance survives your reconciles, even those of an older provider build whose types do not know it. Never write `Instance.status` yourself.
+
 ```go
 func (p *Provider) Status(c *controller.Context) (controller.Status, error) {
     operator := &operatorv1.MyDatabase{}
@@ -1719,6 +1721,29 @@ p.BaseProvider = controller.BaseProvider{ProviderName: "percona-server-mongodb",
 p.SetShippedBackupClasses(backupclasses.Shipped()) // <module>/definition/backupclasses
 ```
 
+#### Claims and verdicts
+
+The runtime **claims** every `BackupClass` whose `providerManaged.providerRef` names your provider: it compares the class in the cluster with the class of the same name you ship and sets the class's `Accepted` condition, with the class generation it judged, under the field manager `openeverest-provider/<provider name>`. Classes naming another provider are ignored. A provider that registers no shipped classes claims nothing, so its classes stay `Accepted=Unknown` and unusable.
+
+| `Accepted` | Reason | When |
+|---|---|---|
+| `True` | `Accepted` | You ship a class of that name and its capabilities (the whole `spec` except `displayName`, `description` and `uiSchema`) equal yours. Administrators may relabel a class; defaults the API server fills in are not a difference. |
+| `False` | `UnknownClass` | You ship no class of that name: administrators cannot create variants of your classes. |
+| `False` | `SpecDrift` | The capabilities differ; the message names the fields. |
+| `Unknown` | `NewerDefinition` / `OlderDefinition` | The class belongs to another release of your provider, as during an upgrade (see the stamp below). |
+
+`provider-sdk generate` stamps every class with your provider release, the chart's `appVersion`, in the annotation `openeverest.io/provider-version`, on the chart manifests and on the classes embedded in the binary alike (a chart without `appVersion` stamps nothing). The runtime compares the stamps before the capabilities: while the chart has installed the new release's class and the old binary still runs, or the other way round, the class is `Unknown` (`NewerDefinition` or `OlderDefinition`), never `SpecDrift`, and it is claimed again once both are on one release. A class without a stamp is compared by capabilities. Run `make generate` after changing `appVersion` so the stamp follows.
+
+Core publishes the outcome in `BackupClass.status.providers[]` (`Compatible`, `Pending` or `Incompatible`), and the runtime reads only that, at the class's current generation, never the class's `executionMode`:
+
+- `Compatible`: the Instance uses the class.
+- `Pending` (also while nothing is published for the class's generation yet): the admission webhook admits the Instance with a warning, and the reconciler holds it, without calling your provider, with `BackupConfigured=False` and reason `BackupClassPending`, until the class is `Compatible`.
+- `Incompatible`, or no entry for your provider: the webhook rejects the Instance and the reconciler reports `BackupClassIncompatible` with the entry's reason, such as `SpecDrift`.
+
+`spec.dataSource` follows the same verdict: an `Incompatible` source class fails seeding, a `Pending` one waits (`BackupClassPending`).
+
+Backups, restores and imports run only for classes that name your provider; the runtime ignores any other class without rejecting it.
+
 #### BackupClass Structure
 
 **`class.yaml`** example:
@@ -1826,7 +1851,9 @@ Render the Instance's backup storages into the engine CR during `Sync`. `c.Backu
 
 - `Storage` is the `BackupStorage`, nil when it does not exist.
 - `Path` is where the engine writes this Instance's backups inside `Storage.Spec.Location.ObjectStore.Bucket`: `<prefix>/backups/<namespace>/<instance>/<instance-uid>/<storage>`. Write every backup under it (for example a bucket plus a prefix, or `repoN-path: /<path>`), so two Instances, or two storages of one Instance, never share a directory. Never build the path yourself.
+- If your engine cannot write under a nested path (Medusa refuses an S3 prefix containing `/`), implement the optional `controller.BackupPathStyleProvider` and return `backupv1alpha1.BackupPathFlat`. The runtime then lays every path out as one folder at the root of the bucket, the nested path with each `/` replaced by `_` (`prod_backups_team-a_orders_<uid>_s3-prod` for the prefix `prod`), and uses that same form for `Path`, the location it records in `status.backup.storages[]`, `Backup.status.path` and `c.BackupLocation(backup, bs)`, so render `Path` as it is. A location recorded in the nested form before you declared the style is read as its flat form, so switching is not a location change. An import lists the keys under `backupv1alpha1.BackupKeyPrefix(style, bs.Spec.Location)` and records each backup's `external.path` relative to it. Read the data of a backup with `c.BackupLocation`, which honours the style; the free `controller.BackupLocation` is deprecated.
 - `Apply()` is true when the entry must be rendered. When it is false, keep whatever the live engine CR already has for the entry, so schedules and PITR keep running against the last configuration that worked (**hold rule**), and don't add an entry the engine does not have yet. The runtime reports the reason in `BackupConfigured` and `status.backup.storages[]`.
+- Whether your class can write to the storage is the verdict core publishes in `BackupStorage.status.backupClasses[]`, which the runtime reads only while it is current (the storage, the class and the storage's `BackupStorageClass` unchanged since): `BackupStorageIncompatible` carries an `Incompatible` verdict's reason, such as `ParameterUnsupported`, and `BackupStorageVerdictPending` holds the entry until core publishes a current one.
 
 Decode the storage with `c.BackupStorageS3(bs)` for the `s3` class. It returns the typed parameters, `s3.Parameters` (`Region`, `EndpointURL` and `Endpoint()`, `ForcePathStyle`, `EffectiveImplementation()`), and the credentials of the storage's auth mode, from the `s3` contract package (`github.com/openeverest/openeverest/v2/backupstorageclasses/s3`). It fails with `backupstorageclasses.ErrUnsupportedParameter` (`github.com/openeverest/openeverest/v2/backupstorageclasses`) when the storage sets a parameter this build does not know. Read TLS with `c.BackupStorageTLS(bs, backupclasses.TLSSupport("<class>", s3.ClassName))`: `TLSSupport` reads the `tls` block of the class's entry, so what the engine does and what the class publishes cannot disagree. When the engine cannot honour something, call `c.RejectBackupStorage(name, err)` and hold the entry. Reject with `controller.ErrImplementationUnsupported` for an `implementation` the engine has no client for. `BackupStorageTLS` already returns `controller.ErrTLSOptionUnsupported`.
 
@@ -2093,18 +2120,19 @@ var _ controller.BackupMirror = (*Provider)(nil)  // Optional
 
 #### RBAC
 
-Add markers in `rbac.go`:
+`provider-sdk add backup` writes these markers into `internal/provider/backup.go`; add them to `rbac.go` if you wrote the backup files yourself:
 
 ```go
 // +kubebuilder:rbac:groups=backup.openeverest.io,resources=backups,verbs=get;list;watch;create;update;patch
 // +kubebuilder:rbac:groups=backup.openeverest.io,resources=backups/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=backup.openeverest.io,resources=backupclasses,verbs=get;list;watch
+// +kubebuilder:rbac:groups=backup.openeverest.io,resources=backupclasses;backupstorageclasses,verbs=get;list;watch
+// +kubebuilder:rbac:groups=backup.openeverest.io,resources=backupclasses/status,verbs=patch
 // +kubebuilder:rbac:groups=backup.openeverest.io,resources=backupstorages,verbs=get;list;watch
 // +kubebuilder:rbac:groups=backup.openeverest.io,resources=restores,verbs=get;list;watch;update;patch
 // +kubebuilder:rbac:groups=backup.openeverest.io,resources=restores/status,verbs=get;update;patch
 ```
 
-Run `make generate` to update manifests.
+`backupclasses/status` lets the runtime claim your classes, and `backupstorageclasses` lets it check that a storage's published verdict is current. Run `make generate` to update manifests.
 
 ---
 
