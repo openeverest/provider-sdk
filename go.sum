@@ -185,8 +185,8 @@ github.com/onsi/ginkgo/v2 v2.33.0 h1:C8gBA6Uc2ZEubiV+SXiu5tZnMTwEmXHgkJwGozKtZf8
 github.com/onsi/ginkgo/v2 v2.33.0/go.mod h1:+aXOY+vzZ5mu2iI2HpTZUPmM//oQfsNFX6gU9kNcA44=
 github.com/onsi/gomega v1.44.0 h1:eAiGl3Pw5jz5GQdDff0BcxYpAX1JxW8xD7mFUuwNfZQ=
 github.com/onsi/gomega v1.44.0/go.mod h1:e/C2HwaZ1DhvjzXXuFhcR7hY7Sh9pl7MmoWKEjzwcdA=
-github.com/openeverest/openeverest/v2 v2.0.0-dev.2.0.20261108234017-25640d8e25eb h1:YWJsjyqE+W3ZQOWfsFkQ67Y+sxOHincb41+Rf99hQ4c=
-github.com/openeverest/openeverest/v2 v2.0.0-dev.2.0.20261108234017-25640d8e25eb/go.mod h1:ggopExRgbzIqjem40wkBQBa9KAfogAl2LOdE3mw2+zE=
+github.com/openeverest/openeverest/v2 v2.0.0-dev.2.0.20261109082337-924b38646ffc h1:VaXPNB/Z2kncU45PiAzFK3Z07zIWld60tYNbFJHaxRY=
+github.com/openeverest/openeverest/v2 v2.0.0-dev.2.0.20261109082337-924b38646ffc/go.mod h1:ggopExRgbzIqjem40wkBQBa9KAfogAl2LOdE3mw2+zE=
 github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
 github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 h1:Jamvg5psRIccs7FGNTlIRMkT8wgtp5eCXdBlqhYGL6U=
 github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
