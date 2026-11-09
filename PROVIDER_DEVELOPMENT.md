@@ -1311,6 +1311,24 @@ comparators must all hold (`>=3.0.0 <4.0.0`) and `||` separates alternatives
 for PMM); a destination using any other mode is not bound to your Instances. It is required:
 list only modes whose credentials you actually hand to the agent.
 
+`contractModule` names the Go module of the integration's contract, such as
+`github.com/openeverest/monitoring-pmm/api` for `pmm`: the Go types of the parameters of the
+integration's destinations and of an Instance's entries for them, with strict decoders. Your
+provider imports it to decode those parameters, so your `go.mod` requires it. With
+`contractModule` set, `provider-sdk generate` publishes the contract's two parameter schemas as
+the integration's `destinationParametersSchema` and `instanceParametersSchema`, in the version
+your `go.mod` selects and closed at the root (`additionalProperties: false`). Core checks the
+parameters against them as well as against the class, so a parameter newer than the contract
+your provider was built with is reported before it reaches your `Sync`. Without
+`contractModule` no schema is published and core checks the parameters against the class
+only. The schemas cannot be written in `monitoring.yaml`.
+
+A contract module holds the two schemas at its root as `zz_generated.destination-parameters.yaml`
+and `zz_generated.instance-parameters.yaml`: OpenAPI v3 schemas of objects, generated from its
+Go types. `generate` reads them from the module's directory as `go list -m` resolves it from your
+module, so a `replace` directive or a `go.work` that points at a local checkout of the contract
+is honoured, and downloads the module into the module cache when it is not there yet.
+
 **`componentTypes`** declares what each component type exposes to ExtensionManaged classes,
 keyed by the component *type* from `provider.yaml` (`pxc`, `mongod`), not by component name:
 
@@ -1353,6 +1371,7 @@ integrations:
   pmm:
     agentVersions: ">=3.0.0 <4.0.0"
     authModes: [ServiceAccountToken]
+    contractModule: github.com/openeverest/monitoring-pmm/api
 componentTypes:
   pxc:
     metrics: Exporter
@@ -1373,7 +1392,9 @@ with `clickhouse: {kind: clickhouse}` under `componentTypes` in `provider.yaml`.
 
 `make generate` fails, naming the field, when an integration name is not a DNS label, when
 `agentVersions` is not a valid range, when an integration lists no `authModes` or a mode that
-is not PascalCase, when a `componentTypes` key (in either file) is not the type of a component
+is not PascalCase, when `contractModule` is not a module your `go.mod` requires or lacks either
+schema file (or holds anything but an object schema in it), when `monitoring.yaml` writes the
+parameter schemas itself, when a `componentTypes` key (in either file) is not the type of a component
 in `provider.yaml`, when a type listed in `monitoring.yaml` has no `kind` in `provider.yaml`,
 when `monitoring.yaml` still declares a `kind` (it says where to move it), or when `kind`,
 `metrics`, `connection` or `podMetadata` holds a value the `Provider` CRD would reject.
@@ -1402,7 +1423,9 @@ returns the names under `integrations`; a binding for any other integration is r
 engine CR (a second apply of that CR would prune what the first one set), from
 `c.MonitoringBindings()`. The ProviderManaged binding whose `Apply` is true resolves everything
 the integration needs: the server address from the destination's parameters
-(`Destination.Spec.Parameters`, e.g. `url` for the `pmm` class), the credentials from
+(`Destination.Spec.Parameters`, e.g. `url` for the `pmm` class; decode it with the contract's
+strict decoder, such as `pmm.DecodeDestination`, and report an error as the binding's
+`RenderFailed`, so a parameter your build does not know is never ignored), the credentials from
 `c.MonitoringCredentials(binding)` (the destination's authentication mode and its credentials
 Secret data, already checked against the keys the class requires for that mode), the agent
 image from `Class.Spec.ProviderManaged.AgentImage` and per-Instance settings from

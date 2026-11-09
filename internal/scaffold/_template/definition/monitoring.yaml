@@ -8,7 +8,10 @@
 # as pmm. agentVersions is the semver range of agent versions it can render,
 # e.g. ">=3.0.0 <4.0.0"; omit it to accept any version. authModes (required)
 # lists the authentication modes of the class it renders, e.g.
-# ServiceAccountToken for PMM.
+# ServiceAccountToken for PMM. contractModule names the Go module of the
+# integration's contract (github.com/openeverest/monitoring-pmm/api for pmm),
+# which go.mod must require; generate publishes the destination and instance
+# parameter schemas of that version.
 #
 # componentTypes: keyed by a component type from provider.yaml (the software,
 # not the component name), one entry per type that exposes monitoring signals

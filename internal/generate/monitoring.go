@@ -28,10 +28,29 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation"
 	"sigs.k8s.io/yaml"
 
+	common "github.com/openeverest/openeverest/v2/api/common/v1alpha1"
 	corev1alpha1 "github.com/openeverest/openeverest/v2/api/core/v1alpha1"
 )
 
 var authModePattern = regexp.MustCompile(`^[A-Z][A-Za-z0-9]{0,62}$`)
+
+// monitoringFile is definition/monitoring.yaml: Provider.spec.monitoring,
+// whose integrations may also name their contract module.
+type monitoringFile struct {
+	Integrations   map[string]monitoringIntegrationFile            `json:"integrations,omitempty"`
+	ComponentTypes map[string]corev1alpha1.MonitoringComponentType `json:"componentTypes,omitempty"`
+}
+
+// monitoringIntegrationFile is an integration of monitoring.yaml.
+type monitoringIntegrationFile struct {
+	corev1alpha1.MonitoringIntegration `json:",inline"`
+
+	// ContractModule is the Go module path of the integration's contract,
+	// e.g. github.com/openeverest/monitoring-pmm/api. generate publishes the
+	// destination and instance parameter schemas of the version the
+	// provider's go.mod requires.
+	ContractModule string `json:"contractModule,omitempty"`
+}
 
 // assembleMonitoring reads the optional definition/monitoring.yaml and returns
 // it as Provider.spec.monitoring. It returns nil when the file is absent or
@@ -54,8 +73,8 @@ func assembleMonitoring(defDir string, components map[string]any, kinds map[stri
 		return nil, fmt.Errorf("invalid monitoring.yaml: %w", err)
 	}
 
-	var monitoring corev1alpha1.ProviderMonitoring
-	if err := yaml.UnmarshalStrict(data, &monitoring); err != nil {
+	var file monitoringFile
+	if err := yaml.UnmarshalStrict(data, &file); err != nil {
 		var topLevel map[string]any
 		if yaml.Unmarshal(data, &topLevel) == nil {
 			if _, wrapped := topLevel["monitoring"]; wrapped {
@@ -64,18 +83,49 @@ func assembleMonitoring(defDir string, components map[string]any, kinds map[stri
 		}
 		return nil, fmt.Errorf("parsing monitoring.yaml: %w", err)
 	}
-	if len(monitoring.Integrations) == 0 && len(monitoring.ComponentTypes) == 0 {
+	if len(file.Integrations) == 0 && len(file.ComponentTypes) == 0 {
 		return nil, nil
 	}
-	if err := validateMonitoring(&monitoring, declaredComponentTypes(components), kinds); err != nil {
+	monitoring, contractErr := withContractSchemas(defDir, &file)
+	err = errors.Join(validateMonitoring(monitoring, declaredComponentTypes(components), kinds), contractErr)
+	if err != nil {
 		return nil, fmt.Errorf("invalid monitoring.yaml: %w", err)
 	}
 
-	spec, err := runtime.DefaultUnstructuredConverter.ToUnstructured(&monitoring)
+	spec, err := runtime.DefaultUnstructuredConverter.ToUnstructured(monitoring)
 	if err != nil {
 		return nil, fmt.Errorf("converting monitoring.yaml: %w", err)
 	}
 	return spec, nil
+}
+
+// withContractSchemas returns the declaration as Provider.spec.monitoring,
+// each integration that names a contract module carrying that module's
+// destination and instance parameter schemas. The schemas come only from
+// contract modules: monitoring.yaml cannot write them.
+func withContractSchemas(defDir string, file *monitoringFile) (*corev1alpha1.ProviderMonitoring, error) {
+	monitoring := &corev1alpha1.ProviderMonitoring{ComponentTypes: file.ComponentTypes}
+	if len(file.Integrations) > 0 {
+		monitoring.Integrations = make(map[string]corev1alpha1.MonitoringIntegration, len(file.Integrations))
+	}
+	var errs []error
+	for _, name := range sortedKeys(file.Integrations) {
+		integration := file.Integrations[name]
+		if integration.DestinationParametersSchema != nil || integration.InstanceParametersSchema != nil {
+			errs = append(errs, fmt.Errorf("integrations[%q]: destinationParametersSchema and instanceParametersSchema are generated from the contract module; declare contractModule instead", name))
+		}
+		if integration.ContractModule != "" {
+			destination, instance, err := contractSchemas(defDir, integration.ContractModule)
+			if err != nil {
+				errs = append(errs, fmt.Errorf("integrations[%q].contractModule: %w", name, err))
+			} else {
+				integration.DestinationParametersSchema = &common.ParametersSchema{OpenAPIV3Schema: destination}
+				integration.InstanceParametersSchema = &common.ParametersSchema{OpenAPIV3Schema: instance}
+			}
+		}
+		monitoring.Integrations[name] = integration.MonitoringIntegration
+	}
+	return monitoring, errors.Join(errs...)
 }
 
 // checkMonitoringDeclaresNoKind rejects the kind of a component type in
