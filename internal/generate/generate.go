@@ -359,6 +359,10 @@ func buildSpecMap(cfg *AssembledConfig, schemas map[string]any, secrets []Secret
 		spec["monitoring"] = cfg.Monitoring
 	}
 
+	if cfg.Suspend != nil {
+		spec["suspend"] = cfg.Suspend
+	}
+
 	// Secrets — build from assembled secret definitions.
 	if secretsSpec := buildSecretsSpec(secrets, schemas); secretsSpec != nil {
 		spec["secrets"] = secretsSpec
