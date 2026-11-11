@@ -19,8 +19,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-
-	"gopkg.in/yaml.v3"
 )
 
 // AddBackupClassConfig holds the configuration for scaffolding a BackupClass.
@@ -57,11 +55,6 @@ func AddBackupClass(cfg *AddBackupClassConfig) error {
 		return fmt.Errorf("not in a provider project root (definition/provider.yaml not found)")
 	}
 
-	providerName, err := readProviderName()
-	if err != nil {
-		return fmt.Errorf("reading provider name: %w", err)
-	}
-
 	bcDir := filepath.Join("definition", "backupclasses", cfg.Name)
 	if _, err := os.Stat(bcDir); err == nil {
 		return fmt.Errorf("backup class %q already exists at %s", cfg.Name, bcDir)
@@ -70,7 +63,7 @@ func AddBackupClass(cfg *AddBackupClassConfig) error {
 		return fmt.Errorf("creating backupclass directory: %w", err)
 	}
 
-	if err := createBackupClassYAML(bcDir, cfg, providerName); err != nil {
+	if err := createBackupClassYAML(bcDir, cfg); err != nil {
 		return fmt.Errorf("creating class.yaml: %w", err)
 	}
 	if err := createBackupClassUIYAML(bcDir, cfg); err != nil {
@@ -82,31 +75,21 @@ func AddBackupClass(cfg *AddBackupClassConfig) error {
 	return nil
 }
 
-func readProviderName() (string, error) {
-	data, err := os.ReadFile("definition/provider.yaml")
-	if err != nil {
-		return "", err
-	}
-	var provider map[string]any
-	if err := yaml.Unmarshal(data, &provider); err != nil {
-		return "", err
-	}
-	if name, ok := provider["name"].(string); ok {
-		return name, nil
-	}
-	return "", fmt.Errorf("definition/provider.yaml missing 'name' field")
-}
-
-func createBackupClassYAML(bcDir string, cfg *AddBackupClassConfig, providerName string) error {
+func createBackupClassYAML(bcDir string, cfg *AddBackupClassConfig) error {
 	configTypeName := toPascalCase(cfg.Name) + "BackupParameters"
 	restoreTypeName := toPascalCase(cfg.Name) + "RestoreParameters"
 	pitrTypeName := toPascalCase(cfg.Name) + "PITRParameters"
 
 	class := map[string]any{
-		"displayName":        toPascalCase(cfg.Name) + " Backup Class",
-		"description":        "TODO: describe what this BackupClass does.",
-		"supportedProviders": []any{providerName},
-		"executionMode":      cfg.ExecutionMode,
+		"displayName": toPascalCase(cfg.Name) + " Backup Class",
+		"description": "TODO: describe what this BackupClass does.",
+		"backupStorageClasses": []any{
+			map[string]any{
+				"name":      "s3",
+				"authModes": []any{"AccessKey"},
+				"tls":       map[string]any{"customCA": "None", "insecureSkipVerify": "None"},
+			},
+		},
 		"parametersSchema": map[string]any{
 			"openAPIV3Schema": configTypeName,
 		},
@@ -130,10 +113,23 @@ func createBackupClassYAML(bcDir string, cfg *AddBackupClassConfig, providerName
 	header := fmt.Sprintf(`# %s BackupClass definition.
 # This file is the source of truth for the generated BackupClass manifest.
 #
+# provider-sdk generate makes the class ProviderManaged and names this
+# provider in providerManaged.providerRef: the provider claims and executes it.
+#
 # Fields:
 #   displayName/description: human-readable metadata.
-#   supportedProviders: providers this class can be used with.
-#   executionMode: "ProviderManaged" (operator-native), the only mode.
+#   backupStorageClasses: the BackupStorageClasses this class can write to. Required.
+#     name, authModes: a storage class and the authentication modes the engine supports.
+#     parametersSchema.openAPIV3Schema: what the engine supports of the storage
+#       class's parameters, when less than all of them. Generate starts from the
+#       schema of the storage class in the openeverest version this project
+#       pins and applies it: properties narrow parameters (an enum to a subset,
+#       a stricter pattern), required adds required ones. A parameter newer than
+#       that version is unsupported.
+#     tls.customCA / tls.insecureSkipVerify: Supported when the engine honours
+#       that setting of BackupStorage.spec.tls, None (the default) otherwise.
+#       Pass backupclasses.TLSSupport(<class>, <storage class>) to
+#       c.BackupStorageTLS, so the engine and the class agree.
 #   providerManaged.supportsPITR: advertise PITR capability to Restore validation.
 #   providerManaged.limits: caps the runtime enforces against Instance.spec.backup.
 #     maxStorages, maxPITREnabledStorages, maxSchedulesPerStorage — unset means unlimited.

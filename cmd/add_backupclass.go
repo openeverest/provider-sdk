@@ -45,9 +45,10 @@ This command creates the following files:
   - definition/backupclasses/<name>/ui.yaml     (UI rendering hints, grouped by modal)
   - definition/backupclasses/<name>/types.go    (Go types for backup/restore/PITR config)
 
-The class.yaml is pre-populated with the calling provider as the only entry in
-supportedProviders. The Go types in types.go are referenced by openAPIV3Schema
-fields in class.yaml and converted to OpenAPI schemas at generation time.
+provider-sdk generate makes the class ProviderManaged and names the calling
+provider in providerManaged.providerRef. The Go types in types.go are
+referenced by openAPIV3Schema fields in class.yaml and converted to OpenAPI
+schemas at generation time.
 
 Run from the provider project root directory.
 

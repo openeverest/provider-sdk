@@ -1705,28 +1705,45 @@ This creates:
 - `definition/backupclasses/<name>/ui.yaml` - UI rendering schema, grouped by modal
 - `definition/backupclasses/<name>/types.go` - Go types for backup/restore/PITR config
 
+`provider-sdk generate` renders every class into `charts/<name>/generated/backupclasses/` and also into `definition/backupclasses/zz_generated.backupclasses.{yaml,go}`, a package your provider imports to embed the classes it ships.
+
 #### Execution Mode
 
-Every BackupClass is **ProviderManaged**: your provider's `SyncBackup`/`SyncRestore`
-handle the lifecycle.
+Every BackupClass a provider ships is **ProviderManaged**: your provider's `SyncBackup`/`SyncRestore` handle the lifecycle.
   - Supports PITR configuration
   - Supports per-BackupClass limits (maxStorages, maxSchedulesPerStorage, etc.)
 
-OpenEverest no longer runs backups as Kubernetes Jobs; `executionMode` stays in
-`class.yaml` so that other modes can be added later.
+Generate writes `executionMode: ProviderManaged` and names your provider in `providerManaged.providerRef`, so `class.yaml` sets neither: the provider in `providerRef` is the one that claims and executes the class, and it cannot change once the class exists. Register the classes you ship when you build the provider, so the runtime knows which classes are yours:
+
+```go
+p.BaseProvider = controller.BaseProvider{ProviderName: "percona-server-mongodb", /* ... */}
+p.SetShippedBackupClasses(backupclasses.Shipped()) // <module>/definition/backupclasses
+```
 
 #### BackupClass Structure
 
 **`class.yaml`** example:
 
-Update `class.yaml` to set `displayName`, `description`, `supportsPITR`, and `limits`
+Update `class.yaml` to set `displayName`, `description`, `supportsPITR`, `limits`, and `backupStorageClasses`.
+
+`backupStorageClasses` is required: it lists the `BackupStorageClass`es (object storage technologies) your engine can write to, each with the authentication modes it supports. Core publishes on every `BackupStorage` which `BackupClass`es can use it, and the UI only offers those storages. `provider-sdk generate` refuses a class without it. Each entry also declares what the engine supports of that storage class:
+
+- **`parametersSchema`**: generate writes the storage class's parameter schema from the openeverest version your `go.mod` pins, closed to other parameters, so a storage setting a parameter newer than your build is reported as unsupported instead of being ignored. Narrow it under `openAPIV3Schema` when the engine supports less: `properties` restrict a parameter (an `enum` to a subset, a stricter `pattern`), `required` adds required ones. Generate refuses a parameter the storage class does not have and an `enum` value outside it.
+- **`tls`**: `customCA` and `insecureSkipVerify`, `Supported` when the engine honours that setting of `BackupStorage.spec.tls` and `None` (the default) otherwise. A storage that uses a setting your class does not support cannot be used with it.
 
 ```yaml
 displayName: "Percona Backup for MongoDB"
 description: "Native backup using Percona Server for MongoDB operator"
-supportedProviders:
-  - percona-server-mongodb
-executionMode: ProviderManaged
+backupStorageClasses:
+  - name: s3
+    authModes: [AccessKey]
+    parametersSchema:
+      openAPIV3Schema:
+        properties:
+          implementation: {enum: [aws, minio, ceph, other]} # no GCS
+    tls:
+      customCA: Supported
+      insecureSkipVerify: Supported
 providerManaged:
   supportsPITR: true
   limits:
@@ -1803,6 +1820,59 @@ to enable OpenEverest's backup management.
 Implement `BackupProvider`, `BackupWatcher`, and `RestoreWatcher` for basic
 backup/restore support. Add `BackupMirror` if your operator creates backups
 independently (e.g., scheduled backups) and you want them reflected in OpenEverest.
+
+#### Backup storages
+
+Render the Instance's backup storages into the engine CR during `Sync`. `c.BackupStorages()` returns one `ResolvedBackupStorage` per entry of `spec.backup.storages`, with the runtime's verdict on it:
+
+- `Storage` is the `BackupStorage`, nil when it does not exist.
+- `Path` is where the engine writes this Instance's backups inside `Storage.Spec.Location.ObjectStore.Bucket`: `<prefix>/backups/<namespace>/<instance>/<instance-uid>/<storage>`. Write every backup under it (for example a bucket plus a prefix, or `repoN-path: /<path>`), so two Instances, or two storages of one Instance, never share a directory. Never build the path yourself.
+- `Apply()` is true when the entry must be rendered. When it is false, keep whatever the live engine CR already has for the entry, so schedules and PITR keep running against the last configuration that worked (**hold rule**), and don't add an entry the engine does not have yet. The runtime reports the reason in `BackupConfigured` and `status.backup.storages[]`.
+
+Decode the storage with `c.BackupStorageS3(bs)` for the `s3` class. It returns the typed parameters, `s3.Parameters` (`Region`, `EndpointURL` and `Endpoint()`, `ForcePathStyle`, `EffectiveImplementation()`), and the credentials of the storage's auth mode, from the `s3` contract package (`github.com/openeverest/openeverest/v2/backupstorageclasses/s3`). It fails with `backupstorageclasses.ErrUnsupportedParameter` (`github.com/openeverest/openeverest/v2/backupstorageclasses`) when the storage sets a parameter this build does not know. Read TLS with `c.BackupStorageTLS(bs, backupclasses.TLSSupport("<class>", s3.ClassName))`: `TLSSupport` reads the `tls` block of the class's entry, so what the engine does and what the class publishes cannot disagree. When the engine cannot honour something, call `c.RejectBackupStorage(name, err)` and hold the entry. Reject with `controller.ErrImplementationUnsupported` for an `implementation` the engine has no client for. `BackupStorageTLS` already returns `controller.ErrTLSOptionUnsupported`.
+
+```go
+func (p *Provider) renderStorages(c *controller.Context, live, desired *operatorv1.MyDatabase) error {
+    storages, err := c.BackupStorages()
+    if err != nil {
+        return err
+    }
+    for _, s := range storages {
+        if s.Apply() {
+            err := p.renderStorage(c, s, desired)
+            if err == nil {
+                continue
+            }
+            c.RejectBackupStorage(s.Name(), err)
+        }
+        // Hold rule: copy the entry from the live engine CR, if it is there.
+        if block, ok := live.Spec.Backup.Storages[s.Name()]; ok {
+            desired.Spec.Backup.Storages[s.Name()] = block
+        }
+    }
+    return nil
+}
+
+func (p *Provider) renderStorage(c *controller.Context, s controller.ResolvedBackupStorage, desired *operatorv1.MyDatabase) error {
+    params, creds, err := c.BackupStorageS3(s.Storage)
+    if err != nil {
+        return err
+    }
+    tls, err := c.BackupStorageTLS(s.Storage, backupclasses.TLSSupport("my-backup-class", s3.ClassName))
+    if err != nil {
+        return err
+    }
+    _ = creds // mirror into the Secret your operator reads, if it needs other keys
+    desired.Spec.Backup.Storages[s.Name()] = operatorv1.BackupStorageSpec{
+        Bucket:             s.Storage.Spec.Location.ObjectStore.Bucket,
+        Prefix:             s.Path,
+        Region:             params.Region,
+        EndpointURL:        params.EndpointURL,
+        InsecureSkipVerify: tls.InsecureSkipVerify,
+    }
+    return nil
+}
+```
 
 #### SyncBackup
 

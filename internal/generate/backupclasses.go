@@ -16,6 +16,7 @@ package generate
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -71,6 +72,9 @@ func AssembleBackupClasses(defDir string, typeRefs map[string]bool) ([]BackupCla
 		if err != nil {
 			return nil, fmt.Errorf("reading backupclass %s: %w", name, err)
 		}
+		if err := validateBackupClass(classData); err != nil {
+			return nil, fmt.Errorf("backupclass %s: %w", name, err)
+		}
 		collectBackupClassTypeRefs(classData, typeRefs)
 
 		var uiData map[string]any
@@ -92,6 +96,49 @@ func AssembleBackupClasses(defDir string, typeRefs map[string]bool) ([]BackupCla
 	// Sort for deterministic output across filesystems.
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out, nil
+}
+
+// validateBackupClass rejects a class.yaml generate cannot render: one
+// without backupStorageClasses, or one that sets what generate writes.
+func validateBackupClass(class map[string]any) error {
+	if _, ok := class["supportedProviders"]; ok {
+		return errors.New("class.yaml must not list supportedProviders: generate names the provider in providerManaged.providerRef")
+	}
+	if mode, ok := class["executionMode"]; ok && mode != "ProviderManaged" {
+		return fmt.Errorf("executionMode %v is not supported: a provider's classes are ProviderManaged", mode)
+	}
+	if pm, ok := class["providerManaged"].(map[string]any); ok {
+		if _, ok := pm["providerRef"]; ok {
+			return errors.New("class.yaml must not set providerManaged.providerRef: generate sets it to the provider")
+		}
+	}
+	storages, _ := class["backupStorageClasses"].([]any)
+	if len(storages) == 0 {
+		return errors.New("class.yaml must list the backupStorageClasses it can write to")
+	}
+	for i, s := range storages {
+		entry, ok := s.(map[string]any)
+		if !ok {
+			return fmt.Errorf("backupStorageClasses[%d] must be a map", i)
+		}
+		tls, ok := entry["tls"]
+		if !ok {
+			continue
+		}
+		settings, ok := tls.(map[string]any)
+		if !ok {
+			return fmt.Errorf("backupStorageClasses[%d].tls must be a map", i)
+		}
+		for key, val := range settings {
+			if key != "customCA" && key != "insecureSkipVerify" {
+				return fmt.Errorf("backupStorageClasses[%d].tls.%s is not a TLS setting: write customCA or insecureSkipVerify", i, key)
+			}
+			if val != "Supported" && val != "None" {
+				return fmt.Errorf("backupStorageClasses[%d].tls.%s must be Supported or None, not %v", i, key, val)
+			}
+		}
+	}
+	return nil
 }
 
 // collectBackupClassTypeRefs scans the known string fields that may carry a
@@ -116,12 +163,28 @@ func collectBackupClassTypeRefs(class map[string]any, typeRefs map[string]bool) 
 	}
 }
 
-// buildBackupClassManifest renders one BackupClass as a top-level Kubernetes
-// manifest map ready to be marshaled to YAML. Type-name references are
-// replaced by the resolved OpenAPI schemas from schemas (placeholder strings
-// remain in place when the schema is missing so failures surface loudly).
-func buildBackupClassManifest(bc BackupClassAssembled, schemas map[string]any) map[string]any {
+// buildBackupClassManifest renders one BackupClass of provider as a
+// top-level Kubernetes manifest map ready to be marshaled to YAML. The class
+// is ProviderManaged and names provider in providerManaged.providerRef.
+// Type-name references are replaced by the resolved OpenAPI schemas from
+// schemas (placeholder strings remain in place when the schema is missing so
+// failures surface loudly), and each backupStorageClasses entry of a storage
+// class whose contract provider-sdk knows gets that contract's schema,
+// narrowed by the entry's parametersSchema.
+func buildBackupClassManifest(bc BackupClassAssembled, schemas map[string]any, provider string) (map[string]any, error) {
 	spec := resolveBackupClassRefs(bc.Class, schemas)
+	spec["executionMode"] = "ProviderManaged"
+	pm, _ := spec["providerManaged"].(map[string]any)
+	if pm == nil {
+		pm = map[string]any{}
+	}
+	pm["providerRef"] = map[string]any{"name": provider}
+	spec["providerManaged"] = pm
+	entries, err := narrowBackupStorageClasses(spec["backupStorageClasses"])
+	if err != nil {
+		return nil, fmt.Errorf("backupclass %s: %w", bc.Name, err)
+	}
+	spec["backupStorageClasses"] = entries
 	if bc.UI != nil {
 		spec["uiSchema"] = bc.UI
 	}
@@ -130,7 +193,37 @@ func buildBackupClassManifest(bc BackupClassAssembled, schemas map[string]any) m
 		"kind":       "BackupClass",
 		"metadata":   map[string]any{"name": bc.Name},
 		"spec":       spec,
+	}, nil
+}
+
+// narrowBackupStorageClasses returns the backupStorageClasses entries with
+// the parametersSchema of each entry whose storage class provider-sdk knows
+// replaced by the contract's schema narrowed by it. Entries of other storage
+// classes keep the schema class.yaml writes, if any.
+func narrowBackupStorageClasses(v any) ([]any, error) {
+	entries, _ := v.([]any)
+	out := make([]any, 0, len(entries))
+	for _, e := range entries {
+		entry := deepCopyMap(e.(map[string]any))
+		name, _ := entry["name"].(string)
+		contract, ok, err := storageClassContract(name)
+		if err != nil {
+			return nil, fmt.Errorf("storage class %s: %w", name, err)
+		}
+		if ok {
+			var overlay map[string]any
+			if ps, ok := entry["parametersSchema"].(map[string]any); ok {
+				overlay, _ = ps["openAPIV3Schema"].(map[string]any)
+			}
+			schema, err := narrowSchema(contract, overlay)
+			if err != nil {
+				return nil, fmt.Errorf("storage class %s: parametersSchema.openAPIV3Schema.%w", name, err)
+			}
+			entry["parametersSchema"] = map[string]any{"openAPIV3Schema": schema}
+		}
+		out = append(out, entry)
 	}
+	return out, nil
 }
 
 // resolveBackupClassRefs returns a deep copy of the class spec with the known
@@ -186,31 +279,37 @@ func resolveProviderManagedRefs(v any, schemas map[string]any) any {
 	return resolved
 }
 
-// writeBackupClassManifests writes each BackupClass as its own YAML document
-// under outputDir. Existing files in outputDir not corresponding to a current
-// definition are removed so the chart directory mirrors the source of truth.
-func writeBackupClassManifests(outputDir string, classes []BackupClassAssembled, schemas map[string]any) error {
+// writeBackupClassManifests writes each BackupClass of provider as its own
+// YAML document under outputDir and returns the documents. Existing files in
+// outputDir not corresponding to a current definition are removed so the
+// chart directory mirrors the source of truth.
+func writeBackupClassManifests(outputDir string, classes []BackupClassAssembled, schemas map[string]any, provider string) ([][]byte, error) {
 	if err := os.MkdirAll(outputDir, 0o755); err != nil {
-		return fmt.Errorf("creating backupclasses output directory: %w", err)
+		return nil, fmt.Errorf("creating backupclasses output directory: %w", err)
 	}
 
 	// Build the desired set.
 	desired := make(map[string]bool, len(classes))
+	docs := make([][]byte, 0, len(classes))
 	for _, bc := range classes {
-		manifest := buildBackupClassManifest(bc, schemas)
+		manifest, err := buildBackupClassManifest(bc, schemas, provider)
+		if err != nil {
+			return nil, err
+		}
 		var buf bytes.Buffer
 		enc := yaml.NewEncoder(&buf)
 		enc.SetIndent(2)
 		if err := enc.Encode(manifest); err != nil {
-			return fmt.Errorf("marshaling backupclass %s: %w", bc.Name, err)
+			return nil, fmt.Errorf("marshaling backupclass %s: %w", bc.Name, err)
 		}
 		enc.Close()
+		docs = append(docs, buf.Bytes())
 
 		header := "# This file is generated by `provider-sdk generate` from definition/ files.\n" +
 			"# Do not edit manually. Run `make generate` to update.\n"
 		outFile := filepath.Join(outputDir, bc.Name+".yaml")
 		if err := os.WriteFile(outFile, []byte(header+buf.String()), 0o644); err != nil {
-			return fmt.Errorf("writing %s: %w", outFile, err)
+			return nil, fmt.Errorf("writing %s: %w", outFile, err)
 		}
 		desired[bc.Name+".yaml"] = true
 		fmt.Fprintf(os.Stderr, "Generated: %s\n", outFile)
@@ -219,7 +318,7 @@ func writeBackupClassManifests(outputDir string, classes []BackupClassAssembled,
 	// Prune stale files so removing a backupclass directory removes its manifest.
 	entries, err := os.ReadDir(outputDir)
 	if err != nil {
-		return nil // best-effort; the writes above already succeeded
+		return docs, nil // best-effort; the writes above already succeeded
 	}
 	for _, e := range entries {
 		if e.IsDir() {
@@ -232,5 +331,5 @@ func writeBackupClassManifests(outputDir string, classes []BackupClassAssembled,
 			_ = os.Remove(filepath.Join(outputDir, e.Name()))
 		}
 	}
-	return nil
+	return docs, nil
 }
