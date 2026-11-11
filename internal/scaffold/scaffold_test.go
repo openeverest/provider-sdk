@@ -222,6 +222,10 @@ func TestScaffold(t *testing.T) {
 	_, err = os.Stat(workflowDir)
 	assert.NoError(t, err, ".github/workflows/ not found")
 
+	dependabot, err := os.ReadFile(filepath.Join(dest, ".github", "dependabot.yml"))
+	require.NoError(t, err, ".github/dependabot.yml not found")
+	assert.Contains(t, string(dependabot), `directory: "/charts/provider-test-db"`)
+
 	// Verify executable permissions on .sh files.
 	varsSh := filepath.Join(dest, "test", "vars.sh")
 	info, err := os.Stat(varsSh)

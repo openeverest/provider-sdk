@@ -1,0 +1,32 @@
+---
+# Dependabot opens a single PR when a new operator release is available. The
+# operator is usually pinned twice: as a Go module (its API types, in go.mod)
+# and as a Helm subchart (charts/[[ .ProjectName ]]/Chart.yaml). Both entries
+# belong to one multi-ecosystem group so the bumps arrive together.
+version: 2
+
+multi-ecosystem-groups:
+  operator:
+    schedule:
+      interval: "daily"
+    labels:
+      - "dependencies"
+
+updates:
+  # TODO: Uncomment and set your operator's Go module path once it is added to
+  # go.mod. Without the allow filter, every Go dependency would be bumped.
+  # - package-ecosystem: "gomod"
+  #   directory: "/"
+  #   allow:
+  #     - dependency-name: "github.com/example/my-operator"
+  #   patterns:
+  #     - "github.com/example/my-operator"
+  #   multi-ecosystem-group: "operator"
+
+  # The chart's only dependencies are expected to be operator charts. Replace
+  # "*" with the chart name if you add unrelated subcharts.
+  - package-ecosystem: "helm"
+    directory: "/charts/[[ .ProjectName ]]"
+    patterns:
+      - "*"
+    multi-ecosystem-group: "operator"

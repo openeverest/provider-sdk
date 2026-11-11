@@ -206,6 +206,7 @@ charts/<provider-name>/              # ← GENERATED (mostly)
   integration-test.yaml              # Reusable workflow called by ci.yaml
   build.yaml                         # Build the provider image (push to main + tags)
   release.yaml                       # Tag-driven release: OCI chart + GitHub release
+.github/dependabot.yml               # Operator version bumps (set the Go module in the TODO)
 
 dev/                                 # ← LOCAL DEV (Tilt)
   Tiltfile                           # Provider dev workflow (installs core + builds provider)

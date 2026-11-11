@@ -160,7 +160,7 @@ func runInit(_ *cobra.Command, _ []string) error {
 	fmt.Printf("  1. cd %s\n", initOpts.outputDir)
 	fmt.Println("  2. Read github.com/openeverest/provider-sdk/blob/main/PROVIDER_DEVELOPMENT.md for a complete development guide")
 	fmt.Println("  3. Add your operator dependency: go get <operator-module>@latest")
-	fmt.Println("  4. Run: go mod tidy")
+	fmt.Println("  4. Run: go mod tidy, then set the operator module in .github/dependabot.yml")
 	fmt.Println()
 	fmt.Println("  Define your provider:")
 	fmt.Println("  5. Add components:  provider-sdk add component")

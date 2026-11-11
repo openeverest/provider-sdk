@@ -228,6 +228,7 @@ code generation, and the backup/restore interfaces are documented once for all p
 | `examples/` | Example `Instance` resources |
 | `dev/` | Tilt dev environment, `.env` configuration, k3d cluster config |
 | `.github/workflows/` | CI: lint, build, unit and integration tests, release |
+| `.github/dependabot.yml` | Daily PRs for new operator releases (Go module + Helm subchart) |
 
 ### Testing
 
