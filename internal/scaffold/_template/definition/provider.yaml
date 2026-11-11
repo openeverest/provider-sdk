@@ -21,3 +21,15 @@ name: [[ .ProviderName ]]
 #   backup:
 #     type: pbm
 components: {}
+
+# Component types map each type used above to its kind: the shared
+# classification of the software it runs, which monitoring classes filter on.
+# Optional per type, but every type listed in monitoring.yaml needs one.
+# Databases use OpenTelemetry db.system.name values (mongodb, mysql,
+# postgresql); other software uses names such as haproxy or pgbouncer.
+# Version catalogs stay in versions.yaml.
+#
+# Example:
+#   mongod:
+#     kind: mongodb
+componentTypes: {}

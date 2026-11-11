@@ -160,7 +160,7 @@ while it is running a bad spec is rejected before it is stored, whoever writes i
 
 ```
 definition/                          # ← YOU EDIT THESE
-  provider.yaml                      # Provider name + component→type mapping
+  provider.yaml                      # Provider name, component→type mapping, type kinds
   versions.yaml                      # Component type version/image catalog
   monitoring.yaml                    # Monitoring contract (optional)
   types.go                           # Shared Go types (e.g. TopologyType)
@@ -293,6 +293,9 @@ a logical part of the database deployment.
 provider-sdk add component --name backupAgent --type backup
 provider-sdk add component --name proxy --type mongod
 provider-sdk add component --name configServer --type mongod
+
+# Optionally declare the kind of a component type (see below):
+provider-sdk add component --name engine --type mongod --kind mongodb
 ```
 
 ### Manual Editing
@@ -312,7 +315,20 @@ components:
     type: mongod
   backupAgent:
     type: backup
+
+# Optional: the kind of each component type, the shared classification of the
+# software it runs. Databases use OpenTelemetry db.system.name values.
+componentTypes:
+  mongod:
+    kind: mongodb
+  backup:
+    kind: percona-backup-mongodb
 ```
+
+`componentTypes.<type>.kind` is published as `Provider.spec.componentTypes.<type>.kind`.
+Monitoring classes filter on it, and every type you declare in `monitoring.yaml` needs one
+(see [Declare monitoring support](#declare-monitoring-support)). Version catalogs stay in
+`versions.yaml`.
 
 ### What Gets Updated
 
@@ -320,7 +336,7 @@ When you add a component (via CLI or manually), these files need to be in sync:
 
 | File | What to add |
 |------|-------------|
-| `definition/provider.yaml` | Component entry under `components:` |
+| `definition/provider.yaml` | Component entry under `components:` (and the type's `kind` under `componentTypes:`, optional) |
 | `definition/versions.yaml` | Component type entry if new type |
 | `definition/components/types.go` | `Parameters` struct if component accepts parameters |
 | `internal/common/spec.go` | Constants for component name and type |
@@ -1275,7 +1291,8 @@ modes:
 
 When a class fits your provider in both modes, core picks ProviderManaged and records the
 mode on the binding once. In both modes the extension still claims the class
-named by its `--class-name` and checks the class's destinations.
+(every class whose `spec.controllerName` is its `--controller-name`) and checks the class's
+destinations.
 
 `definition/monitoring.yaml` declares which of these your provider supports.
 `provider-sdk generate` publishes it as `spec.monitoring` on the `Provider`, where core reads it
@@ -1300,9 +1317,33 @@ keyed by the component *type* from `provider.yaml` (`pxc`, `mongod`), not by com
 
 | Field | Meaning |
 |---|---|
-| `kind` | The engine kind (`mysql`, `mongodb`, `postgresql`, `haproxy`). Well-known values follow OpenTelemetry `db.system.name`; other values are allowed and match no backend that filters on kind. Must match the `Provider` CRD pattern, which `make generate` prints when it does not. Required. |
 | `metrics` | `Native` when the process serves OpenMetrics itself, `Exporter` when your provider can run an exporter for it on demand, `None` otherwise. Defaults to `None`. |
 | `connection` | `Supported` when monitoring agents can connect to the component over its native protocol with the `monitor` credential (see [Connections and pod metadata](#implement-it)), `None` otherwise. Defaults to `None`. |
+| `podMetadata` | `Supported` when your provider renders the pod annotations monitoring classes request (`c.MonitoringPodAnnotations`, see [Connections and pod metadata](#implement-it)) into the pods of the type, `None` otherwise. It is per type because whether annotations reach the pods depends on each component's operator CRD. Defaults to `None`. |
+
+**The kind of a component type** lives in `definition/provider.yaml`, next to the component
+mapping, not in `monitoring.yaml`: it classifies the software (`mysql`, `mongodb`,
+`postgresql`, `haproxy`) for monitoring classes, the UI and future backup classes alike, and
+`provider-sdk generate` publishes it as `Provider.spec.componentTypes.<type>.kind`. Databases
+use OpenTelemetry `db.system.name` values; other values are allowed and match no class that
+filters on kinds it does not list. It must match the `Provider` CRD pattern, which
+`make generate` prints when it does not. It is optional per type, but every type listed under
+`componentTypes` in `monitoring.yaml` needs one: the runtime sets the `kind` of every published
+endpoint from it and publishes no endpoint of a type without one.
+
+```yaml
+# definition/provider.yaml
+components:
+  engine:
+    type: pxc
+  proxy:
+    type: haproxy
+componentTypes:
+  pxc:
+    kind: mysql
+  haproxy:
+    kind: haproxy
+```
 
 A provider whose operator has a native PMM integration, which can run an exporter sidecar for
 the database and whose proxy serves its own metrics (Percona XtraDB Cluster):
@@ -1315,10 +1356,8 @@ integrations:
     authModes: [ServiceAccountToken]
 componentTypes:
   pxc:
-    kind: mysql
     metrics: Exporter
   haproxy:
-    kind: haproxy
     metrics: Native
 ```
 
@@ -1328,14 +1367,17 @@ A provider that renders no integration and whose engine serves metrics itself:
 # definition/monitoring.yaml
 componentTypes:
   clickhouse:
-    kind: clickhouse
     metrics: Native
 ```
 
+with `clickhouse: {kind: clickhouse}` under `componentTypes` in `provider.yaml`.
+
 `make generate` fails, naming the field, when an integration name is not a DNS label, when
 `agentVersions` is not a valid range, when an integration lists no `authModes` or a mode that
-is not PascalCase, when a `componentTypes` key is not the type of a component in
-`provider.yaml`, or when `kind`, `metrics` or `connection` holds a value the `Provider` CRD would reject.
+is not PascalCase, when a `componentTypes` key (in either file) is not the type of a component
+in `provider.yaml`, when a type listed in `monitoring.yaml` has no `kind` in `provider.yaml`,
+when `monitoring.yaml` still declares a `kind` (it says where to move it), or when `kind`,
+`metrics`, `connection` or `podMetadata` holds a value the `Provider` CRD would reject.
 
 ### Implement it
 
@@ -1424,7 +1466,8 @@ return c.Apply(cluster)
 **Connections and pod metadata.** Some backends (Coroot, Datadog) do not scrape an HTTP
 endpoint: their agent connects to the database over its native protocol and finds it through
 annotations on the database pods. Declare `connection: Supported` on the component types that
-accept such connections, then:
+accept such connections, and `podMetadata: Supported` on those whose pods get the requested
+annotations, then:
 
 - Publish one `connections` entry per serving component, reached on each pod directly: `podSelector`
   with `controller.InstanceLabel`, `container`, `port`, and `auth.credentialProfile: monitor`.
@@ -1446,9 +1489,9 @@ accept such connections, then:
 # definition/monitoring.yaml
 componentTypes:
   mongod:
-    kind: mongodb
     metrics: Exporter
     connection: Supported
+    podMetadata: Supported
 ```
 
 ---
@@ -2669,9 +2712,11 @@ Add a component to an existing provider project.
 
 ```bash
 provider-sdk add component --name backupAgent --type backup
+provider-sdk add component --name engine --type mongod --kind mongodb
 ```
 
-Updates: `provider.yaml`, `versions.yaml`, `components/types.go`, `spec.go`
+Updates: `provider.yaml` (with `--kind`, also `componentTypes.<type>.kind`), `versions.yaml`,
+`components/types.go`, `spec.go`
 
 ### `provider-sdk add topology`
 

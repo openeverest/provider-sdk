@@ -31,24 +31,27 @@ import (
 	corev1alpha1 "github.com/openeverest/openeverest/v2/api/core/v1alpha1"
 )
 
-var (
-	monitoringKindPattern = regexp.MustCompile(corev1alpha1.MonitoringKindPattern)
-	authModePattern       = regexp.MustCompile(`^[A-Z][A-Za-z0-9]{0,62}$`)
-)
+var authModePattern = regexp.MustCompile(`^[A-Z][A-Za-z0-9]{0,62}$`)
 
 // assembleMonitoring reads the optional definition/monitoring.yaml and returns
 // it as Provider.spec.monitoring. It returns nil when the file is absent or
 // declares nothing, so a fully commented-out file publishes no contract.
 //
 // components is the components map from provider.yaml; every key under
-// componentTypes must be the type of one of them.
-func assembleMonitoring(defDir string, components map[string]any) (map[string]any, error) {
+// componentTypes must be the type of one of them. kinds is the kind each
+// component type declares in provider.yaml; every type under componentTypes
+// needs one, since provider-runtime publishes no endpoint of a type without
+// a kind.
+func assembleMonitoring(defDir string, components map[string]any, kinds map[string]string) (map[string]any, error) {
 	data, err := os.ReadFile(filepath.Join(defDir, "monitoring.yaml"))
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, fmt.Errorf("reading monitoring.yaml: %w", err)
+	}
+	if err := checkMonitoringDeclaresNoKind(data); err != nil {
+		return nil, fmt.Errorf("invalid monitoring.yaml: %w", err)
 	}
 
 	var monitoring corev1alpha1.ProviderMonitoring
@@ -64,7 +67,7 @@ func assembleMonitoring(defDir string, components map[string]any) (map[string]an
 	if len(monitoring.Integrations) == 0 && len(monitoring.ComponentTypes) == 0 {
 		return nil, nil
 	}
-	if err := validateMonitoring(&monitoring, declaredComponentTypes(components)); err != nil {
+	if err := validateMonitoring(&monitoring, declaredComponentTypes(components), kinds); err != nil {
 		return nil, fmt.Errorf("invalid monitoring.yaml: %w", err)
 	}
 
@@ -75,9 +78,28 @@ func assembleMonitoring(defDir string, components map[string]any) (map[string]an
 	return spec, nil
 }
 
+// checkMonitoringDeclaresNoKind rejects the kind of a component type in
+// monitoring.yaml, where it was declared before it moved to provider.yaml,
+// with a message that says where it goes now.
+func checkMonitoringDeclaresNoKind(data []byte) error {
+	var loose struct {
+		ComponentTypes map[string]map[string]any `json:"componentTypes"`
+	}
+	if yaml.Unmarshal(data, &loose) != nil {
+		return nil // the strict parse reports it
+	}
+	var errs []error
+	for _, typeName := range sortedKeys(loose.ComponentTypes) {
+		if kind, has := loose.ComponentTypes[typeName]["kind"]; has {
+			errs = append(errs, fmt.Errorf("componentTypes[%q].kind: kind moved to provider.yaml; declare it there as componentTypes.%s.kind: %v and remove it from monitoring.yaml", typeName, typeName, kind))
+		}
+	}
+	return errors.Join(errs...)
+}
+
 // validateMonitoring reports every problem in the declaration at once, in a
 // stable order, naming the offending field.
-func validateMonitoring(monitoring *corev1alpha1.ProviderMonitoring, declaredTypes map[string]bool) error {
+func validateMonitoring(monitoring *corev1alpha1.ProviderMonitoring, declaredTypes map[string]bool, kinds map[string]string) error {
 	var errs []error
 
 	for _, name := range sortedKeys(monitoring.Integrations) {
@@ -121,11 +143,8 @@ func validateMonitoring(monitoring *corev1alpha1.ProviderMonitoring, declaredTyp
 			errs = append(errs, fmt.Errorf("componentTypes[%q]: no component in provider.yaml has type %q (declared types: %s)", typeName, typeName, declared))
 		}
 
-		switch {
-		case componentType.Kind == "":
-			errs = append(errs, fmt.Errorf("componentTypes[%q].kind: required", typeName))
-		case !monitoringKindPattern.MatchString(componentType.Kind):
-			errs = append(errs, fmt.Errorf("componentTypes[%q].kind: %q does not match %s", typeName, componentType.Kind, monitoringKindPattern))
+		if kinds[typeName] == "" {
+			errs = append(errs, fmt.Errorf("componentTypes[%q]: provider.yaml declares no kind for component type %q; set componentTypes.%s.kind there, endpoints of a type without a kind are not published", typeName, typeName, typeName))
 		}
 
 		switch componentType.Metrics {
@@ -140,6 +159,13 @@ func validateMonitoring(monitoring *corev1alpha1.ProviderMonitoring, declaredTyp
 		default:
 			errs = append(errs, fmt.Errorf("componentTypes[%q].connection: %q is not one of %s, %s", typeName, componentType.Connection,
 				corev1alpha1.ConnectionSupported, corev1alpha1.ConnectionNone))
+		}
+
+		switch componentType.PodMetadata {
+		case "", corev1alpha1.PodMetadataSupported, corev1alpha1.PodMetadataNone:
+		default:
+			errs = append(errs, fmt.Errorf("componentTypes[%q].podMetadata: %q is not one of %s, %s", typeName, componentType.PodMetadata,
+				corev1alpha1.PodMetadataSupported, corev1alpha1.PodMetadataNone))
 		}
 	}
 

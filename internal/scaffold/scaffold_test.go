@@ -250,12 +250,13 @@ func TestScaffoldMonitoringExampleIsValid(t *testing.T) {
 	}
 	require.NoError(t, os.WriteFile(filepath.Join(defDir, "monitoring.yaml"), []byte(uncommented.String()), 0o600))
 	require.NoError(t, os.WriteFile(filepath.Join(defDir, "provider.yaml"),
-		[]byte("name: test-db\ncomponents:\n  engine:\n    type: mydb\n"), 0o600))
+		[]byte("name: test-db\ncomponents:\n  engine:\n    type: mydb\ncomponentTypes:\n  mydb:\n    kind: mydb\n"), 0o600))
 
 	assembled, err := generate.Assemble(defDir)
 	require.NoError(t, err)
 	require.NotNil(t, assembled.Monitoring)
 	assert.Contains(t, assembled.Monitoring["componentTypes"], "mydb")
+	assert.Equal(t, map[string]any{"kind": "mydb"}, assembled.ComponentTypes["mydb"])
 }
 
 func TestScaffoldOutputDirExists(t *testing.T) {

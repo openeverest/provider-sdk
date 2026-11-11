@@ -17,15 +17,23 @@ package scaffold
 import (
 	"fmt"
 	"os"
+	"regexp"
 	"strings"
 
 	"gopkg.in/yaml.v3"
+
+	corev1alpha1 "github.com/openeverest/openeverest/v2/api/core/v1alpha1"
 )
+
+var kindPattern = regexp.MustCompile(corev1alpha1.KindPattern)
 
 // AddComponentConfig holds the configuration for adding a component.
 type AddComponentConfig struct {
 	ComponentName string // e.g., "backupAgent"
 	ComponentType string // e.g., "backup"
+	// Kind is the optional kind of the component type, e.g. "mongodb",
+	// declared in provider.yaml componentTypes.
+	Kind string
 }
 
 // AddComponent adds a new component to an existing provider project.
@@ -38,6 +46,10 @@ func AddComponent(cfg *AddComponentConfig) error {
 
 	if err := validateIdentifier(cfg.ComponentType); err != nil {
 		return fmt.Errorf("invalid component type for Go: %w", err)
+	}
+
+	if cfg.Kind != "" && !kindPattern.MatchString(cfg.Kind) {
+		return fmt.Errorf("invalid kind %q: must match %s", cfg.Kind, kindPattern)
 	}
 
 	// Ensure we're in a provider project.
@@ -101,6 +113,10 @@ func addComponentToProviderYAML(cfg *AddComponentConfig) error {
 		"type": cfg.ComponentType,
 	}
 
+	if err := addKindToProviderYAML(provider, cfg); err != nil {
+		return err
+	}
+
 	return writeYAMLWithHeader(
 		"definition/provider.yaml",
 		provider,
@@ -111,6 +127,34 @@ func addComponentToProviderYAML(cfg *AddComponentConfig) error {
 }
 
 // addTypeToVersionsYAML adds a component type to definition/versions.yaml if not already present.
+// addKindToProviderYAML records cfg.Kind as the kind of cfg.ComponentType in
+// provider's componentTypes. A type that already declares the same kind is
+// left alone; one that declares another kind is an error.
+func addKindToProviderYAML(provider map[string]any, cfg *AddComponentConfig) error {
+	if cfg.Kind == "" {
+		return nil
+	}
+	typesRaw, ok := provider["componentTypes"]
+	if !ok || typesRaw == nil {
+		typesRaw = map[string]any{}
+		provider["componentTypes"] = typesRaw
+	}
+	types, ok := typesRaw.(map[string]any)
+	if !ok {
+		return fmt.Errorf("componentTypes field is not a map")
+	}
+	entry, ok := types[cfg.ComponentType].(map[string]any)
+	if !ok {
+		entry = map[string]any{}
+		types[cfg.ComponentType] = entry
+	}
+	if existing, ok := entry["kind"].(string); ok && existing != "" && existing != cfg.Kind {
+		return fmt.Errorf("component type %q already declares kind %q in provider.yaml", cfg.ComponentType, existing)
+	}
+	entry["kind"] = cfg.Kind
+	return nil
+}
+
 func addTypeToVersionsYAML(cfg *AddComponentConfig) error {
 	data, err := os.ReadFile("definition/versions.yaml")
 	if err != nil {

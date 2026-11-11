@@ -24,13 +24,25 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// providerKinds is the componentTypes block of the provider.yaml that
+// writeMonitoringDefinition writes.
+const providerKinds = "componentTypes:\n  pxc:\n    kind: mysql\n  haproxy:\n    kind: haproxy\n"
+
 // writeMonitoringDefinition writes a definition directory whose provider.yaml
-// declares the component types pxc and haproxy, plus monitoring.yaml unless
-// monitoringYAML is nil.
+// declares the component types pxc (kind mysql) and haproxy (kind haproxy),
+// plus monitoring.yaml unless monitoringYAML is nil.
 func writeMonitoringDefinition(t *testing.T, monitoringYAML *string) string {
 	t.Helper()
+	return writeMonitoringDefinitionWith(t, providerKinds, monitoringYAML)
+}
+
+// writeMonitoringDefinitionWith writes a definition directory whose provider.yaml declares
+// the component types pxc and haproxy followed by componentTypesYAML, plus
+// monitoring.yaml unless monitoringYAML is nil.
+func writeMonitoringDefinitionWith(t *testing.T, componentTypesYAML string, monitoringYAML *string) string {
+	t.Helper()
 	dir := t.TempDir()
-	providerYAML := "name: test-provider\ncomponents:\n  engine:\n    type: pxc\n  proxy:\n    type: haproxy\n"
+	providerYAML := "name: test-provider\ncomponents:\n  engine:\n    type: pxc\n  proxy:\n    type: haproxy\n" + componentTypesYAML
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "provider.yaml"), []byte(providerYAML), 0o600))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "versions.yaml"), []byte("componentTypes: {}\n"), 0o600))
 	if monitoringYAML != nil {
@@ -54,10 +66,8 @@ integrations:
     authModes: [ServiceAccountToken]
 componentTypes:
   pxc:
-    kind: mysql
     metrics: Exporter
   haproxy:
-    kind: haproxy
     metrics: Native
 `),
 			want: `
@@ -67,10 +77,8 @@ integrations:
     authModes: [ServiceAccountToken]
 componentTypes:
   pxc:
-    kind: mysql
     metrics: Exporter
   haproxy:
-    kind: haproxy
     metrics: Native
 `,
 		},
@@ -78,26 +86,22 @@ componentTypes:
 			monitoringYAML: new(`
 componentTypes:
   haproxy:
-    kind: haproxy
     metrics: Native
 `),
 			want: `
 componentTypes:
   haproxy:
-    kind: haproxy
     metrics: Native
 `,
 		},
-		"metrics omitted is left to the CRD default": {
+		"capabilities omitted are left to the CRD defaults": {
 			monitoringYAML: new(`
 componentTypes:
-  haproxy:
-    kind: haproxy
+  haproxy: {}
 `),
 			want: `
 componentTypes:
-  haproxy:
-    kind: haproxy
+  haproxy: {}
 `,
 		},
 		"integration without agentVersions": {
@@ -112,18 +116,26 @@ integrations:
     authModes: [ServiceAccountToken]
 `,
 		},
-		"kind with the dots and underscores of OpenTelemetry db.system.name": {
+		"connection and pod metadata capabilities": {
 			monitoringYAML: new(`
 componentTypes:
   pxc:
-    kind: microsoft.sql_server
     metrics: Exporter
+    connection: Supported
+    podMetadata: Supported
+  haproxy:
+    metrics: Native
+    podMetadata: None
 `),
 			want: `
 componentTypes:
   pxc:
-    kind: microsoft.sql_server
     metrics: Exporter
+    connection: Supported
+    podMetadata: Supported
+  haproxy:
+    metrics: Native
+    podMetadata: None
 `,
 		},
 		"no monitoring.yaml": {},
@@ -131,7 +143,6 @@ componentTypes:
 			monitoringYAML: new(`
 # componentTypes:
 #   pxc:
-#     kind: mysql
 #     metrics: None
 `),
 		},
@@ -176,7 +187,7 @@ func TestAssembleRejectsInvalidMonitoring(t *testing.T) {
 		wantErrs       []string
 	}{
 		"component type not declared in provider.yaml": {
-			monitoringYAML: "componentTypes: {mongod: {kind: mongodb, metrics: Exporter}}",
+			monitoringYAML: "componentTypes: {mongod: {metrics: Exporter}}",
 			wantErrs:       []string{`componentTypes["mongod"]: no component in provider.yaml has type "mongod" (declared types: haproxy, pxc)`},
 		},
 		"integration key that is not a DNS label": {
@@ -188,11 +199,11 @@ func TestAssembleRejectsInvalidMonitoring(t *testing.T) {
 			wantErrs:       []string{`this file is spec.monitoring itself; remove the top-level monitoring key`},
 		},
 		"metrics outside the enum": {
-			monitoringYAML: "componentTypes: {pxc: {kind: mysql, metrics: Prometheus}}",
+			monitoringYAML: "componentTypes: {pxc: {metrics: Prometheus}}",
 			wantErrs:       []string{`componentTypes["pxc"].metrics: "Prometheus" is not one of Native, Exporter, None`},
 		},
 		"connection outside the enum": {
-			monitoringYAML: "componentTypes: {pxc: {kind: mysql, connection: Always}}",
+			monitoringYAML: "componentTypes: {pxc: {connection: Always}}",
 			wantErrs:       []string{`componentTypes["pxc"].connection: "Always" is not one of Supported, None`},
 		},
 		"integration without authModes": {
@@ -210,27 +221,31 @@ func TestAssembleRejectsInvalidMonitoring(t *testing.T) {
 			monitoringYAML: `integrations: {pmm: {agentVersions: ">=3.0 <4.0"}}`,
 			wantErrs:       []string{`integrations["pmm"].agentVersions: ">=3.0 <4.0" is not a semver range`},
 		},
-		"kind outside the core pattern": {
-			monitoringYAML: "componentTypes: {pxc: {kind: MySQL, metrics: Exporter}}",
-			wantErrs:       []string{`componentTypes["pxc"].kind: "MySQL" does not match`},
+		"podMetadata outside the enum": {
+			monitoringYAML: "componentTypes: {pxc: {podMetadata: Always}}",
+			wantErrs:       []string{`componentTypes["pxc"].podMetadata: "Always" is not one of Supported, None`},
 		},
-		"kind missing": {
-			monitoringYAML: "componentTypes: {haproxy: {metrics: Native}}",
-			wantErrs:       []string{`componentTypes["haproxy"].kind: required`},
+		"kind still declared in monitoring.yaml": {
+			monitoringYAML: "componentTypes: {pxc: {kind: mysql, metrics: Exporter}, haproxy: {kind: haproxy}}",
+			wantErrs: []string{
+				`invalid monitoring.yaml: componentTypes["haproxy"].kind: kind moved to provider.yaml; declare it there as componentTypes.haproxy.kind: haproxy and remove it from monitoring.yaml`,
+				`componentTypes["pxc"].kind: kind moved to provider.yaml; declare it there as componentTypes.pxc.kind: mysql`,
+			},
 		},
 		"misspelled field": {
-			monitoringYAML: "componentTypes: {pxc: {kind: mysql, metric: Exporter}}",
+			monitoringYAML: "componentTypes: {pxc: {metric: Exporter}}",
 			wantErrs:       []string{`parsing monitoring.yaml`, `unknown field "metric"`},
 		},
 		"field outside the contract": {
-			monitoringYAML: "componentTypes: {pxc: {kind: mysql, metrics: Exporter, credentialProfiles: [metrics]}}",
+			monitoringYAML: "componentTypes: {pxc: {metrics: Exporter, credentialProfiles: [metrics]}}",
 			wantErrs:       []string{`parsing monitoring.yaml`, `unknown field "credentialProfiles"`},
 		},
 		"every problem reported at once": {
-			monitoringYAML: "componentTypes: {mongod: {kind: MongoDB}, pxc: {kind: mysql, metrics: Prometheus}}",
+			monitoringYAML: "componentTypes: {mongod: {connection: Always}, pxc: {metrics: Prometheus}}",
 			wantErrs: []string{
 				`componentTypes["mongod"]: no component in provider.yaml has type "mongod"`,
-				`componentTypes["mongod"].kind: "MongoDB" does not match`,
+				`componentTypes["mongod"]: provider.yaml declares no kind for component type "mongod"`,
+				`componentTypes["mongod"].connection: "Always" is not one of`,
 				`componentTypes["pxc"].metrics: "Prometheus" is not one of`,
 			},
 		},
@@ -248,4 +263,15 @@ func TestAssembleRejectsInvalidMonitoring(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestAssembleRequiresKindForMonitoredComponentTypes(t *testing.T) {
+	t.Parallel()
+
+	monitoringYAML := "componentTypes: {pxc: {metrics: Exporter}, haproxy: {metrics: Native}}"
+	_, err := Assemble(writeMonitoringDefinitionWith(t, "componentTypes:\n  pxc:\n    kind: mysql\n", &monitoringYAML))
+
+	require.Error(t, err)
+	assert.ErrorContains(t, err, `componentTypes["haproxy"]: provider.yaml declares no kind for component type "haproxy"; set componentTypes.haproxy.kind there`)
+	assert.NotContains(t, err.Error(), `componentTypes["pxc"]`)
 }

@@ -48,6 +48,8 @@ func TestAddComponent(t *testing.T) {
 	tests := map[string]struct {
 		name             string
 		componentType    string
+		kind             string
+		expectedKinds    string
 		expectedType     string
 		expectedSpecName string
 		expectedSpecType string
@@ -59,6 +61,21 @@ func TestAddComponent(t *testing.T) {
 			expectedType:     "type MongodParameters struct{}",
 			expectedSpecName: `ComponentEngine = "engine"`,
 			expectedSpecType: `ComponentTypeMongod = "mongod"`,
+		},
+		"with kind": {
+			name:             "engine",
+			componentType:    "mongod",
+			kind:             "mongodb",
+			expectedKinds:    "\n  mongod:\n    kind: mongodb",
+			expectedType:     "type MongodParameters struct{}",
+			expectedSpecName: `ComponentEngine = "engine"`,
+			expectedSpecType: `ComponentTypeMongod = "mongod"`,
+		},
+		"invalid kind": {
+			name:          "engine",
+			componentType: "mongod",
+			kind:          "MongoDB",
+			err:           `invalid kind "MongoDB": must match`,
 		},
 		"camelCase": {
 			name:             "backupAgent",
@@ -113,6 +130,7 @@ func TestAddComponent(t *testing.T) {
 			err := AddComponent(&AddComponentConfig{
 				ComponentName: tt.name,
 				ComponentType: tt.componentType,
+				Kind:          tt.kind,
 			})
 			if tt.err != "" {
 				require.ErrorContains(t, err, tt.err)
@@ -145,12 +163,43 @@ func TestAddComponent(t *testing.T) {
 			providerYAML, err := os.ReadFile(filepath.Join(tmpDir, "definition", "provider.yaml"))
 			require.NoError(t, err)
 
+			kinds := tt.expectedKinds
+			if kinds == "" {
+				kinds = " {}"
+			}
 			expected := fmt.Sprintf(`
 name: test
 components:
   %s:
-    type: %s`, tt.name, tt.componentType)
+    type: %s
+componentTypes:%s`, tt.name, tt.componentType, kinds)
 			assert.YAMLEq(t, expected, string(providerYAML))
 		})
 	}
+}
+
+func TestAddComponentKindOfExistingType(t *testing.T) {
+	tmpDir := setupMinimalProvider(t)
+
+	require.NoError(t, AddComponent(&AddComponentConfig{ComponentName: "engine", ComponentType: "mongod", Kind: "mongodb"}))
+	require.NoError(t, AddComponent(&AddComponentConfig{ComponentName: "configServer", ComponentType: "mongod", Kind: "mongodb"}))
+	require.NoError(t, AddComponent(&AddComponentConfig{ComponentName: "proxy", ComponentType: "mongod"}))
+	err := AddComponent(&AddComponentConfig{ComponentName: "router", ComponentType: "mongod", Kind: "mongos"})
+	require.ErrorContains(t, err, `component type "mongod" already declares kind "mongodb" in provider.yaml`)
+
+	providerYAML, err := os.ReadFile(filepath.Join(tmpDir, "definition", "provider.yaml"))
+	require.NoError(t, err)
+	assert.YAMLEq(t, `
+name: test
+components:
+  engine:
+    type: mongod
+  configServer:
+    type: mongod
+  proxy:
+    type: mongod
+componentTypes:
+  mongod:
+    kind: mongodb
+`, string(providerYAML))
 }
