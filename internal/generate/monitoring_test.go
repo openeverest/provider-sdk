@@ -191,6 +191,10 @@ func TestAssembleRejectsInvalidMonitoring(t *testing.T) {
 			monitoringYAML: "componentTypes: {pxc: {kind: mysql, metrics: Prometheus}}",
 			wantErrs:       []string{`componentTypes["pxc"].metrics: "Prometheus" is not one of Native, Exporter, None`},
 		},
+		"connection outside the enum": {
+			monitoringYAML: "componentTypes: {pxc: {kind: mysql, connection: Always}}",
+			wantErrs:       []string{`componentTypes["pxc"].connection: "Always" is not one of Supported, None`},
+		},
 		"integration without authModes": {
 			monitoringYAML: `integrations: {pmm: {agentVersions: ">=3.0.0 <4.0.0"}}`,
 			wantErrs:       []string{`integrations["pmm"].authModes: required`},

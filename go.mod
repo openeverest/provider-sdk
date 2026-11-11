@@ -8,7 +8,7 @@ require (
 	github.com/charmbracelet/bubbletea v1.3.10
 	github.com/charmbracelet/lipgloss v1.1.0
 	github.com/google/cel-go v0.29.2
-	github.com/openeverest/openeverest/v2 v2.0.0-dev.2.0.20261029121954-02a02d35d69a
+	github.com/openeverest/openeverest/v2 v2.0.0-dev.2.0.20261110122231-23f19236b01d
 	github.com/spf13/cobra v1.10.2
 	github.com/stretchr/testify v1.12.1
 	golang.org/x/tools v0.51.0
