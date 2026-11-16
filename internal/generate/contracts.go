@@ -44,9 +44,9 @@ const (
 // contractSchemas returns the destination and instance parameter schemas of
 // the contract module modulePath, in the version the Go module containing dir
 // selects (its go.mod, a replace directive or a go.work), so a provider
-// publishes the schemas of the contract it is built with. Each is closed
-// (additionalProperties: false) at its root, so a parameter newer than that
-// version is unsupported (spec 019 Rule E).
+// publishes the schemas of the contract it is built with. Each is closed at
+// its root by closeSchema, so a parameter newer than that version is
+// unsupported.
 func contractSchemas(dir, modulePath string) (*apiextensionsv1.JSONSchemaProps, *apiextensionsv1.JSONSchemaProps, error) {
 	if err := module.CheckPath(modulePath); err != nil {
 		return nil, nil, fmt.Errorf("%q is not a module path: %w", modulePath, err)
@@ -79,10 +79,20 @@ func readContractSchema(moduleDir, modulePath, file string) (*apiextensionsv1.JS
 	if schema.Type != "object" {
 		return nil, fmt.Errorf("%s: %s: parameters are an object, the schema has type %q", modulePath, file, schema.Type)
 	}
+	closeSchema(schema)
+	return schema, nil
+}
+
+// closeSchema closes the parameter schema of a contract at its root
+// (additionalProperties: false) unless the contract sets additionalProperties
+// itself, so a parameter newer than the contract version the provider is
+// built with is unsupported rather than ignored. It closes the schemas of
+// both kinds of contract generate publishes: a monitoring integration's
+// contract module and a backup storage class's contract package.
+func closeSchema(schema *apiextensionsv1.JSONSchemaProps) {
 	if schema.AdditionalProperties == nil {
 		schema.AdditionalProperties = &apiextensionsv1.JSONSchemaPropsOrBool{Allows: false}
 	}
-	return schema, nil
 }
 
 // goModule is the part of the output of go list -m -json and go mod
