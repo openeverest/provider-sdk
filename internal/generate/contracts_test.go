@@ -29,6 +29,7 @@ import (
 	"golang.org/x/mod/sumdb/dirhash"
 	modzip "golang.org/x/mod/zip"
 	"gopkg.in/yaml.v3"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 
 	corev1alpha1 "github.com/openeverest/openeverest/v2/api/core/v1alpha1"
 )
@@ -310,4 +311,29 @@ func TestMonitoringFileMirrorsProviderMonitoring(t *testing.T) {
 		jsonNames(reflect.TypeFor[corev1alpha1.ProviderMonitoring]()),
 		jsonNames(reflect.TypeFor[monitoringFile]()),
 	)
+}
+
+func TestCloseSchema(t *testing.T) {
+	t.Parallel()
+
+	closed := &apiextensionsv1.JSONSchemaPropsOrBool{Allows: false}
+	open := &apiextensionsv1.JSONSchemaPropsOrBool{Allows: true}
+	ofStrings := &apiextensionsv1.JSONSchemaPropsOrBool{Allows: true, Schema: &apiextensionsv1.JSONSchemaProps{Type: "string"}}
+	tests := map[string]struct {
+		additionalProperties *apiextensionsv1.JSONSchemaPropsOrBool
+		want                 *apiextensionsv1.JSONSchemaPropsOrBool
+	}{
+		"an open root is closed":                             {additionalProperties: nil, want: closed},
+		"a root that allows other properties keeps them":     {additionalProperties: open, want: open},
+		"a root with a schema for other properties keeps it": {additionalProperties: ofStrings, want: ofStrings},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			schema := &apiextensionsv1.JSONSchemaProps{Type: "object", AdditionalProperties: tt.additionalProperties.DeepCopy()}
+			closeSchema(schema)
+			assert.Equal(t, tt.want, schema.AdditionalProperties)
+		})
+	}
 }
