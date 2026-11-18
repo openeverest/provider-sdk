@@ -98,6 +98,11 @@ helm install [[ .ProjectName ]] \
   --namespace everest-system
 ```
 
+The provider runs one replica by default. For HA, set `replicaCount` above one.
+Leader election is enabled by default, so only one replica reconciles while all
+replicas continue serving health endpoints and admission requests. The chart
+creates a PodDisruptionBudget for multi-replica deployments.
+
 <!-- TODO(provider): keep whichever of the two bullets below is true, delete the other. -->
 - The operator is bundled as a chart dependency and is installed automatically.
 - The operator is **not** bundled — install it before installing this provider.
