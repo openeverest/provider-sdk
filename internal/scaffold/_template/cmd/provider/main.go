@@ -17,10 +17,12 @@ func main() {
 	var serverPort int
 	var metricsBindAddress string
 	var admission bool
+	var leaderElect bool
 
 	flag.IntVar(&serverPort, "server-port", 8082, "The port for the provider HTTP server.")
 	flag.StringVar(&metricsBindAddress, "metrics-bind-address", ":8081", "The address the metrics endpoint binds to. Use 0 to disable.")
 	flag.BoolVar(&admission, "admission", true, "Serve the Instance admission webhook, with the serving certificate the chart mounts.")
+	flag.BoolVar(&leaderElect, "leader-elect", false, "Enable leader election for provider controllers.")
 	flag.Parse()
 
 	l := ctrl.Log.WithName("setup")
@@ -39,6 +41,10 @@ func main() {
 
 	if admission {
 		opts = append(opts, reconciler.WithAdmission())
+	}
+
+	if leaderElect {
+		opts = append(opts, reconciler.WithLeaderElection())
 	}
 
 	r, err := reconciler.New(ctx, p, opts...)

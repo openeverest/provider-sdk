@@ -153,6 +153,18 @@ func TestScaffold(t *testing.T) {
 	assert.Contains(t, string(genContent), "package providertestdb")
 	assert.Contains(t, string(genContent), "go tool provider-sdk generate")
 
+	mainContent, err := os.ReadFile(filepath.Join(dest, "cmd", "provider", "main.go"))
+	require.NoError(t, err)
+	assert.Contains(t, string(mainContent), "reconciler.WithLeaderElection()")
+
+	deployment, err := os.ReadFile(filepath.Join(chartDir, "templates", "deployment.yaml"))
+	require.NoError(t, err)
+	assert.Contains(t, string(deployment), "replicaCount above 1 requires leaderElection.enabled")
+	assert.Contains(t, string(deployment), "- --leader-elect")
+
+	_, err = os.Stat(filepath.Join(chartDir, "templates", "poddisruptionbudget.yaml"))
+	assert.NoError(t, err, "leader-election PodDisruptionBudget not scaffolded")
+
 	// Verify definition/ directory structure exists (no topology files by default).
 	for _, defFile := range []string{
 		"definition/provider.yaml",

@@ -1,3 +1,7 @@
+{{- $replicas := int .Values.replicaCount }}
+{{- if and (gt $replicas 1) (not .Values.leaderElection.enabled) }}
+{{- fail "replicaCount above 1 requires leaderElection.enabled" }}
+{{- end }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -6,7 +10,7 @@ metadata:
   labels:
     {{- include "[[ .ProjectName ]].labels" . | nindent 4 }}
 spec:
-  replicas: {{ .Values.replicaCount }}
+  replicas: {{ $replicas }}
   revisionHistoryLimit: {{ .Values.revisionHistoryLimit }}
   {{- with .Values.strategy }}
   strategy:
@@ -48,6 +52,9 @@ spec:
           args:
             - --server-port={{ .Values.service.port }}
             - --metrics-bind-address={{ .Values.service.metricsBindAddress }}
+            {{- if .Values.leaderElection.enabled }}
+            - --leader-elect
+            {{- end }}
           ports:
             - name: http
               containerPort: {{ .Values.service.port }}
