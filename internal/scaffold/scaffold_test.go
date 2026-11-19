@@ -17,6 +17,7 @@ package scaffold
 import (
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -257,6 +258,32 @@ func TestScaffoldMonitoringExampleIsValid(t *testing.T) {
 	require.NotNil(t, assembled.Monitoring)
 	assert.Contains(t, assembled.Monitoring["componentTypes"], "mydb")
 	assert.Equal(t, map[string]any{"kind": "mydb"}, assembled.ComponentTypes["mydb"])
+}
+
+// The Instance CRD accepts only the phases Pending, Provisioned and
+// Terminating, which the runtime sets, and the helpers that named another
+// phase are deprecated. A scaffolded provider must teach neither.
+func TestScaffoldReportsFactsNotPhases(t *testing.T) {
+	t.Parallel()
+
+	dest := filepath.Join(t.TempDir(), "provider-test-db")
+	require.NoError(t, Scaffold(&Config{ProviderName: "test-db", ModulePath: "github.com/example/provider-test-db"}, dest))
+
+	deprecatedHelper := regexp.MustCompile(`controller\.(Pending|Provisioning|Initializing|Updating|Suspending|Suspended|Resuming)\(`)
+	removedPhase := regexp.MustCompile(`phase: (Provisioning|Initializing|Ready|Running|Updating|Failed|Restoring|Suspending|Suspended|Resuming)\b`)
+	err := filepath.WalkDir(dest, func(path string, d os.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return err
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		assert.NotRegexp(t, deprecatedHelper, string(data), "deprecated status helper in %s", path)
+		assert.NotRegexp(t, removedPhase, string(data), "removed Instance phase in %s", path)
+		return nil
+	})
+	require.NoError(t, err)
 }
 
 func TestScaffoldOutputDirExists(t *testing.T) {

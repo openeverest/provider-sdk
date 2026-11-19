@@ -47,13 +47,16 @@ spec:
     # TODO: enable once your provider implements Status().
     # The operator is scaled to 0 in integration tests, so simulate it
     # marking the cluster ready by patching the operator-native CR status,
-    # then assert the Instance reports phase Running.
+    # then assert the Instance is Provisioned and Ready. If Status() checks
+    # the operator's observedGeneration, patch it to the object's generation
+    # again after every spec change, or the Instance never becomes Ready.
     # - name: instance-ready
     #   try:
     #     - script:
     #         content: |
+    #           gen=$(kubectl get <operator-resource>/test-instance -n $NAMESPACE -o jsonpath='{.metadata.generation}')
     #           kubectl patch <operator-resource>/test-instance --subresource status -n $NAMESPACE \
-    #             -p '{"status":{"state":"ready"}}' --type=merge
+    #             -p "{\"status\":{\"state\":\"ready\",\"observedGeneration\":$gen}}" --type=merge
     #     - assert:
     #         file: 11-assert.yaml
 

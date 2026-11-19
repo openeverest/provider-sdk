@@ -28,6 +28,9 @@ package provider
 //
 //   - Access Kubernetes core resources:
 //   // +kubebuilder:rbac:groups="",resources=secrets;configmaps,verbs=get;list;watch
+//
+//   - Let the runtime count the pods labelled with c.PodLabels and report
+//     their crash loops and scheduling failures on the Instance:
 //   // +kubebuilder:rbac:groups="",resources=pods,verbs=get;list;watch
 //
 //   - Access PVCs (if managing storage):

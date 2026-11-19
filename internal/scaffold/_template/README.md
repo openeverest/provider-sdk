@@ -149,11 +149,33 @@ Watch it come up and read the connection details:
 
 ```bash
 kubectl get instance my-instance -w
+kubectl wait --for=condition=Ready instance/my-instance --timeout=10m
 kubectl get instance my-instance -o jsonpath='{.status.connectionSecretRef.name}'
 ```
 
 Connection details, when the technology has any, are in the Secret named by
 `.status.connectionSecretRef.name`.
+
+### Status
+
+<!-- TODO(provider): fill in what each condition comes from and where the operator's signals
+     stop, and list the problems the provider reports. See the Status section of
+     https://github.com/openeverest/provider-percona-server-mongodb for a complete example. -->
+
+The provider reports what it observes, and OpenEverest derives the `Instance` conditions from
+it the same way for every provider. `status.phase` only says whether the database has been
+available yet (`Pending`, then `Provisioned`) or is being deleted (`Terminating`).
+
+| Condition | What this provider reports |
+|---|---|
+| `Available` | |
+| `Ready` | |
+
+A problem makes the `Instance` not `Ready`, with a reason that says what is wrong:
+
+| Reason | Cause |
+|---|---|
+| `EngineError` | Any other error the operator reports; the message quotes it. |
 
 ## Topologies
 

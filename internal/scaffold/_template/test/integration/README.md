@@ -41,7 +41,26 @@ directories (e.g. `backup/`, `monitoring/`) and wire each one to its own
   *provider's* translation and status logic, not the operator itself.
 - **Assert both directions** — after applying an `Instance`, assert the
   operator-native CR spec the provider must produce; after patching the
-  operator CR status, assert the `Instance` reaches `phase: Running`.
+  operator CR status, assert the `Instance` reaches `phase: Provisioned`
+  with the `Ready` condition `True`.
+- **Assert conditions, not phases** — the phase only says where the
+  `Instance` is in its life: `Pending` until it has first been available,
+  `Provisioned` from then on, `Terminating` once deleted. What is happening
+  now is in the conditions:
+
+  ```yaml
+  status:
+    phase: Provisioned
+    (conditions[?type == 'Ready'].status | [0]): "True"
+    (conditions[?type == 'Upgrading'].status | [0]): "True"
+  ```
+
+  To wait in a script, use `kubectl wait --for=condition=Ready instance/<name>`.
+  A list that may still be absent needs a default, ``length(x || `[]`)``:
+  chainsaw does not retry an expression error.
+- **Keep the simulated status current** — if `Status()` checks the operator's
+  `observedGeneration`, patch it to the object's `metadata.generation` again
+  after every spec change, or the `Instance` never becomes `Ready` again.
 - **Collect diagnostics on failure** — use the `catch` block in
   `chainsaw-test.yaml` to dump relevant resources and provider logs.
 
