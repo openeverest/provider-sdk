@@ -237,6 +237,10 @@ the runtime might change. And the pod runs with `runAsNonRoot`, an explicit uid,
 root filesystem and all capabilities dropped — providers create the workloads, so providers
 own their security context.
 
+The pod template also carries the labels `c.PodLabels(common.ComponentEngine)` returns. The
+runtime counts the pods that have them into the Instance's `status.components`, and reports a
+pod stuck in a crash loop or waiting for a node on the Instance, so `Status` never has to.
+
 Finally, tell the manager about the types you use. The runtime's scheme knows the OpenEverest
 APIs and `core/v1`; anything else is yours to register:
 
@@ -248,61 +252,95 @@ WatchConfigs: []controller.WatchConfig{controller.WatchOwned(&appsv1.StatefulSet
 Skip the watch and the Instance is only reconciled when it changes — so the next section would
 never notice pods becoming ready.
 
-Then grant yourself the access in `rbac.go` and re-run `make generate`:
+Then grant yourself the access in `rbac.go` and re-run `make generate`. The runtime needs to
+read the pods to report on them:
 
 ```go
 // +kubebuilder:rbac:groups=apps,resources=statefulsets,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups="",resources=pods,verbs=get;list;watch
 ```
 
 > **Grant yourself Secrets too**, even if you never touch one. The runtime writes the
 > connection details from the next section into a Secret using the manager's *cached* client,
 > so without `secrets` access the informer never syncs and every reconcile that reports
-> `Ready` fails before it can publish the phase. The symptom is an Instance frozen on a stale
-> `Updating` while the workload is plainly healthy.
+> connection details fails. The symptom is an Instance that never becomes `Ready`, and after
+> a minute reports `ReconcileError`, while the workload is plainly healthy.
 
 ---
 
 ## 5. Report what happened: Status
 
-`Sync` says what should exist. `Status` says what does. The runtime writes the phase onto the
-Instance and, when it is `Ready`, persists the connection details into a Secret the API server
-serves to clients.
+`Sync` says what should exist. `Status` says what does, as facts: has the workload caught up
+with the spec, can clients connect, how many nodes should there be. The runtime turns them
+into the Instance's conditions and phase, the same way for every provider, and persists the
+connection details into a Secret the API server serves to clients. See
+[`internal/provider/status.go`](https://github.com/openeverest/provider-example/blob/main/internal/provider/status.go).
 
 ```go
-switch {
-case statefulSet.Status.ObservedGeneration < statefulSet.Generation:
-	status = controller.Updating("Rolling out the updated configuration")
-case ready == 0:
-	status = controller.Initializing("Waiting for the first node to become ready")
-case ready < desired:
-	status = controller.Updating(fmt.Sprintf("%d of %d nodes ready", ready, desired))
-default:
-	status = controller.ReadyWithConnectionDetails(details)
+func statusFromStatefulSet(sts *appsv1.StatefulSet, desired int32, details controller.ConnectionDetails) controller.Status {
+	ready := sts.Status.ReadyReplicas
+
+	var status controller.Status
+	switch {
+	case sts.Status.ObservedGeneration < sts.Generation:
+		status = controller.Progressing("Rolling out the updated configuration")
+	case sts.Status.CurrentRevision != sts.Status.UpdateRevision:
+		status = controller.Progressing(fmt.Sprintf("%d of %d nodes updated", sts.Status.UpdatedReplicas, desired))
+	case sts.Status.Replicas != desired || ready < desired:
+		status = controller.Progressing(fmt.Sprintf("%d of %d nodes ready", ready, desired))
+	default:
+		status = controller.Ready()
+	}
+
+	if ready == 0 {
+		status = status.WithUnavailable("NoNodeReady", "No memcached node is ready")
+	} else {
+		status = status.WithAvailable(controller.Available)
+		status.ConnectionDetails = details
+	}
+
+	return status.WithDesiredReplicas(common.ComponentEngine, desired)
 }
 ```
 
-The phases are read by the UI, the CLI and anything waiting on an Instance, so each has to
-mean something specific:
+The UI, the CLI and anything waiting on an Instance read what the runtime derives from these
+facts, so each has to mean something specific:
 
-| Phase | Means |
-|---|---|
-| `Provisioning` | The workload does not exist yet. |
-| `Initializing` | It exists, nothing serves traffic yet. |
-| `Updating` | A change is rolling out, or nodes are still joining. |
-| `Ready` | Everything the spec asked for is serving. |
-| `Failed` | Human intervention required. |
+| Fact | Means | Here |
+|---|---|---|
+| Converged: `Ready()`, or `Progressing(message)` until then | The workload runs what the spec asks for. Until it does, the message says what it waits for. | The StatefulSet has acted on its latest generation, every pod runs the latest revision, and every node is ready. |
+| Available | Clients can connect right now. | At least one node is ready. |
+| Connection details | How clients connect. | Reported as soon as a node is ready, not only once converged. |
+| Desired replicas | How many pods the component has once converged. | The node count the Instance asks for, with the default `Sync` applies. |
+
+From them the runtime derives the `Ready` and `Available` conditions and the phase: `Pending`
+until the cache has first been available, then `Provisioned` for good. `Ready`'s reason is the
+status word clients show: `Creating` while the Instance first comes up, `ApplyingChanges` while
+a later change rolls out, and `Ready` once it has converged.
 
 The generation check comes first on purpose. Immediately after a spec change the StatefulSet
 still reports the *old* replica count as fully ready, so a check that skipped it would report
-`Ready` for a rollout that has not started.
+the Instance converged for a rollout that has not started. The revision check catches the
+moments in a rolling update when every pod happens to be ready but some still run the old
+template. And `desired` comes from the Instance, through the `resolveReplicas` helper `Sync`
+uses, not from the StatefulSet, which may still describe the previous spec.
 
 A missing workload is not an error — `Sync` ran, the cache has not caught up:
 
 ```go
 if apierrors.IsNotFound(err) {
-	return controller.Provisioning("Waiting for the StatefulSet to be created"), nil
+	return controller.Progressing("Waiting for the StatefulSet to be created"), nil
 }
 ```
+
+Any other failed read is returned as an error. The runtime retries it, and reports it only if
+it persists.
+
+memcached has no operator to report errors or long operations, so this provider reports
+neither. One backed by an operator adds them: `WithProblem` for an error the operator reports,
+`WithOperation` for an upgrade, a restore or a volume resize, as
+[Status](PROVIDER_DEVELOPMENT.md#status) in the guide shows. Neither reports a crash loop or a
+pod that cannot be scheduled: the runtime sees those on the pods labelled in section 4.
 
 Fill in the well-known connection fields so the API server can serve them without knowing
 anything about your engine. `AdditionalProperties` carries whatever they do not cover; every
@@ -327,8 +365,8 @@ if replicas > maxPoolNodes {
 ```
 
 A rejected Instance keeps its phase and reports `Ready=False` with reason `ValidationFailed`
-and your errors, so `kubectl wait`, Argo CD and Flux all see the rejection, and nothing is
-synced until the Instance or the `Provider` changes. Say what is wrong *and* what to do
+and your errors, and `Stalled=True`, so `kubectl wait`, Argo CD and Flux all see the
+rejection, and nothing is synced until the Instance or the `Provider` changes. Say what is wrong *and* what to do
 instead — that message is the entire user experience of a rejection, whether it lands in a
 form or in `kubectl describe`.
 
@@ -407,16 +445,18 @@ kubectl apply -f examples/instance-simple.yaml
 kubectl get instance cache -w
 ```
 
-You should watch it walk `Provisioning` → `Initializing` → `Ready`. Once it is ready, the
-connection Secret is populated:
+You should watch its `STATUS` go from `Creating` to `Ready`, and `AVAILABLE` turn `True`
+as soon as the first node is ready. From then on the connection Secret is populated:
 
 ```bash
+kubectl wait --for=condition=Ready instance/cache --timeout=5m
 kubectl get secret cache-conn -o jsonpath='{.data.uri}' | base64 -d
 ```
 
-If it never reaches `Ready`, the two usual causes are the missing `secrets` RBAC rule from
-section 4 and a missing watch, which leaves `Status` running only when the Instance itself
-changes.
+If it never reaches `Ready`, `kubectl describe instance cache` shows the conditions, and the
+`Ready` condition's message says what it waits for. The two usual causes are the missing
+`secrets` RBAC rule from section 4 and a missing watch, which leaves `Status` running only
+when the Instance itself changes.
 
 ---
 
@@ -432,8 +472,8 @@ require.NoError(t, err)
 assert.Equal(t, "memcached:1.6.38-alpine", engine.image)
 ```
 
-Assert values the code *chose*: the resolved image, the derived flags, the phase a given
-status maps to. A test that only asserts "no error" tells you nothing.
+Assert values the code *chose*: the resolved image, the derived flags, the facts a given
+StatefulSet status maps to — converged or not, available or not, the desired replicas. A test that only asserts "no error" tells you nothing.
 
 **Integration tests** are [chainsaw](https://kyverno.github.io/chainsaw/) suites under
 `test/integration/`, run in CI against a real k3d cluster:
