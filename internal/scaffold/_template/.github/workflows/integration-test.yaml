@@ -33,8 +33,6 @@ permissions:
 
 env:
   IMG: [[ .ProjectName ]]:ci
-  # Branch of openeverest/openeverest to build the platform from.
-  OPENEVEREST_BRANCH: main
 
 jobs:
   run:
@@ -45,11 +43,26 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
+      # The controller and the CRDs it applies must match the core go.mod pins.
+      - name: Resolve the pinned OpenEverest commit
+        id: openeverest
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=$(awk '{for (i = 1; i < NF; i++) if ($i == "github.com/openeverest/openeverest/v2") {print $(i+1); exit}}' go.mod)
+          ref=$version
+          # A pseudo-version ends in the commit's 12-character prefix.
+          sha=$(printf '%s' "$version" | sed -nE 's/.*[-.][0-9]{14}-([0-9a-f]{12})$/\1/p')
+          if [ -n "$sha" ]; then
+            ref=$(gh api "repos/openeverest/openeverest/commits/${sha}" --jq .sha)
+          fi
+          echo "ref=$ref" >> "$GITHUB_OUTPUT"
+
       - name: Checkout OpenEverest
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           repository: openeverest/openeverest
-          ref: ${{ env.OPENEVEREST_BRANCH }}
+          ref: ${{ steps.openeverest.outputs.ref }}
           path: _openeverest
 
       - name: Install Kubernetes tooling
@@ -82,8 +95,6 @@ jobs:
 
       - name: Install CRDs
         run: make install-crds
-        env:
-          OPENEVEREST_BRANCH: ${{ env.OPENEVEREST_BRANCH }}
 
       - name: Deploy provider
         run: make deploy-provider-ci

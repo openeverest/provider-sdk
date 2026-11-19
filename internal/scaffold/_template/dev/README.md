@@ -103,7 +103,7 @@ instance).
 
 ### An Instance never becomes ready (DNS times out on some pods)
 
-The Instance hangs in `Provisioning` and some pods restart in a loop on
+The Instance stays `Pending`, never `Ready`, and some pods restart in a loop on
 liveness probe timeouts, but which pods are affected changes on every
 `make dev-up`. On Linux this means `br_netfilter` is not loaded on the host, so
 kube-proxy's DNAT is bypassed for traffic that stays on one node's bridge. Pods

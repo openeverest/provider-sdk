@@ -51,7 +51,9 @@ func (p *Provider) Sync(c *controller.Context) error {
 	// TODO: Implement sync logic.
 	// Typical pattern:
 	//   1. Build the operator CR spec from the Instance spec
-	//   2. Use c.Apply() to create/update the operator resource
+	//   2. Label each component's pods with c.PodLabels(<component name>),
+	//      so the runtime can count them and report crash loops
+	//   3. Use c.Apply() to create/update the operator resource
 	//
 	// Example:
 	//   cr := &operatorv1.MyDatabase{
@@ -61,38 +63,74 @@ func (p *Provider) Sync(c *controller.Context) error {
 	//       },
 	//       Spec: buildSpec(c),
 	//   }
+	//   cr.Spec.PodLabels = c.PodLabels("engine")
 	//   return c.Apply(cr)
 	return nil
 }
 
-// Status computes the current status of the database instance.
+// Status reports what the provider observes about the engine.
 //
-// Query the operator's resource(s) and translate their status
-// into the provider-runtime's Status type.
+// It reports facts, not a phase: whether the engine runs what the Instance
+// asks for, whether clients can connect, what is wrong and which long
+// operation is running. The runtime derives the Instance's phase and
+// conditions from them, the same way for every provider.
 func (p *Provider) Status(c *controller.Context) (controller.Status, error) {
 	l := log.FromContext(c.Context())
 	l.Info("Computing status", "name", c.Name())
 
-	// TODO: Implement status logic.
-	// Typical pattern:
-	//   1. Get the operator CR using c.Get()
-	//   2. Translate its status to a controller.Status
+	// TODO: Implement status logic. Report only what the operator tells you.
 	//
 	// Example:
 	//   cr := &operatorv1.MyDatabase{}
 	//   if err := c.Get(cr, c.Name()); err != nil {
-	//       return controller.Status{}, err
+	//       if apierrors.IsNotFound(err) {
+	//           return controller.Progressing("Waiting for the MyDatabase to be created"), nil
+	//       }
+	//       return controller.Status{}, err // retried, and reported if it persists
 	//   }
-	//   if cr.Status.Ready {
-	//       return controller.ReadyWithConnectionDetails(
-	//           controller.ConnectionDetails{
-	//           // Populate connection details.
-	//           },
-	//       ), nil
+	//
+	//   // Converged: the operator has acted on the latest spec and reports ready.
+	//   status := controller.Progressing("Waiting for the cluster to be ready")
+	//   if cr.Status.ObservedGeneration == cr.Generation && cr.Status.State == "ready" {
+	//       status = controller.Ready()
 	//   }
-	//   return controller.Provisioning("waiting for database to be ready"), nil
+	//
+	//   // Available: whether clients can connect now. Publish the connection
+	//   // details as soon as they can, not only once converged.
+	//   if cr.Status.ReadyReplicas > 0 {
+	//       status = status.WithAvailable(controller.Available)
+	//       status.ConnectionDetails = connectionDetails(cr)
+	//   } else {
+	//       status = status.WithUnavailable("NoReplicaReady", "No replica is ready")
+	//   }
+	//
+	//   // Operations: name every long operation. A wait with no name is
+	//   // reported as stalled after 30 minutes.
+	//   if cr.Status.Version != cr.Spec.Version {
+	//       status = status.WithOperation(v1alpha1.ConditionUpgrading, "RollingUpdate",
+	//           "Upgrading to "+cr.Spec.Version)
+	//   }
+	//
+	//   // Problems: WithProblem for what may clear by itself, WithTerminalProblem
+	//   // only for what nothing but a person can fix.
+	//   switch {
+	//   case cr.Spec.Paused: // Sync never sets it
+	//       status = status.WithTerminalProblem("PausedOutsideOpenEverest",
+	//           "The cluster was paused outside OpenEverest")
+	//   case cr.Status.Error != "":
+	//       status = status.WithProblem("ReplicationBroken", cr.Status.Error)
+	//   }
+	//
+	//   // Desired replicas: the pods each component has once the current spec
+	//   // has converged, defaults included.
+	//   return status.WithDesiredReplicas("engine", engineReplicas(c)), nil
+	//
+	// The runtime already reports crash loops, image pull back-offs and
+	// unschedulable pods (of the pods labelled with c.PodLabels), the seeding
+	// of a new Instance from spec.dataSource, and errors returned from Sync or
+	// Status. Don't report them again.
 
-	return controller.Provisioning("initializing"), nil
+	return controller.Progressing("Status is not implemented yet"), nil
 }
 
 // Cleanup handles deletion of provider-managed resources.

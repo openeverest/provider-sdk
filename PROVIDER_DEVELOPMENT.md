@@ -147,9 +147,9 @@ Instance against what your `Provider` declares — topology, components, version
 schemas and `supportedFields` — so `Validate` only sees Instances that already match them.
 
 A rejected Instance keeps its phase and reports `Ready=False` with reason `ValidationFailed`
-and the errors as `field: detail`, which `kubectl wait --for=condition=Ready`, Argo CD and
-Flux all read. It is checked again when the Instance or the `Provider` changes. Return
-errors with field paths that make sense to the person who wrote the Instance.
+and the errors as `field: detail`, with `Stalled=True`. `kubectl wait --for=condition=Ready`,
+Argo CD and Flux all read these. It is checked again when the Instance or the `Provider`
+changes. Return errors with field paths that make sense to the person who wrote the Instance.
 
 The same checks also run in an [admission webhook](#admission) your provider serves, so
 while it is running a bad spec is rejected before it is stored, whoever writes it.
@@ -1557,9 +1557,9 @@ Where a rule goes:
 | A rule about another object's contents, such as the keys of the user Secret | The optional `ValidateReferences(c *controller.Context) (field.ErrorList, error)`, which runs after `Validate` and before `Sync` |
 
 Errors from the runtime's checks or from `Validate` set `Ready=False` with
-reason `ValidationFailed`, keep the phase, skip `Sync`, and are checked again
-when the Instance or the `Provider` changes. Warnings are recorded as a
-Warning Event.
+reason `ValidationFailed` and `Stalled=True`, keep the phase, skip `Sync`, and
+are checked again when the Instance or the `Provider` changes. Warnings are
+recorded as a Warning Event.
 
 `ValidateReferences` runs only once the objects the Instance names exist, so
 it checks their contents, not their existence. Give each error the path of the
@@ -1664,6 +1664,8 @@ func (p *Provider) Sync(c *controller.Context) error {
         ObjectMeta: c.ObjectMeta(c.Name()),  // Sets ownership
         Spec:       buildOperatorSpec(c),
     }
+    // Lets the runtime find the component's pods (see Status)
+    operator.Spec.PodLabels = c.PodLabels("engine")
 
     // Apply creates or updates the resource
     if err := c.Apply(operator); err != nil {
@@ -1676,31 +1678,274 @@ func (p *Provider) Sync(c *controller.Context) error {
 
 ### Status
 
-Read the operator resource status and translate it to an Instance status.
+Read what the engine looks like and report it as facts: whether it runs what
+the Instance asks for, whether clients can connect, what is wrong, which long
+operation is running. The runtime turns these facts into the Instance's
+phase, conditions and status word, the same way for every provider, so a
+provider chooses no phase, no words and no severities.
 
 The runtime writes `Instance.status` for you, with server-side apply under the field manager `openeverest-provider/<provider name>`: it applies only the fields it owns, so a status field another writer, such as core, applies on the Instance survives your reconciles, even those of an older provider build whose types do not know it. Never write `Instance.status` yourself.
 
 ```go
+import "github.com/openeverest/openeverest/v2/api/core/v1alpha1"
+
 func (p *Provider) Status(c *controller.Context) (controller.Status, error) {
-    operator := &operatorv1.MyDatabase{}
-    if err := c.Get(operator, c.Name()); err != nil {
-        return controller.Provisioning("Waiting for operator resource"), nil
-    }
-
-    switch operator.Status.State {
-    case "ready":
-        details := controller.ConnectionDetails{
-          // TODO: Set connection details.
+    db := &operatorv1.MyDatabase{}
+    if err := c.Get(db, c.Name()); err != nil {
+        if apierrors.IsNotFound(err) {
+            // Sync has run; the cache has not caught up yet.
+            return controller.Progressing("Waiting for the MyDatabase to be created"), nil
         }
-
-		    return controller.ReadyWithConnectionDetails(details), nil
-    case "error":
-        return controller.Failed(operator.Status.Message), nil
-    default:
-        return controller.Provisioning("Cluster is being created"), nil
+        return controller.Status{}, err
     }
+
+    status := controller.Progressing(waitingFor(db))
+    if db.Status.ObservedGeneration == db.Generation && db.Status.State == "ready" {
+        status = controller.Ready()
+    }
+
+    if db.Status.ReadyMembers > 0 {
+        status = status.WithAvailable(controller.Available)
+        status.ConnectionDetails = connectionDetails(db)
+    } else {
+        status = status.WithUnavailable("NoMemberReady", "No member of the cluster is ready")
+    }
+
+    if db.Status.Version != "" && db.Status.Version != db.Spec.Version {
+        status = status.WithOperation(v1alpha1.ConditionUpgrading, "RollingOutVersion",
+            "Upgrading to "+db.Spec.Version)
+    }
+    if db.Status.State == "error" {
+        status = status.WithProblem(problemReason(db.Status.Message), db.Status.Message)
+    }
+
+    return status.WithDesiredReplicas("engine", engineReplicas(c.Instance())), nil
 }
 ```
+
+For real ones, read the `Status` of the Percona providers, each with a
+"Status" section in its README that says where every fact comes from:
+
+- [provider-percona-server-mongodb](https://github.com/openeverest/provider-percona-server-mongodb/blob/main/internal/provider/status.go):
+  availability from the member states the operator records, rollouts from the
+  StatefulSets, and an uncached read of the operator object.
+- [provider-percona-xtradb-cluster](https://github.com/openeverest/provider-percona-xtradb-cluster/blob/main/internal/provider/status.go):
+  availability from the operator's ready counts, `Unknown` when it cannot
+  count, operator-native restores, and `StorageResizing` from the operator's
+  resize mark.
+- [provider-percona-postgresql](https://github.com/openeverest/provider-percona-postgresql/blob/main/internal/provider/status.go):
+  availability from the endpoints of the Patroni leader Service, a resize
+  confirmed against the PVCs, and a cluster paused outside OpenEverest.
+
+#### What the Instance shows
+
+The runtime derives all of these; your provider writes none of them.
+
+- **`status.phase`** says where the Instance is in its life, and nothing else:
+  `Pending` until the database has first been available, `Provisioned` from
+  then on, `Terminating` once deletion is requested. It only moves forward
+  and says nothing about health now, so don't decide anything on it.
+- **Summary conditions** answer the questions every reader has:
+
+  | Condition | Answers |
+  |---|---|
+  | `Available` | Can clients connect right now? |
+  | `Ready` | Has the Instance converged? Its reason is the status word every client shows (kubectl, everestctl, Argo CD, the UI), and its message one sentence a person can act on. |
+  | `Reconciling` | Wait: the runtime or the provider is working towards the spec. |
+  | `Stalled` | Act: the Instance will not converge without a person. |
+  | `NeedsAttention` | A problem is observed, even one that may still clear. |
+
+  While `Ready` is not `True`, exactly one of `Reconciling` and `Stalled` is.
+- **Checks** gate `Ready`. `True` is fine, `Unknown` is in progress and
+  `False` is a problem: `ReferencesResolved`, `Synced`, `PodsScheduled`,
+  `PodsReady`, `EngineHealthy`, `DataSourceReady` and `BackupConfigured`.
+- **Operations**, `Restoring`, `Upgrading` and `StorageResizing`, are `True`
+  while one runs and `False` with reason `Succeeded` once it has ended.
+
+The status word is `Creating` until the database has first been available and
+`ApplyingChanges` afterwards, unless something more specific applies: the
+type of the operation that is running, or the reason of a problem, whether a
+failing check or one you report. What is merely in progress, such as pods
+that are starting, keeps the Instance from being `Ready` and leaves the word
+alone.
+
+#### What you report
+
+`controller.Status` holds the facts. Start from a constructor and add to it
+with the `With...` methods, which take and return a `Status` by value: always
+use the result.
+
+| Fact | Set it with | What the Instance shows |
+|---|---|---|
+| Converged | `Ready()`, `ReadyWithConnectionDetails(d)`; `Progressing(message)` while not | `Ready=True` once every check passes |
+| Message | `Progressing(message)` | `Ready`'s message while it waits |
+| Available | `WithAvailable(a)`, `WithUnavailable(reason, message)` | `Available`; the first `True` makes the phase `Provisioned` |
+| Problem | `WithProblem(reason, message)` | `EngineHealthy=False` and `NeedsAttention=True` at once, with the reason as the status word; `Stalled=True` if it lasts 10 minutes |
+| Terminal problem | `WithTerminalProblem(reason, message)` | `Stalled=True` at once |
+| Operation | `WithOperation(conditionType, reason, message)` | The operation's condition is `True`, its type is the status word, and it has no deadline |
+| Connection details | `ReadyWithConnectionDetails(d)`, or the `ConnectionDetails` field | The Secret named by `status.connectionSecretRef`, and `ConnectionDetailsReady` |
+| Desired replicas | `WithDesiredReplicas(component, n)` | `status.components[].desiredReplicas`, which clients show the ready pods against |
+
+Report only what the operator tells you. When it cannot tell, say `Unknown`
+or leave the fact to the runtime, and write the limit down in your README.
+
+**Converged.** The operator has acted on the latest generation of its object
+and reports it ready, and the workloads it runs have rolled out. Compare the
+operator's `status.observedGeneration`, or a condition's
+`observedGeneration`, with the object's `metadata.generation`: right after
+`Sync` applies a change, the operator still reports the previous
+configuration as ready. Where the operator publishes neither, use the
+strongest signal it has, typically a ready condition plus the rollout of its
+workloads: a StatefulSet whose `currentRevision` equals its `updateRevision`
+with every replica updated and ready, or a Deployment whose
+`observedGeneration` is current with every replica updated and available.
+Watch those workloads too, with `controller.WatchExternal` and a handler that
+maps them to their Instance, so a finished rollout reconciles it; and grant
+`list` and `watch` on them.
+
+The cache can also lag behind `Sync`. When a stale read could let an old
+"ready" through, read the operator object past it: the client does not cache
+unstructured objects, so get it as an `unstructured.Unstructured` and decode
+it (see `uncachedCluster` in provider-percona-server-mongodb).
+
+**Message.** While not converged, say what is being waited for, in the
+operator's words where it has any. A wait that names no operation is reported
+as `Stalled`, with reason `ProgressDeadlineExceeded`, after 30 minutes.
+
+**Available.** Whether clients can use the published endpoint right now,
+judged from the operator's signals: ready replicas of the serving tier, a
+primary or leader, a ready endpoint. Never from pods merely existing. A
+highly available cluster stays available through a rolling change. Report
+`Unavailable` while an in-place restore runs and while the engine is paused
+or stopped, and `AvailabilityUnknown` when the operator cannot tell; give
+both a reason and a message, such as `NoPrimary`, "Replica set rs1 has no
+primary". Leave it unset only when the operator says nothing at all: the
+runtime then assumes `True` once converged, `False` until the database has
+first been available, and `Unknown` otherwise.
+
+**Problems.** `WithProblem` reports something wrong with the engine that may
+still clear by itself: an operator error, a failed condition. Pick a
+CamelCase reason from what the operator gives you, a condition reason or a
+recognisable fragment of its message, and `EngineError` otherwise. The reason
+becomes the status word, so give each cause its own. Waits are not problems:
+a write conflict ("the object has been modified") or an operator retrying
+with back-off belongs in the message of a status that is not converged. The
+reasons `Converged`, `Reconciling`, `Stalled` and `NoProblems` are reserved;
+a problem that uses one, or a malformed reason, is reported as `EngineError`.
+
+**Terminal problems.** `WithTerminalProblem` only when nothing the provider
+does can fix it. The typical case is an operator object paused or stopped by
+a field `Sync` never sets: report `PausedOutsideOpenEverest`, with
+`Unavailable`. An operator error is rarely terminal: unless the operator
+says which generation it is about, the error showing right after a fix may
+be the one being fixed.
+
+**Operations.** `WithOperation` names a long operation by the condition that
+reports it:
+
+| Condition type | Report it while |
+|---|---|
+| `v1alpha1.ConditionRestoring` | a `Restore` of this Instance runs. `Restoring(message)` is the shorthand. |
+| `v1alpha1.ConditionUpgrading` | a new engine version rolls out |
+| `v1alpha1.ConditionStorageResizing` | volumes are being expanded |
+
+A named operation has no deadline, so name everything that can take long. An
+operation that carries out what someone asked for, such as a version change
+in the spec or a `Restore`, keeps the Instance from being `Ready`; one the
+engine started on its own on a converged spec leaves it `Ready` and only
+supplies the status word. Report an operation only when the operator lets you
+tell it reliably, and leave it out otherwise.
+
+**Connection details.** Report them as soon as clients can connect, not only
+once converged: whoever is told the database is available must find where to
+connect, and the details must follow a change that is still rolling out.
+`ReadyWithConnectionDetails` sets them on a converged status; on any other,
+set the `ConnectionDetails` field. Fill in the well-known fields (`Type`,
+`Host`, `Port`, `Username`, `Password`, `URI`) so the API server can serve
+them without knowing your engine; `AdditionalProperties` carries the rest.
+
+**Desired replicas.** Call `WithDesiredReplicas` for each component in
+`definition/provider.yaml` that has pods of its own: the number it will have
+once the current spec has converged, with your defaults, summed over the
+groups it spans, such as the replica sets of every shard. Compute it from the
+Instance with the same helpers `Sync` uses, not from the operator object,
+which may still describe the previous spec. Leave out sidecars.
+
+**Testing.** Keep the translation a pure function of what you read, such as
+`observe(db, statefulSets) controller.Status`, and cover each state you
+report with a table-driven test: converged or not, available or not, each
+problem reason and whether it is terminal, each operation, and the desired
+replicas.
+
+#### What the runtime does for you
+
+Don't report these again:
+
+- **Seeding.** While a new Instance is seeded from `spec.dataSource`, the
+  runtime reports `DataSourceReady=Unknown`, the `Restoring` operation with
+  reason `Seeding`, and `Available=False` with reason `LoadingData`, whatever
+  you report. A `Status` that calls `c.GetDataSourceStatus()` only to report
+  a restore can drop that branch.
+- **Pods.** The runtime counts the pods that carry the labels
+  `c.PodLabels(component)` returns into `status.components`. It reports a pod
+  that has waited more than a minute for a node (`PodsScheduled=False`,
+  `Unschedulable`) and one in a back-off (`PodsReady=False`,
+  `CrashLoopBackOff`, `ImagePullBackOff`, `CreateContainerConfigError`). Call
+  `PodLabels` in `Sync` for every component, put the labels on its pods,
+  usually through the operator's pod labels field, and grant `list` and
+  `watch` on pods. Without them the runtime reports nothing about pods.
+- **Errors.** When a read or a write fails, return the error from `Sync` or
+  `Status`; don't turn it into a problem. It is retried with backoff and, on
+  an Instance that had converged, changes nothing at first. Once the calls
+  have failed for a minute without a success, the runtime reports
+  `Synced=False` with reason `ReconcileError`. To be called again later
+  without an error, return `controller.WaitFor(reason)` from `Sync` or
+  `Cleanup`; the Instance reads as in progress with the reason as its message.
+- **Validation, references and deletion.** A rejected spec
+  (`ValidationFailed`), a missing or rejected object the Instance names
+  (`ReferencesResolved=False`) and a deletion in progress are the runtime's.
+- **Deadlines.** A problem that lasts 10 minutes, and a wait that names no
+  operation and lasts 30, are reported as `Stalled`. Change them with
+  `reconciler.WithProblemDeadline` and `reconciler.WithProgressDeadline`.
+  Their clocks are kept in memory: they start again when the provider
+  restarts, and they assume one replica of it is running.
+
+#### Migrating from the phase helpers
+
+`Status` used to choose a phase. The CRD now accepts only `Pending`,
+`Provisioned` and `Terminating`, so `Provisioning`, `Initializing`, `Ready`,
+`Updating`, `Failed`, `Restoring`, `Suspending`, `Suspended` and `Resuming`
+are gone, and so is `status.message`: read the `Ready` condition's message
+instead. The helpers that named a phase still compile but are deprecated:
+each now means "not converged yet" and drops whatever the phase said, so an
+`Updating` that was a volume resize no longer tells anyone a resize is
+running. Replace every call:
+
+| Before | After |
+|---|---|
+| `Pending(msg)`, `Provisioning(msg)`, `Initializing(msg)` | `Progressing(msg)`, with `WithUnavailable(reason, msg)` when the operator says nothing serves yet |
+| `Updating(msg)` for a rolling change | `Progressing(msg)`, with `WithAvailable(controller.Available)` when the operator says clients can still connect |
+| `Updating(msg)` for a version upgrade | `Progressing(msg).WithOperation(v1alpha1.ConditionUpgrading, "RollingOutImage", msg)` |
+| `Updating(msg)` for a PVC resize | `Progressing(msg).WithOperation(v1alpha1.ConditionStorageResizing, "ResizingVolumes", msg)` |
+| `Updating(msg)` or `Restoring(msg)` during a restore | `Restoring(msg).WithUnavailable("Restoring", msg)` while a `Restore` of the Instance runs; nothing while it is seeded from `spec.dataSource` |
+| `Suspending(msg)`, `Resuming(msg)` | `Progressing(msg)` |
+| `Suspended()` | `WithUnavailable("Paused", …)`, plus `WithTerminalProblem("PausedOutsideOpenEverest", …)` when it was stopped outside OpenEverest |
+| `Failed(msg)` | `WithProblem(reason, msg)` with a reason that names the cause, `WithTerminalProblem` only when nothing but a person can fix it, or a returned error when the call itself failed |
+| `ReadyWithConnectionDetails(d)` only once ready | The same, and the `ConnectionDetails` field as soon as clients can connect |
+
+Then:
+
+- Add `WithAvailable` or `WithUnavailable` wherever the operator tells you,
+  and `WithDesiredReplicas` for every component with pods.
+- Label the pods with `c.PodLabels` in `Sync`, and grant `list` and `watch`
+  on pods.
+- In chainsaw tests, assert `phase: Provisioned` with
+  `(conditions[?type == 'Ready'].status | [0]): "True"` instead of
+  `phase: Ready`, wait on conditions instead of removed phases, also in
+  scripts (`kubectl wait --for=condition=Ready`), and drop `status.message`
+  assertions.
+- `golangci-lint` flags any remaining deprecated helper (`staticcheck`
+  SA1019).
 
 ### Cleanup
 
@@ -2247,8 +2492,9 @@ The scaffold includes base RBAC for the provider runtime:
 - Leases (leader election)
 - Events (recording)
 - Secrets — the runtime writes the connection details returned by `Status()`
-  into the Instance's connection Secret. Without it every reconcile that would
-  report `Ready` fails, and the Instance freezes on its last reported phase.
+  into the Instance's connection Secret. Without it every reconcile that
+  reports connection details fails: the Instance never becomes `Ready`, and
+  after a minute it reports `ReconcileError`.
 
 ### Adding Provider-Specific RBAC
 
@@ -2272,7 +2518,9 @@ Add markers for your operator's resources:
 - ConfigMaps (operator config)
 - Services (database endpoints)
 - PersistentVolumeClaims (storage)
-- Pods (monitoring, status)
+- Pods (`get`, `list`, `watch`) — the runtime counts the pods labelled with
+  `c.PodLabels` and reports their crash loops and scheduling failures; see
+  [What the runtime does for you](#what-the-runtime-does-for-you)
 
 After adding markers, run `make generate` to regenerate RBAC manifests.
 
@@ -2406,8 +2654,8 @@ test skeleton under `test/integration/` plus CI wiring:
 
 - `test/integration/core/` — a suite skeleton that verifies the provider
   deployment and contains commented-out lifecycle steps (create Instance →
-  assert operator CR → simulate readiness → assert `phase: Ready` → delete)
-  to enable as you implement the provider.
+  assert operator CR → simulate readiness → assert `phase: Provisioned` and
+  the `Ready` condition → delete) to enable as you implement the provider.
 - `.github/workflows/ci.yaml` — runs lint, build, unit tests, generated-file
   verification, Helm lint, and each integration suite on every PR.
 - `.github/workflows/integration-test.yaml` — a reusable workflow that
@@ -2900,8 +3148,9 @@ Use this checklist to track your progress:
 - [ ] **Provider interface** implemented in `internal/provider/provider.go`:
   - [ ] `Validate()` — validates Instance spec
   - [ ] `Sync()` — creates/updates operator resources
-  - [ ] `Status()` — translates operator status
+  - [ ] `Status()` — reports facts: converged, available, problems, operations, connection details, desired replicas
   - [ ] `Cleanup()` — handles deletion
+- [ ] **Pod labels** from `c.PodLabels` on every component's pods, with `list` and `watch` on pods
 - [ ] **Operator scheme** registered in `SchemeFuncs`
 - [ ] **Watch configs** set for operator resources
 - [ ] **RBAC markers** added for all operator resources

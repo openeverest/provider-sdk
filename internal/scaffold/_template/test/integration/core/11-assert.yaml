@@ -1,9 +1,12 @@
 # Expected outcome of the instance-ready step: once the operator-native CR
-# reports ready, the provider's Status() must surface phase Running on the
-# Instance.
+# reports ready for its latest generation, the provider's Status() reports
+# the cluster converged and available, and the runtime marks the Instance
+# Provisioned and Ready.
 apiVersion: core.openeverest.io/v1alpha1
 kind: Instance
 metadata:
   name: test-instance
 status:
-  phase: Running
+  phase: Provisioned
+  (conditions[?type == 'Ready'].status | [0]): "True"
+  (conditions[?type == 'Available'].status | [0]): "True"
