@@ -90,9 +90,9 @@ func (p *Provider) Status(c *controller.Context) (controller.Status, error) {
 	//           },
 	//       ), nil
 	//   }
-	//   return controller.Provisioning("waiting for database to be ready"), nil
+	//   return controller.Progressing("waiting for database to be ready"), nil
 
-	return controller.Provisioning("initializing"), nil
+	return controller.Progressing("initializing"), nil
 }
 
 // Cleanup handles deletion of provider-managed resources.

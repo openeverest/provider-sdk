@@ -1684,7 +1684,7 @@ The runtime writes `Instance.status` for you, with server-side apply under the f
 func (p *Provider) Status(c *controller.Context) (controller.Status, error) {
     operator := &operatorv1.MyDatabase{}
     if err := c.Get(operator, c.Name()); err != nil {
-        return controller.Provisioning("Waiting for operator resource"), nil
+        return controller.Progressing("Waiting for operator resource"), nil
     }
 
     switch operator.Status.State {
@@ -1697,7 +1697,7 @@ func (p *Provider) Status(c *controller.Context) (controller.Status, error) {
     case "error":
         return controller.Failed(operator.Status.Message), nil
     default:
-        return controller.Provisioning("Cluster is being created"), nil
+        return controller.Progressing("Cluster is being created"), nil
     }
 }
 ```
@@ -2353,15 +2353,17 @@ options:
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `INSTALL_OPENEVEREST` | `true` | Install the released OpenEverest core. |
-| `OPENEVEREST_VERSION` | `>=2.0.0-0 <3.0.0` | Pin a specific core chart version. |
+| `OPENEVEREST_VERSION` | `2.0.0-alpha.1` | Core chart version to install. |
 | `PROVIDER_NAMESPACE` | `default` | Namespace for the provider + DB operator. |
 | `ENABLE_SEAWEEDFS` | `false` | Deploy SeaweedFS + a `BackupStorage` CR for backups. |
 
-> **Note:** While OpenEverest v2 is in pre-release, the Helm repository only
-> publishes pre-release tags (e.g. `2.0.0-dev.4`), which Helm's default "latest"
-> resolution skips — it would install v1, whose CRDs a v2 provider cannot use.
-> `OPENEVEREST_VERSION` therefore defaults to a constraint rather than being
-> empty. Override it to pin an exact version.
+> **Note:** `OPENEVEREST_VERSION` is an exact version: the core release that
+> `go.mod` requires. While OpenEverest v2 is in pre-release, the Helm repository
+> only publishes pre-release tags, which Helm's default "latest" resolution
+> skips — it would install v1, whose CRDs a v2 provider cannot use. A range such
+> as `>=2.0.0-0 <3.0.0` does not help either: SemVer sorts pre-release labels
+> alphabetically, so `2.0.0-dev.4` ranks above `2.0.0-alpha.1`. Move it
+> together with the core version in `go.mod`.
 
 **Developing against a core you build from source:** run the core's own Tilt
 instance, then start the provider Tilt instance on a different port with

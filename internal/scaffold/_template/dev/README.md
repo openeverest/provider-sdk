@@ -69,16 +69,18 @@ All settings live in `dev/.env` (see `dev/.env.example`). Common options:
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `INSTALL_OPENEVEREST` | `true` | Install the released OpenEverest core. |
-| `OPENEVEREST_VERSION` | `>=2.0.0-0 <3.0.0` | Pin a specific core chart version. |
+| `OPENEVEREST_VERSION` | `2.0.0-alpha.1` | Core chart version to install. |
 | `PROVIDER_NAMESPACE` | `default` | Namespace for the provider + operator. |
 | `ENABLE_SEAWEEDFS` | `false` | Deploy SeaweedFS + a `BackupStorage` CR for backups. |
 | `K8S_CONTEXT` | _(unset)_ | Restrict Tilt to a specific Kubernetes context. |
 | `DOCKER_REGISTRY_URL` | _(unset)_ | Push images here instead of the cluster's local registry. |
 
-> **Note:** v2 currently ships only as pre-releases (e.g. `2.0.0-dev.4`), which
-> Helm's default "latest" resolution skips — it would install v1, whose CRDs a v2
-> provider cannot use. `OPENEVEREST_VERSION` therefore defaults to a constraint
-> rather than being empty. Override it to pin an exact version.
+> **Note:** `OPENEVEREST_VERSION` is an exact version: the core release that
+> `go.mod` requires. v2 ships as pre-releases, which Helm's default "latest"
+> resolution skips — it would install v1, whose CRDs a v2 provider cannot use.
+> A range such as `>=2.0.0-0 <3.0.0` does not help either: SemVer sorts
+> pre-release labels alphabetically, so `2.0.0-dev.4` ranks above
+> `2.0.0-alpha.1`. Move it together with the core version in `go.mod`.
 
 ## Developing the core and the provider together
 
