@@ -35,6 +35,7 @@ requires the previous one.
 - [Define parameter types](#define-parameter-types)
 - [Configure the UI schema](#configure-the-ui-schema)
 - [Declare monitoring support](#declare-monitoring-support)
+- [Support suspending instances](#support-suspending-instances)
 
 **Implement it**
 - [Implement the provider interface](#implement-the-provider-interface)
@@ -160,7 +161,7 @@ while it is running a bad spec is rejected before it is stored, whoever writes i
 
 ```
 definition/                          # ← YOU EDIT THESE
-  provider.yaml                      # Provider name, component→type mapping, type kinds
+  provider.yaml                      # Provider name, component→type mapping, type kinds, suspend support
   versions.yaml                      # Component type version/image catalog
   monitoring.yaml                    # Monitoring contract (optional)
   types.go                           # Shared Go types (e.g. TopologyType)
@@ -1516,6 +1517,55 @@ componentTypes:
     connection: Supported
     podMetadata: Supported
 ```
+
+---
+
+## Support suspending instances
+
+Users stop an Instance's compute, keeping its volumes and data, with
+`spec.suspend.suspended: true`, and resume it by setting it back to `false`.
+Your provider does this through the operator's own mechanism, such as
+`spec.pause` on Percona operators or the hibernation annotation on
+CloudNativePG.
+
+Declare the support in `definition/provider.yaml`. `provider-sdk generate`
+publishes it as `spec.suspend` on the `Provider`. Without it, the runtime
+rejects Instances that ask to be suspended.
+
+```yaml
+# definition/provider.yaml
+name: my-database
+suspend: {}
+components:
+  engine:
+    type: mongod
+```
+
+Then implement it:
+
+- **Sync** renders the operator's pause or hibernation switch from
+  `c.Instance().SuspendRequested()`. Keep rendering everything else as usual.
+  Deleting a suspended Instance needs nothing special: delete the operator CR
+  in `Cleanup`, as for a running Instance.
+- **Status** returns `controller.Suspended()` once the operator reports that
+  the engine is stopped. You don't have to report the transitions. While a
+  suspend is requested, the runtime turns any other phase except `Failed` into
+  `Suspending`. After a resume, it turns `Suspending`, `Suspended`, and the
+  start-up phases that follow a suspension into `Resuming` until you report
+  `Ready`.
+
+The runtime enforces the rest:
+
+- It rejects any other spec change, except `deletionPolicy`, while the
+  Instance is suspended, and in the update that suspends or resumes it.
+- It disables backup schedules in the Instance your `Sync` receives, so the
+  operator takes no scheduled backups. Storages and PITR settings are passed
+  unchanged.
+- It holds every maintenance action above `NonDisruptive`, even if approved,
+  with the `MaintenancePending` reason `Suspended`.
+- It holds Backups and Restores that have not started as `Pending`, without
+  calling `SyncBackup` or `SyncRestore`, until the Instance resumes. Backups of
+  a schedule are still synced, so you adopt the operator backup they mirror.
 
 ---
 
