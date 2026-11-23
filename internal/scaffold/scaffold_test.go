@@ -22,7 +22,9 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/mod/modfile"
 
+	"github.com/openeverest/provider-sdk/internal/compat"
 	"github.com/openeverest/provider-sdk/internal/generate"
 )
 
@@ -257,6 +259,45 @@ func TestScaffoldMonitoringExampleIsValid(t *testing.T) {
 	require.NotNil(t, assembled.Monitoring)
 	assert.Contains(t, assembled.Monitoring["componentTypes"], "mydb")
 	assert.Equal(t, map[string]any{"kind": "mydb"}, assembled.ComponentTypes["mydb"])
+}
+
+// TestScaffoldContractHelperIsGenerated keeps the helper a new project
+// starts with identical to the one generate writes, so a project renders
+// before its first make generate and generate leaves the file unchanged.
+func TestScaffoldContractHelperIsGenerated(t *testing.T) {
+	t.Parallel()
+
+	scaffolded, err := templateFS.ReadFile(templateRoot + "/charts/__PROJECT_NAME__/templates/" + generate.ContractHelperFile)
+	require.NoError(t, err)
+	assert.Equal(t, generate.ContractHelper, string(scaffolded))
+}
+
+// TestScaffoldRequiresTheCoreOfTheSDK keeps the core a new project requires
+// identical to the one provider-sdk requires: provider-sdk built from its
+// own module, as `go install` does, then links the core the project builds
+// against, so it stamps the project's chart.
+func TestScaffoldRequiresTheCoreOfTheSDK(t *testing.T) {
+	t.Parallel()
+
+	sdk, err := os.ReadFile(filepath.Join("..", "..", "go.mod"))
+	require.NoError(t, err)
+	tmpl, err := templateFS.ReadFile(templateRoot + "/go.mod.tmpl")
+	require.NoError(t, err)
+	rendered, err := renderTemplate("go.mod.tmpl", string(tmpl), &Config{ModulePath: "github.com/example/provider-test-db"})
+	require.NoError(t, err)
+
+	coreOf := func(name string, data []byte) string {
+		f, err := modfile.ParseLax(name, data, nil)
+		require.NoError(t, err)
+		for _, r := range f.Require {
+			if r.Mod.Path == compat.CoreModule {
+				return r.Mod.Version
+			}
+		}
+		t.Fatalf("%s does not require %s", name, compat.CoreModule)
+		return ""
+	}
+	assert.Equal(t, coreOf("go.mod", sdk), coreOf("go.mod.tmpl", []byte(rendered)))
 }
 
 func TestScaffoldOutputDirExists(t *testing.T) {

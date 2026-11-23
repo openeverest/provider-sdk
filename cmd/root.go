@@ -32,7 +32,8 @@ Commands:
   init          Scaffold a new provider project from the built-in template
   add component Add a new component to an existing provider project
   add topology  Add a new topology to an existing provider project
-  generate      Generate Provider CR spec from definition/ files`,
+  generate      Generate Provider CR spec from definition/ files
+  verify        Check the chart is stamped with the OpenEverest it is built against`,
 }
 
 // Execute executes the root command.

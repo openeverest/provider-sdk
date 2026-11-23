@@ -30,6 +30,7 @@ import (
 
 	backupv1alpha1 "github.com/openeverest/openeverest/v2/api/backup/v1alpha1"
 	"github.com/openeverest/openeverest/v2/backupstorageclasses/s3"
+	"github.com/openeverest/openeverest/v2/contract"
 	_ "github.com/openeverest/openeverest/v2/provider-runtime/controller"
 )
 
@@ -201,7 +202,7 @@ backupStorageClasses:
 
 			var class map[string]any
 			require.NoError(t, yaml.Unmarshal([]byte(tt.class), &class))
-			got, err := buildBackupClassManifest(BackupClassAssembled{Name: "pbm", Class: class}, nil, "percona-server-mongodb", "")
+			got, err := buildBackupClassManifest(BackupClassAssembled{Name: "pbm", Class: class}, nil, "percona-server-mongodb", stamps{})
 			if tt.wantErr != "" {
 				require.EqualError(t, err, tt.wantErr)
 				return
@@ -234,20 +235,45 @@ backupStorageClasses:
 	}
 }
 
-func TestBuildBackupClassManifestStampsTheRelease(t *testing.T) {
+func TestBuildBackupClassManifestStamps(t *testing.T) {
 	t.Parallel()
 
+	tests := map[string]struct {
+		stamp stamps
+		want  map[string]any
+	}{
+		"release and contract version": {
+			stamp: stamps{release: "1.2.0", contractVersion: "2.0.0"},
+			want: map[string]any{
+				"name": "pbm",
+				"annotations": map[string]any{
+					backupv1alpha1.ProviderVersionAnnotation: "1.2.0",
+					contract.VersionAnnotation:               "2.0.0",
+				},
+			},
+		},
+		"a chart without appVersion stamps the contract version only": {
+			stamp: stamps{contractVersion: "2.0.0"},
+			want: map[string]any{
+				"name":        "pbm",
+				"annotations": map[string]any{contract.VersionAnnotation: "2.0.0"},
+			},
+		},
+		"no stamps": {
+			want: map[string]any{"name": "pbm"},
+		},
+	}
 	class := map[string]any{"backupStorageClasses": []any{map[string]any{"name": "s3", "authModes": []any{"AccessKey"}}}}
-	got, err := buildBackupClassManifest(BackupClassAssembled{Name: "pbm", Class: class}, nil, "mongo", "1.2.0")
-	require.NoError(t, err)
-	assert.Equal(t, map[string]any{
-		"name":        "pbm",
-		"annotations": map[string]any{backupv1alpha1.ProviderVersionAnnotation: "1.2.0"},
-	}, got["metadata"])
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
 
-	got, err = buildBackupClassManifest(BackupClassAssembled{Name: "pbm", Class: class}, nil, "mongo", "")
-	require.NoError(t, err)
-	assert.Equal(t, map[string]any{"name": "pbm"}, got["metadata"], "a chart without appVersion stamps nothing")
+			got, err := buildBackupClassManifest(BackupClassAssembled{Name: "pbm", Class: class}, nil, "mongo", tt.stamp)
+
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got["metadata"])
+		})
+	}
 }
 
 func TestNarrowSchemaRequiredAndType(t *testing.T) {
@@ -311,7 +337,7 @@ backupStorageClasses:
     authModes: [AccessKey]
     tls: {customCA: Supported}
 `), &class))
-	manifest, err := buildBackupClassManifest(BackupClassAssembled{Name: "pbm", Class: class}, nil, "mongo", "1.2.0")
+	manifest, err := buildBackupClassManifest(BackupClassAssembled{Name: "pbm", Class: class}, nil, "mongo", stamps{release: "1.2.0", contractVersion: "2.0.0"})
 	require.NoError(t, err)
 	doc, err := yaml.Marshal(manifest)
 	require.NoError(t, err)

@@ -62,8 +62,19 @@ jobs:
       - name: Install Helm
         uses: azure/setup-helm@dda3372f752e03dde6b3237bc9431cdc2f7a02a2 # v5.0.0
 
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+        with:
+          go-version-file: go.mod
+          cache: true
+
       - name: Stamp chart version and image
         run: make -C "$CHART_DIR" release VERSION="$VERSION" IMAGE_PREFIX="$REGISTRY/${{ github.repository_owner }}"
+
+      # A release tells users the oldest OpenEverest it works with, so it must
+      # be built against an OpenEverest they can install: this fails on a chart
+      # stamped for an unreleased OpenEverest or a go.mod that pins one.
+      - name: Verify the chart is stamped for a released OpenEverest
+        run: go tool provider-sdk verify --release --chart-dir "$CHART_DIR"
 
       - name: Build chart dependencies
         run: helm dependency build "$CHART_DIR"

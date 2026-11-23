@@ -195,11 +195,14 @@ internal/                            # ← YOU IMPLEMENT THESE
     spec.go                          # Component name/type constants
 
 charts/<provider-name>/              # ← GENERATED (mostly)
+  Chart.yaml                         # `generate` writes the openeverest.io/contract-version annotation
   Makefile                           # Stamps chart version/image + resolves deps at release time
   generated/
     provider-spec.yaml               # Generated from definition/ by `provider-sdk generate`
     rbac-rules.yaml                  # Generated from rbac.go by `make manifests`
+    backupclasses/                   # Generated BackupClass manifests (optional)
   templates/                         # Helm chart templates (edit if needed)
+    _openeverest_contract.tpl        # Generated helper rendering the OpenEverest stamp
 
 .github/workflows/                   # ← CI/CD (standardized)
   ci.yaml                            # Lint, unit tests and integration tests on PRs
@@ -2293,7 +2296,7 @@ After adding markers, run `make generate` to regenerate RBAC manifests.
 | `make helm-template`    | Render Helm templates locally (dry-run)                    |
 | `make test-unit`        | Run unit tests                                             |
 | `make test-integration` | Run chainsaw integration tests                             |
-| `make verify`           | Check generated files are up-to-date (CI)                  |
+| `make verify`           | Check generated files are up-to-date and the chart is stamped (CI) |
 | `make lint`             | Run golangci-lint                                          |
 | `make dev-up`           | Create a k3d cluster and start the Tilt dev environment    |
 | `make dev-down`         | Stop Tilt (keeps the cluster)                              |
@@ -2309,7 +2312,9 @@ make generate
 This runs:
 1. `controller-gen` → `config/rbac/role.yaml` (from kubebuilder markers)
 2. `helm-sync-rbac` → `charts/.../generated/rbac-rules.yaml`
-3. `go generate` → `charts/.../generated/provider-spec.yaml` (from definition/)
+3. `go generate` → `charts/.../generated/provider-spec.yaml` (from definition/), and
+   the OpenEverest stamp in `Chart.yaml` (see
+   [Compatibility with OpenEverest](#compatibility-with-openeverest))
 
 ### Rapid Iteration with Tilt (recommended)
 
@@ -2433,9 +2438,13 @@ new suites). For a complete real-world example, see the
 ### CI Verification
 
 ```bash
-# Verify generated files are up-to-date
+# Verify generated files are up-to-date and the chart is stamped
 make verify
 ```
+
+`make verify` regenerates everything, fails if that changed a committed file,
+then runs `go tool provider-sdk verify` (see
+[Compatibility with OpenEverest](#compatibility-with-openeverest)).
 
 ### Deployment with Helm
 
@@ -2515,6 +2524,51 @@ manual workflow dispatch required.
 > while the table only lists `0.1.x`). Add the row — with the OpenEverest / operator /
 > Kubernetes versions you've actually validated — in the PR that bumps the dependency,
 > not at release time.
+
+### Compatibility with OpenEverest
+
+A provider is built against one OpenEverest: the core version its `go.mod`
+requires. OpenEverest publishes the range of versions it serves, and refuses
+or flags a provider built for a newer OpenEverest than it is, or for one older
+than it still serves. You never write that version yourself: `make generate`
+stamps it, so it cannot drift from the code the provider is built against.
+
+- `Chart.yaml` gets the annotation `openeverest.io/contract-version`, with the
+  version of the OpenEverest the provider is built against.
+- The generated BackupClasses carry the same annotation.
+- `templates/_openeverest_contract.tpl` defines the helper
+  `openeverest.contract.annotations`, which renders the annotation from
+  `Chart.yaml`. `templates/provider.yaml` includes it, and so must any other
+  object OpenEverest interprets that you add to the chart by hand
+  (`BackupStorageClass`, `MonitoringClass`):
+
+  ```yaml
+  metadata:
+    annotations:
+      {{- include "openeverest.contract.annotations" . | nindent 4 }}
+  ```
+
+The stamp is the version of the core that `provider-sdk` links. Run as
+`go tool provider-sdk`, which `go generate` and the Makefile do, it builds
+with your module, so that is the core your `go.mod` requires. A separately
+installed `provider-sdk` may link another core; `generate` and `verify` then
+refuse to run rather than stamp the wrong value. When your `go.mod` replaces
+the core with a local directory, they warn and stamp the version of that tree.
+
+After generating, `provider-sdk` prints the oldest OpenEverest the build works
+with. Built against an unreleased OpenEverest (a `go.mod` that requires a
+commit of core rather than a release), the stamp is a development value such as
+`2.0.0-alpha.1.dev`, and it says that the provider cannot be published until
+that OpenEverest is released.
+
+`go tool provider-sdk verify` renders the chart with its default values,
+without a cluster, and checks that `Chart.yaml` and every `Provider`,
+`BackupClass`, `BackupStorageClass` and `MonitoringClass` it renders carry the
+stamp. `make verify` runs it in CI. The release workflow runs
+`go tool provider-sdk verify --release` before packaging the chart, which also
+fails on a development value and on a `go.mod` that requires a pseudo-version
+of OpenEverest or replaces it: a release tells users the oldest OpenEverest it
+works with, so it must be built against an OpenEverest they can install.
 
 ### Images and Registry
 
@@ -2880,6 +2934,8 @@ provider-sdk generate
 ```
 
 Usually invoked via `go generate ./...` (see `gen.go`) or `make generate`.
+It also stamps the chart with the OpenEverest the provider is built against
+(see [Compatibility with OpenEverest](#compatibility-with-openeverest)).
 
 The generator also validates version bundles at build time — it ensures every
 component name and version referenced in a bundle exists in `provider.yaml` and
@@ -2887,6 +2943,18 @@ the `componentTypes` catalog. An invalid bundle produces a fatal error rather
 than silently emitting a broken Provider CR. It validates
 `definition/monitoring.yaml` the same way, when present (see
 [Declare monitoring support](#declare-monitoring-support)).
+
+### `provider-sdk verify`
+
+Check that the chart is stamped with the OpenEverest the provider is built
+against (see [Compatibility with OpenEverest](#compatibility-with-openeverest)).
+
+```bash
+go tool provider-sdk verify [--chart-dir charts/<provider-name>] [--release]
+```
+
+`make verify` runs it; the release workflow runs it with `--release`, which
+also fails when the provider is built against an unreleased OpenEverest.
 
 ---
 

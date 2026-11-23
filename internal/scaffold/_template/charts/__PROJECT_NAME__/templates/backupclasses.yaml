@@ -1,0 +1,9 @@
+{{/*
+Renders every BackupClass manifest produced by `provider-sdk generate` from
+definition/backupclasses/, stamped with the provider release and the
+OpenEverest it is built against. Renders nothing when there is none.
+*/}}
+{{- range $path, $_ := .Files.Glob "generated/backupclasses/*.yaml" }}
+---
+{{ $.Files.Get $path }}
+{{- end }}
