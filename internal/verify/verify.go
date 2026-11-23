@@ -17,7 +17,10 @@
 package verify
 
 import (
+	"errors"
 	"fmt"
+	"io/fs"
+	"os"
 	"path/filepath"
 
 	"helm.sh/helm/v3/pkg/chartutil"
@@ -108,6 +111,24 @@ func Run(opts Options) (Result, error) {
 	}
 	if providers == 0 {
 		res.Problems = append(res.Problems, "the chart renders no Provider with its default values")
+	}
+
+	// The templates generate writes must be those of this provider-sdk, and
+	// the check must read the CRDs of what the chart applies.
+	for _, generated := range []struct{ file, want string }{
+		{generate.ContractHelperFile, generate.ContractHelper},
+		{generate.CompatCheckFile, generate.CompatCheck(generate.CheckedCRDs(objects))},
+	} {
+		file := generated.file
+		got, err := os.ReadFile(filepath.Join(opts.ChartDir, "templates", file))
+		switch {
+		case errors.Is(err, fs.ErrNotExist):
+			res.Problems = append(res.Problems, fmt.Sprintf("templates/%s is missing; run `make generate`", file))
+		case err != nil:
+			return res, fmt.Errorf("reading templates/%s: %w", file, err)
+		case string(got) != generated.want:
+			res.Problems = append(res.Problems, fmt.Sprintf("templates/%s is out of date; run `make generate`", file))
+		}
 	}
 
 	if opts.Release {

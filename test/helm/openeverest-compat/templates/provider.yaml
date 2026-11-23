@@ -1,0 +1,7 @@
+apiVersion: core.openeverest.io/v1alpha1
+kind: Provider
+metadata:
+  name: {{ .Values.provider.name }}
+  annotations:
+    {{- include "openeverest.contract.annotations" . | nindent 4 }}
+spec: {}

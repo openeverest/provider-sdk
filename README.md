@@ -58,8 +58,10 @@ with the provider's module and thus the OpenEverest core it requires.
 ## Working on the SDK itself
 
 ```bash
-make build   # build to ./bin/provider-sdk
-make test    # run unit tests
+make build      # build to ./bin/provider-sdk
+make test       # run unit tests
+make gen        # regenerate the committed copies of the chart templates generate writes
+make test-helm  # run their helm-unittest suites (installs the plugin into ./bin)
 ```
 
 The scaffolding engine lives in `internal/scaffold/`, with the project template it emits under

@@ -1,0 +1,14 @@
+{{- /*
+Test-only: the check for a chart stamped .Values.stamp, for
+tests/check_test.yaml. Renders the ConfigMap "passed" when it passes.
+*/ -}}
+{{- include "openeverest.contract.check" (dict
+  "root" .
+  "stamp" .Values.stamp
+  "crds" (list "providers.core.openeverest.io" "backupclasses.backup.openeverest.io")
+  "object" (dict "apiVersion" "core.openeverest.io/v1alpha1" "kind" "Provider" "crd" "providers.core.openeverest.io" "name" .Values.provider.name)
+) -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: passed

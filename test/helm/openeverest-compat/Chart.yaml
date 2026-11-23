@@ -1,0 +1,11 @@
+apiVersion: v2
+name: provider-compat-test
+description: >-
+  Fixture for the helm-unittest suites of the templates provider-sdk generate
+  writes into provider charts: _openeverest_contract.tpl and
+  openeverest-compat-check.yaml. Run `make test-helm`.
+type: application
+version: 1.2.3
+appVersion: "1.2.3"
+annotations:
+  openeverest.io/contract-version: "2.1.0"

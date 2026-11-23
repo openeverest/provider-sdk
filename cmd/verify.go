@@ -53,7 +53,9 @@ OpenEverest this provider is built against, the core its go.mod requires.
 
 provider-sdk generate writes the stamp into Chart.yaml and the generated
 BackupClasses; chart templates render it on other objects with
-{{ include "openeverest.contract.annotations" . }}.
+{{ include "openeverest.contract.annotations" . }}. verify also checks that
+the templates generate writes, _openeverest_contract.tpl and
+openeverest-compat-check.yaml, are those of this provider-sdk and the chart.
 
 With --release, also fail when the stamp is a development contract version
 (OpenEverest's contract changed since its last release) or when go.mod replaces

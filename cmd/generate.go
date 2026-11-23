@@ -73,7 +73,11 @@ templates/_openeverest_contract.tpl that renders it on the Provider and the
 other objects OpenEverest interprets, with the annotations set in the chart
 value openeverest.annotations. The stamp is that of the core this binary
 links, so generate refuses to run when it is not the core the module
-requires: run it as ` + "`go tool provider-sdk`" + `.`,
+requires: run it as ` + "`go tool provider-sdk`" + `.
+
+Last, it writes templates/openeverest-compat-check.yaml, which fails the
+chart's render on an OpenEverest that does not serve the stamp, reading the
+CRDs of the objects the chart applies with its default values.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if _, err := checkLinkedCore(); err != nil {
 			return err

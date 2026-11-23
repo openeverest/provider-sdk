@@ -241,6 +241,12 @@ func Run(opts Options) error {
 		return err
 	}
 
+	// 8. Fail the chart's render on an OpenEverest that does not serve the
+	//    stamp, reading the CRDs of the objects the chart applies.
+	if err := writeCompatCheck(opts.ChartDir); err != nil {
+		return err
+	}
+
 	return nil
 }
 

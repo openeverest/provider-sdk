@@ -44,3 +44,195 @@ to OpenEverest.
 {{- end -}}
 {{- join "\n" $annotations -}}
 {{- end -}}
+
+{{/*
+openeverest.contract.check fails the render when the OpenEverest in the
+cluster does not serve the contract version this chart is stamped with. It
+runs before anything is applied, so a refused install leaves no failed release
+behind and a retry just works. templates/openeverest-compat-check.yaml, which
+provider-sdk generate writes, calls it with a dict of:
+
+  root    the root context;
+  stamp   the chart's stamp, its openeverest.io/contract-version annotation;
+  crds    the core CRDs of the objects the chart applies, whose annotations
+          publish the window of contract versions the core serves;
+  object  the chart's root object (apiVersion, kind, crd, name, namespace).
+
+It compares like OpenEverest does: by SemVer 2.0.0 precedence, with no version
+ranges, against the intersection of the windows of the CRDs it finds. It
+passes when:
+
+  - it finds none of the CRDs: nothing to read, as with helm template, a
+    client-side dry run or Argo CD, which other checks cover, or no
+    OpenEverest installed;
+  - the stamp or the window is missing or not a SemVer 2.0.0 version, or the
+    CRDs disagree on the window, as during an OpenEverest upgrade;
+  - the stamp is in the window;
+  - compatibility.acknowledge.coreVersion is the version of the OpenEverest in
+    the cluster, the openeverest.io/version label of its CRDs: the user chose
+    to install anyway on that release;
+  - the cluster already has the root object with the same stamp: a re-render
+    of the installed build, e.g. to change values, is never blocked.
+
+CRDs that publish no window belong to an OpenEverest that predates published
+windows, which is older than every stamp.
+*/}}
+{{- define "openeverest.contract.check" -}}
+{{- $root := .root -}}
+{{- $stamp := .stamp | default "" | toString -}}
+{{- $w := include "openeverest.contract.window" .crds | fromJson -}}
+{{- $verdict := "" -}}
+{{- if not $w.found -}}
+{{- else if not $w.windows -}}
+  {{- if include "openeverest.contract.valid" $stamp -}}
+    {{- $verdict = "CoreTooOld" -}}
+  {{- end -}}
+{{- else if lt (int $w.windows) (int $w.found) -}}
+  {{- $verdict = "CoreVersionSkew" -}}
+{{- else -}}
+  {{- $verdict = include "openeverest.contract.verdict" (dict "ext" $stamp "min" $w.min "cur" $w.cur) -}}
+{{- end -}}
+{{- if has $verdict (list "CoreTooOld" "ExtensionTooOld") -}}
+  {{- $ack := "" -}}
+  {{- if kindIs "map" $root.Values.compatibility -}}
+    {{- $ack = dig "acknowledge" "coreVersion" "" $root.Values.compatibility | toString -}}
+  {{- end -}}
+  {{- $installed := "" -}}
+  {{- $o := .object | default dict -}}
+  {{- if and $o.name (has (printf "%s %s" $o.crd (base $o.apiVersion)) $w.served) -}}
+    {{- $obj := lookup $o.apiVersion $o.kind ($o.namespace | default "") $o.name -}}
+    {{- $installed = dig "metadata" "annotations" "openeverest.io/contract-version" "" $obj | toString -}}
+  {{- end -}}
+  {{- if and $ack (eq $ack $w.coreVersion) -}}
+  {{- else if and $installed (eq $installed $stamp) -}}
+  {{- else -}}
+    {{- fail (include "openeverest.contract.message" (dict "root" $root "verdict" $verdict "stamp" $stamp "window" $w)) -}}
+  {{- end -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+openeverest.contract.window looks up the CRDs named in the list it is given and
+returns, as JSON: found, how many exist; windows, how many of those publish a
+window; min and cur, the intersection of their windows (the highest min and
+the lowest current, so it never claims more than every CRD serves; an invalid
+value carries over); coreVersion, the openeverest.io/version label of the
+first that has one; served, "<crd> <version>" for every version they serve.
+*/}}
+{{- define "openeverest.contract.window" -}}
+{{- $found := 0 -}}
+{{- $windows := 0 -}}
+{{- $min := "" -}}
+{{- $cur := "" -}}
+{{- $core := "" -}}
+{{- $served := list -}}
+{{- range . -}}
+  {{- $name := . -}}
+  {{- $crd := lookup "apiextensions.k8s.io/v1" "CustomResourceDefinition" "" $name -}}
+  {{- if $crd -}}
+    {{- $found = add1 $found -}}
+    {{- range dig "spec" "versions" list $crd -}}
+      {{- if .served -}}
+        {{- $served = append $served (printf "%s %s" $name .name) -}}
+      {{- end -}}
+    {{- end -}}
+    {{- if not $core -}}
+      {{- $core = dig "metadata" "labels" "openeverest.io/version" "" $crd | toString -}}
+    {{- end -}}
+    {{- $a := dig "metadata" "annotations" dict $crd -}}
+    {{- if or (hasKey $a "openeverest.io/min-contract-version") (hasKey $a "openeverest.io/contract-version") -}}
+      {{- $wmin := get $a "openeverest.io/min-contract-version" | default "" | toString -}}
+      {{- $wcur := get $a "openeverest.io/contract-version" | default "" | toString -}}
+      {{- if not $windows -}}
+        {{- $min = $wmin -}}
+        {{- $cur = $wcur -}}
+      {{- else -}}
+        {{- if and (include "openeverest.contract.valid" $min) (or (not (include "openeverest.contract.valid" $wmin)) (eq ((semver $wmin).Compare (semver $min)) 1)) -}}
+          {{- $min = $wmin -}}
+        {{- end -}}
+        {{- if and (include "openeverest.contract.valid" $cur) (or (not (include "openeverest.contract.valid" $wcur)) (eq ((semver $wcur).Compare (semver $cur)) -1)) -}}
+          {{- $cur = $wcur -}}
+        {{- end -}}
+      {{- end -}}
+      {{- $windows = add1 $windows -}}
+    {{- end -}}
+  {{- end -}}
+{{- end -}}
+{{- dict "found" $found "windows" $windows "min" $min "cur" $cur "coreVersion" $core "served" $served | toJson -}}
+{{- end -}}
+
+{{/*
+openeverest.contract.verdict returns the reason OpenEverest's check gives for
+an extension stamped ext on a core serving the window [min, cur]: Supported,
+CoreTooOld, ExtensionTooOld, Unversioned, InvalidVersion or CoreVersionSkew
+(a window whose min is above its current version, from CRDs that disagree).
+*/}}
+{{- define "openeverest.contract.verdict" -}}
+{{- $ext := .ext | default "" | toString -}}
+{{- $min := .min | default "" | toString -}}
+{{- $cur := .cur | default "" | toString -}}
+{{- if eq $ext "" -}}
+Unversioned
+{{- else if not (and (include "openeverest.contract.valid" $ext) (include "openeverest.contract.valid" $min) (include "openeverest.contract.valid" $cur)) -}}
+InvalidVersion
+{{- else if eq ((semver $min).Compare (semver $cur)) 1 -}}
+CoreVersionSkew
+{{- else if eq ((semver $cur).Compare (semver $ext)) -1 -}}
+CoreTooOld
+{{- else if eq ((semver $ext).Compare (semver $min)) -1 -}}
+ExtensionTooOld
+{{- else -}}
+Supported
+{{- end -}}
+{{- end -}}
+
+{{/*
+openeverest.contract.valid returns "true" when its argument is a SemVer 2.0.0
+version: MAJOR.MINOR.PATCH, optional pre-release and build metadata, no "v"
+prefix, no short forms, no leading zeros. Helm's semver accepts all of those,
+so only versions this accepts are passed to it.
+*/}}
+{{- define "openeverest.contract.valid" -}}
+{{- if and (kindIs "string" .) (regexMatch "^(0|[1-9][0-9]*)[.](0|[1-9][0-9]*)[.](0|[1-9][0-9]*)(-(0|[1-9][0-9]*|[0-9]*[a-zA-Z-][0-9a-zA-Z-]*)([.](0|[1-9][0-9]*|[0-9]*[a-zA-Z-][0-9a-zA-Z-]*))*)?([+][0-9a-zA-Z-]+([.][0-9a-zA-Z-]+)*)?$" .) -}}
+true
+{{- end -}}
+{{- end -}}
+
+{{/*
+openeverest.contract.development returns "true" when its argument is a
+development value, such as 2.0.0-alpha.1.dev or 2.0.1-dev: the version of an
+unreleased OpenEverest, which nobody can install.
+*/}}
+{{- define "openeverest.contract.development" -}}
+{{- if and (include "openeverest.contract.valid" .) (has "dev" (splitList "." (semver .).Prerelease)) -}}
+true
+{{- end -}}
+{{- end -}}
+
+{{/*
+openeverest.contract.message describes a failed check to the user installing
+the chart, naming OpenEverest releases, and how to install anyway.
+*/}}
+{{- define "openeverest.contract.message" -}}
+{{- $name := printf "%s %s" .root.Chart.Name .root.Chart.Version -}}
+{{- $core := .window.coreVersion -}}
+{{- $msg := "" -}}
+{{- if eq .verdict "CoreTooOld" -}}
+  {{- if include "openeverest.contract.development" .stamp -}}
+    {{- $msg = printf "%s needs a newer, unreleased OpenEverest build" $name -}}
+  {{- else -}}
+    {{- $msg = printf "%s needs OpenEverest %s or later" $name .stamp -}}
+  {{- end -}}
+{{- else -}}
+  {{- if include "openeverest.contract.development" .window.min -}}
+    {{- $msg = printf "%s was built for an older OpenEverest; install a version of it built for this unreleased OpenEverest build" $name -}}
+  {{- else -}}
+    {{- $msg = printf "%s was built for an older OpenEverest; install a release of it built for OpenEverest %s or later" $name .window.min -}}
+  {{- end -}}
+{{- end -}}
+{{- if $core -}}
+  {{- printf "%s; this cluster runs OpenEverest %s. To install it anyway on this OpenEverest, set compatibility.acknowledge.coreVersion=%s." $msg $core $core -}}
+{{- else -}}
+  {{- printf "%s; this cluster runs an OpenEverest that does not declare its version, so compatibility.acknowledge.coreVersion cannot override this check." $msg -}}
+{{- end -}}
+{{- end -}}

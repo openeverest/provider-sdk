@@ -179,6 +179,15 @@ admission:
     # -- Issue the serving certificate with cert-manager, which must be installed.
     enabled: false
 
+compatibility:
+  acknowledge:
+    # -- Install even though the OpenEverest in the cluster does not serve the
+    # OpenEverest this chart is built for, which the install otherwise refuses.
+    # Set it to the version of OpenEverest the cluster runs, which the error
+    # names: it covers that release only, so the next OpenEverest upgrade is
+    # checked again.
+    coreVersion: ""
+
 # -- Leader election configuration
 leaderElection:
   # -- Enable leader election (recommended for HA deployments)

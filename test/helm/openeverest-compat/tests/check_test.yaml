@@ -1,0 +1,329 @@
+suite: check
+templates:
+  - templates/check.yaml
+kubernetesProvider:
+  scheme:
+    apiextensions.k8s.io/v1/CustomResourceDefinition:
+      gvr:
+        group: apiextensions.k8s.io
+        version: v1
+        resource: customresourcedefinitions
+      namespaced: false
+    core.openeverest.io/v1alpha1/Provider:
+      gvr:
+        group: core.openeverest.io
+        version: v1alpha1
+        resource: providers
+      namespaced: false
+  objects: []
+tests:
+  - it: passes when OpenEverest is not installed
+    set:
+      stamp: "2.1.0"
+    asserts:
+      - containsDocument:
+          kind: ConfigMap
+          apiVersion: v1
+          name: passed
+
+  - it: passes when the stamp is in the window
+    set:
+      stamp: "2.1.0"
+    kubernetesProvider:
+      objects:
+        - &providers
+          apiVersion: apiextensions.k8s.io/v1
+          kind: CustomResourceDefinition
+          metadata:
+            name: providers.core.openeverest.io
+            labels:
+              openeverest.io/version: "2.1.0"
+            annotations:
+              openeverest.io/min-contract-version: "2.0.0"
+              openeverest.io/contract-version: "2.1.0"
+          spec:
+            versions:
+              - name: v1alpha1
+                served: true
+    asserts:
+      - containsDocument:
+          kind: ConfigMap
+          apiVersion: v1
+          name: passed
+
+  - it: fails when OpenEverest is older than the stamp
+    set:
+      stamp: "2.1.0"
+    kubernetesProvider:
+      objects:
+        - &providersOlder
+          <<: *providers
+          metadata:
+            name: providers.core.openeverest.io
+            labels:
+              openeverest.io/version: "2.0.1"
+            annotations:
+              openeverest.io/min-contract-version: "2.0.0"
+              openeverest.io/contract-version: "2.0.1"
+    asserts:
+      - failedTemplate:
+          errorMessage: >-
+            provider-compat-test 1.2.3 needs OpenEverest 2.1.0 or later; this cluster runs OpenEverest 2.0.1.
+            To install it anyway on this OpenEverest, set compatibility.acknowledge.coreVersion=2.0.1.
+
+  - it: fails when OpenEverest is older than an unreleased stamp
+    set:
+      stamp: "2.0.2-dev"
+    kubernetesProvider:
+      objects:
+        - *providersOlder
+    asserts:
+      - failedTemplate:
+          errorMessage: >-
+            provider-compat-test 1.2.3 needs a newer, unreleased OpenEverest build; this cluster runs OpenEverest 2.0.1.
+            To install it anyway on this OpenEverest, set compatibility.acknowledge.coreVersion=2.0.1.
+
+  - it: fails when OpenEverest no longer serves the stamp
+    set:
+      stamp: "2.0.0"
+    kubernetesProvider:
+      objects:
+        - &providersNewer
+          <<: *providers
+          metadata:
+            name: providers.core.openeverest.io
+            labels:
+              openeverest.io/version: "3.0.0"
+            annotations:
+              openeverest.io/min-contract-version: "2.1.0"
+              openeverest.io/contract-version: "3.0.0"
+    asserts:
+      - failedTemplate:
+          errorMessage: >-
+            provider-compat-test 1.2.3 was built for an older OpenEverest; install a release of it built for OpenEverest 2.1.0 or later;
+            this cluster runs OpenEverest 3.0.0. To install it anyway on this OpenEverest, set compatibility.acknowledge.coreVersion=3.0.0.
+
+  - it: passes when the user acknowledged this OpenEverest release
+    set:
+      stamp: "2.1.0"
+      compatibility.acknowledge.coreVersion: "2.0.1"
+    kubernetesProvider:
+      objects:
+        - *providersOlder
+    asserts:
+      - containsDocument:
+          kind: ConfigMap
+          apiVersion: v1
+          name: passed
+
+  - it: passes when the user acknowledged this OpenEverest release for an older build
+    set:
+      stamp: "2.0.0"
+      compatibility.acknowledge.coreVersion: "3.0.0"
+    kubernetesProvider:
+      objects:
+        - *providersNewer
+    asserts:
+      - containsDocument:
+          kind: ConfigMap
+          apiVersion: v1
+          name: passed
+
+  - it: fails when the user acknowledged another OpenEverest release
+    set:
+      stamp: "2.1.0"
+      compatibility.acknowledge.coreVersion: "2.0.0"
+    kubernetesProvider:
+      objects:
+        - *providersOlder
+    asserts:
+      - failedTemplate:
+          errorPattern: needs OpenEverest 2.1.0 or later; this cluster runs OpenEverest 2.0.1
+
+  - it: passes when the installed build carries the same stamp
+    set:
+      stamp: "2.1.0"
+    kubernetesProvider:
+      objects:
+        - *providersOlder
+        - &installed
+          apiVersion: core.openeverest.io/v1alpha1
+          kind: Provider
+          metadata:
+            name: compat-test
+            annotations:
+              openeverest.io/contract-version: "2.1.0"
+    asserts:
+      - containsDocument:
+          kind: ConfigMap
+          apiVersion: v1
+          name: passed
+
+  - it: fails when the installed build carries another stamp
+    set:
+      stamp: "2.2.0"
+    kubernetesProvider:
+      objects:
+        - *providersOlder
+        - *installed
+    asserts:
+      - failedTemplate:
+          errorPattern: needs OpenEverest 2.2.0 or later
+
+  - it: does not read the installed object of a version its CRD does not serve
+    set:
+      stamp: "2.1.0"
+    kubernetesProvider:
+      objects:
+        - <<: *providersOlder
+          spec:
+            versions:
+              - name: v1alpha1
+                served: false
+              - name: v1beta1
+                served: true
+        - *installed
+    asserts:
+      - failedTemplate:
+          errorPattern: needs OpenEverest 2.1.0 or later
+
+  - it: fails when OpenEverest predates published windows
+    set:
+      stamp: "2.1.0"
+    kubernetesProvider:
+      objects:
+        - &providersUnversioned
+          apiVersion: apiextensions.k8s.io/v1
+          kind: CustomResourceDefinition
+          metadata:
+            name: providers.core.openeverest.io
+          spec:
+            versions:
+              - name: v1alpha1
+                served: true
+    asserts:
+      - failedTemplate:
+          errorMessage: >-
+            provider-compat-test 1.2.3 needs OpenEverest 2.1.0 or later; this cluster runs an OpenEverest that does not declare
+            its version, so compatibility.acknowledge.coreVersion cannot override this check.
+
+  - it: passes an unstamped chart when OpenEverest predates published windows
+    set:
+      stamp: ""
+    kubernetesProvider:
+      objects:
+        - *providersUnversioned
+    asserts:
+      - containsDocument:
+          kind: ConfigMap
+          apiVersion: v1
+          name: passed
+
+  - it: passes a chart with an invalid stamp when OpenEverest predates published windows
+    set:
+      stamp: "v2.1.0"
+    kubernetesProvider:
+      objects:
+        - *providersUnversioned
+    asserts:
+      - containsDocument:
+          kind: ConfigMap
+          apiVersion: v1
+          name: passed
+
+  - it: passes an unstamped chart
+    set:
+      stamp: ""
+    kubernetesProvider:
+      objects:
+        - *providersOlder
+    asserts:
+      - containsDocument:
+          kind: ConfigMap
+          apiVersion: v1
+          name: passed
+
+  - it: passes on an invalid window
+    set:
+      stamp: "2.1.0"
+    kubernetesProvider:
+      objects:
+        - <<: *providers
+          metadata:
+            name: providers.core.openeverest.io
+            annotations:
+              openeverest.io/min-contract-version: "2.0"
+              openeverest.io/contract-version: "2.0.1"
+    asserts:
+      - containsDocument:
+          kind: ConfigMap
+          apiVersion: v1
+          name: passed
+
+  - it: checks against the intersection of the windows of the CRDs
+    set:
+      stamp: "2.1.0"
+    kubernetesProvider:
+      objects:
+        - <<: *providers
+          metadata:
+            name: providers.core.openeverest.io
+            labels:
+              openeverest.io/version: "2.2.0"
+            annotations:
+              openeverest.io/min-contract-version: "2.0.0"
+              openeverest.io/contract-version: "2.2.0"
+        - &backupClassesOlder
+          apiVersion: apiextensions.k8s.io/v1
+          kind: CustomResourceDefinition
+          metadata:
+            name: backupclasses.backup.openeverest.io
+            labels:
+              openeverest.io/version: "2.0.5"
+            annotations:
+              openeverest.io/min-contract-version: "2.0.0"
+              openeverest.io/contract-version: "2.0.5"
+    asserts:
+      - failedTemplate:
+          errorPattern: needs OpenEverest 2.1.0 or later; this cluster runs OpenEverest 2.2.0[.]
+
+  - it: passes when the CRDs publish windows that do not overlap, as during an upgrade
+    set:
+      stamp: "2.1.0"
+    kubernetesProvider:
+      objects:
+        - <<: *providers
+          metadata:
+            name: providers.core.openeverest.io
+            annotations:
+              openeverest.io/min-contract-version: "2.1.0"
+              openeverest.io/contract-version: "2.2.0"
+        - *backupClassesOlder
+    asserts:
+      - containsDocument:
+          kind: ConfigMap
+          apiVersion: v1
+          name: passed
+
+  - it: passes when only some CRDs publish a window, as during an upgrade
+    set:
+      stamp: "2.1.0"
+    kubernetesProvider:
+      objects:
+        - *providersUnversioned
+        - *backupClassesOlder
+    asserts:
+      - containsDocument:
+          kind: ConfigMap
+          apiVersion: v1
+          name: passed
+
+  - it: checks the CRDs it finds
+    set:
+      stamp: "2.1.0"
+    kubernetesProvider:
+      objects:
+        - *backupClassesOlder
+    asserts:
+      - failedTemplate:
+          errorPattern: needs OpenEverest 2.1.0 or later; this cluster runs OpenEverest 2.0.5[.]

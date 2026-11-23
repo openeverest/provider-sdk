@@ -1,0 +1,101 @@
+suite: generated check
+templates:
+  - templates/openeverest-compat-check.yaml
+kubernetesProvider:
+  scheme:
+    apiextensions.k8s.io/v1/CustomResourceDefinition:
+      gvr:
+        group: apiextensions.k8s.io
+        version: v1
+        resource: customresourcedefinitions
+      namespaced: false
+    core.openeverest.io/v1alpha1/Provider:
+      gvr:
+        group: core.openeverest.io
+        version: v1alpha1
+        resource: providers
+      namespaced: false
+  objects: []
+tests:
+  - it: renders nothing when OpenEverest is not installed
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: renders nothing when the chart's stamp is in the window
+    kubernetesProvider:
+      objects:
+        - &providers
+          apiVersion: apiextensions.k8s.io/v1
+          kind: CustomResourceDefinition
+          metadata:
+            name: providers.core.openeverest.io
+            labels:
+              openeverest.io/version: "2.1.0"
+            annotations:
+              openeverest.io/min-contract-version: "2.0.0"
+              openeverest.io/contract-version: "2.1.0"
+          spec:
+            versions:
+              - name: v1alpha1
+                served: true
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: fails with the chart's stamp, name and version
+    kubernetesProvider:
+      objects:
+        - &providersOlder
+          <<: *providers
+          metadata:
+            name: providers.core.openeverest.io
+            labels:
+              openeverest.io/version: "2.0.1"
+            annotations:
+              openeverest.io/min-contract-version: "2.0.0"
+              openeverest.io/contract-version: "2.0.1"
+    asserts:
+      - failedTemplate:
+          errorMessage: >-
+            provider-compat-test 1.2.3 needs OpenEverest 2.1.0 or later; this cluster runs OpenEverest 2.0.1.
+            To install it anyway on this OpenEverest, set compatibility.acknowledge.coreVersion=2.0.1.
+
+  - it: reads the acknowledgement from the values
+    set:
+      compatibility.acknowledge.coreVersion: "2.0.1"
+    kubernetesProvider:
+      objects:
+        - *providersOlder
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: reads the installed Provider named in the values
+    kubernetesProvider:
+      objects:
+        - *providersOlder
+        - apiVersion: core.openeverest.io/v1alpha1
+          kind: Provider
+          metadata:
+            name: compat-test
+            annotations:
+              openeverest.io/contract-version: "2.1.0"
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: reads the BackupClass CRD, as the chart applies BackupClasses
+    kubernetesProvider:
+      objects:
+        - *providers
+        - apiVersion: apiextensions.k8s.io/v1
+          kind: CustomResourceDefinition
+          metadata:
+            name: backupclasses.backup.openeverest.io
+            annotations:
+              openeverest.io/min-contract-version: "2.0.0"
+              openeverest.io/contract-version: "2.0.5"
+    asserts:
+      - failedTemplate:
+          errorPattern: needs OpenEverest 2.1.0 or later; this cluster runs OpenEverest 2.1.0[.]

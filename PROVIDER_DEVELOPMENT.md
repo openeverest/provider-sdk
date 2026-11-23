@@ -202,7 +202,8 @@ charts/<provider-name>/              # ← GENERATED (mostly)
     rbac-rules.yaml                  # Generated from rbac.go by `make manifests`
     backupclasses/                   # Generated BackupClass manifests (optional)
   templates/                         # Helm chart templates (edit if needed)
-    _openeverest_contract.tpl        # Generated helper rendering the OpenEverest stamp
+    _openeverest_contract.tpl        # Generated helpers: the OpenEverest stamp and its check
+    openeverest-compat-check.yaml    # Generated: refuses to install on an OpenEverest that does not serve the stamp
 
 .github/workflows/                   # ← CI/CD (standardized)
   ci.yaml                            # Lint, unit tests and integration tests on PRs
@@ -2595,10 +2596,42 @@ before any release that can follow it:
 No OpenEverest release is ever named either way. Core builds such as
 `2.0.0-dev.4` are releases, not development values.
 
+`make generate` also writes `templates/openeverest-compat-check.yaml`, which
+makes the install fail, before anything is applied, when the OpenEverest in the
+cluster does not serve the stamp. It reads the range of versions OpenEverest
+serves from the annotations of the CRDs of the objects the chart applies (the
+`Provider`, plus `BackupClass` and the others when the chart renders them),
+and compares like OpenEverest does. The message names the OpenEverest the
+provider needs:
+
+```
+Error: INSTALLATION FAILED: execution error at (provider-my-database/templates/openeverest-compat-check.yaml:8:4):
+provider-my-database 0.3.0 needs OpenEverest 2.1.0 or later; this cluster runs OpenEverest 2.0.1.
+To install it anyway on this OpenEverest, set compatibility.acknowledge.coreVersion=2.0.1.
+```
+
+- Failing the render rather than a pre-install hook leaves no failed Helm
+  release behind, so installing again after upgrading OpenEverest just works.
+- Without access to a cluster (`helm template`, a client-side dry run, Argo CD)
+  the check finds no CRD and passes, as it does when OpenEverest is not
+  installed. It also passes when the stamp or the range is missing or
+  malformed, and while the CRDs disagree on the range, as during an
+  OpenEverest upgrade.
+- Upgrading an installed release whose `Provider` carries the same stamp, e.g.
+  to change values, is never blocked.
+- `compatibility.acknowledge.coreVersion` installs anyway on one OpenEverest
+  release, the one it is set to, so the next OpenEverest upgrade is checked
+  again. The scaffolded `values.yaml` documents it.
+
+The check reads the CRDs as the user installing the chart, so a user who may
+not `get` them cannot install it; the OpenEverest chart grants that to every
+authenticated user.
+
 `go tool provider-sdk verify` renders the chart with its default values,
 without a cluster, and checks that `Chart.yaml` and every `Provider`,
 `BackupClass`, `BackupStorageClass`, `MonitoringClass` and
-`ClusterInstancePreset` it renders carry the stamp. `make verify` runs it in
+`ClusterInstancePreset` it renders carry the stamp. It also checks that the
+generated templates are those of this `provider-sdk`. `make verify` runs it in
 CI. The release workflow runs
 `go tool provider-sdk verify --release` before packaging the chart, which also
 fails on a development value and on a `go.mod` that replaces OpenEverest: a

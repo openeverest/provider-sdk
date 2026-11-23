@@ -1,0 +1,6 @@
+provider:
+  name: compat-test
+
+# Test-only inputs of templates/verdict.yaml and templates/check.yaml.
+ext: ""
+stamp: ""
