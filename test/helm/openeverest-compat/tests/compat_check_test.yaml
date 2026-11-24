@@ -98,4 +98,20 @@ tests:
               openeverest.io/contract-version: "2.0.5"
     asserts:
       - failedTemplate:
-          errorPattern: needs OpenEverest 2.1.0 or later; this cluster runs OpenEverest 2.1.0[.]
+          errorPattern: needs OpenEverest 2.1.0 or later; this cluster runs an OpenEverest that does not declare its version
+
+  - it: reads the acknowledgement OpenEverest lists for the Provider named in the values
+    kubernetesProvider:
+      objects:
+        - <<: *providersOlder
+          metadata:
+            name: providers.core.openeverest.io
+            labels:
+              openeverest.io/version: "2.0.1"
+            annotations:
+              openeverest.io/min-contract-version: "2.0.0"
+              openeverest.io/contract-version: "2.0.1"
+              openeverest.io/acknowledged-extensions: compat-test@2.0.1
+    asserts:
+      - hasDocuments:
+          count: 0

@@ -1,0 +1,41 @@
+suite: generated objects
+templates:
+  - templates/backupclasses.yaml
+tests:
+  - it: renders a generated manifest as written
+    asserts:
+      - equal:
+          path: metadata.annotations
+          value:
+            openeverest.io/contract-version: "2.1.0"
+            openeverest.io/provider-version: 1.2.3
+      - equal:
+          path: spec.uiSchema.backup.annotations
+          value:
+            label: Not metadata
+
+  - it: adds the acknowledgement to its metadata only
+    set:
+      compatibility.acknowledge.coreVersion: "2.0.1"
+    asserts:
+      - equal:
+          path: metadata.annotations
+          value:
+            openeverest.io/compatibility-acknowledged: "2.0.1"
+            openeverest.io/contract-version: "2.1.0"
+            openeverest.io/provider-version: 1.2.3
+      - equal:
+          path: metadata.name
+          value: pbm
+      - equal:
+          path: spec.uiSchema.backup.annotations
+          value:
+            label: Not metadata
+
+  - it: writes the acknowledgement as it is set
+    set:
+      compatibility.acknowledge.coreVersion: "2.0.1 ${1} $$ \"quoted\""
+    asserts:
+      - equal:
+          path: metadata.annotations["openeverest.io/compatibility-acknowledged"]
+          value: "2.0.1 ${1} $$ \"quoted\""

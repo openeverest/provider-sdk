@@ -16,8 +16,9 @@
 // code that are committed outside a provider's chart: the copies of the
 // templates provider-sdk generate writes into a chart, in the scaffold and in
 // the helm-unittest fixture chart test/helm/openeverest-compat, and the
-// fixture's suite of the vectors OpenEverest publishes for its compatibility
-// check, so the Helm implementation decides every case exactly as core does.
+// fixture's suites of the vectors OpenEverest publishes for its compatibility
+// check and its acknowledgements, so the Helm implementation decides every
+// case exactly as core does.
 //
 // Run it from the module root: go run ./hack/gen-compat-tests
 package main
@@ -41,6 +42,14 @@ const (
 	scaffoldChart = "internal/scaffold/_template/charts/__PROJECT_NAME__"
 	providersCRD  = "providers.core.openeverest.io"
 	backupCRD     = "backupclasses.backup.openeverest.io"
+
+	// fixtureProvider is the name of the Provider of the fixture chart, its
+	// provider.name value, under which OpenEverest lists its acknowledgement.
+	fixtureProvider = "compat-test"
+	// newestStamp is a stamp newer than every version in the vectors, so the
+	// check refuses it on any window of theirs, and only an acknowledgement
+	// lets it through.
+	newestStamp = "99.0.0"
 )
 
 func main() {
@@ -63,12 +72,17 @@ func Files() (map[string][]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+	acknowledge, err := acknowledgeSuite()
+	if err != nil {
+		return nil, err
+	}
 	return map[string][]byte{
 		scaffoldChart + "/templates/" + generate.ContractHelperFile: []byte(generate.ContractHelper),
 		scaffoldChart + "/templates/" + generate.CompatCheckFile:    []byte(generate.CompatCheck([]string{providersCRD})),
 		fixtureChart + "/templates/" + generate.ContractHelperFile:  []byte(generate.ContractHelper),
 		fixtureChart + "/templates/" + generate.CompatCheckFile:     []byte(generate.CompatCheck([]string{providersCRD, backupCRD})),
 		fixtureChart + "/tests/vectors_test.yaml":                   vectors,
+		fixtureChart + "/tests/acknowledge_vectors_test.yaml":       acknowledge,
 	}, nil
 }
 
@@ -82,6 +96,12 @@ type vectors struct {
 		Status string `json:"status"`
 		Reason string `json:"reason"`
 	} `json:"check"`
+	Acknowledge []struct {
+		Ack             string `json:"ack"`
+		ContractVersion string `json:"contractVersion"`
+		CoreVersion     string `json:"coreVersion"`
+		Holds           bool   `json:"holds"`
+	} `json:"acknowledge"`
 }
 
 type suite struct {
@@ -98,6 +118,7 @@ type provider struct {
 
 type test struct {
 	It                 string            `yaml:"it"`
+	Template           string            `yaml:"template,omitempty"`
 	Set                map[string]string `yaml:"set"`
 	KubernetesProvider *provider         `yaml:"kubernetesProvider"`
 	Asserts            []any             `yaml:"asserts"`
@@ -198,15 +219,146 @@ func vectorsSuite() ([]byte, error) {
 		},
 		Tests: tests,
 	}
+	return encode(s)
+}
+
+// acknowledgeSuite returns the helm-unittest suite that runs every
+// "acknowledge" case of contract.OrderVectors:
+//   - on openeverest.contract.acknowledgementHolds itself, expecting the
+//     case's result;
+//   - when the case's contract version is valid, through the check, on a
+//     chart stamped newestStamp in a cluster whose providers CRD publishes
+//     the case's contract version and core version, with the case's
+//     acknowledgement as compatibility.acknowledge.coreVersion, and as the
+//     chart's entry in the CRD's acknowledged-extensions list when it reads
+//     back as written. The check passes exactly when the acknowledgement
+//     holds.
+//
+// Every expectation is also what contract.AcknowledgementHolds and
+// contract.ParseAcknowledgedExtensions return, or generation fails.
+func acknowledgeSuite() ([]byte, error) {
+	var v vectors
+	if err := json.Unmarshal(contract.OrderVectors, &v); err != nil {
+		return nil, fmt.Errorf("decoding contract.OrderVectors: %w", err)
+	}
+
+	var tests []test
+	for _, c := range v.Acknowledge {
+		if got := contract.AcknowledgementHolds(c.Ack, c.ContractVersion, c.CoreVersion); got != c.Holds {
+			return nil, fmt.Errorf("contract.AcknowledgementHolds(%q, %q, %q) is %t, not %t", c.Ack, c.ContractVersion, c.CoreVersion, got, c.Holds)
+		}
+		holds := ""
+		if c.Holds {
+			holds = "true"
+		}
+		tests = append(tests, test{
+			It:       fmt.Sprintf("acknowledge: %q with contract version %q on %q holds: %t", c.Ack, c.ContractVersion, c.CoreVersion, c.Holds),
+			Template: "templates/acknowledgement.yaml",
+			Set:      map[string]string{"ack": c.Ack, "contractVersion": c.ContractVersion, "coreVersion": c.CoreVersion},
+			Asserts:  []any{equal("data.holds", holds)},
+		})
+
+		if !contract.Valid(c.ContractVersion) {
+			continue
+		}
+		if got := contract.Check(newestStamp, c.ContractVersion, c.ContractVersion).Reason; got != contract.ReasonCoreTooOld {
+			return nil, fmt.Errorf("contract.Check(%q, %q, %q) is %s, not %s", newestStamp, c.ContractVersion, c.ContractVersion, got, contract.ReasonCoreTooOld)
+		}
+		tests = append(tests, test{
+			It: fmt.Sprintf("acknowledge in values: %q with contract version %q on %q %s",
+				c.Ack, c.ContractVersion, c.CoreVersion, passesOrFails(c.Holds)),
+			Template:           "templates/check.yaml",
+			Set:                map[string]string{"stamp": newestStamp, contract.AcknowledgeValuePath: c.Ack},
+			KubernetesProvider: &provider{Objects: []any{crd(c.ContractVersion, c.CoreVersion, nil)}},
+			Asserts:            []any{checkResult(c.Holds)},
+		})
+
+		// The list trims its entries and splits them on commas, so only
+		// values that read back as written are the same case.
+		if strings.TrimSpace(c.Ack) != c.Ack || strings.Contains(c.Ack, ",") {
+			continue
+		}
+		list := fixtureProvider + "@" + c.Ack
+		acks, err := contract.ParseAcknowledgedExtensions(list)
+		listed := err == nil && contract.AcknowledgementHolds(acks[fixtureProvider], c.ContractVersion, c.CoreVersion)
+		if listed != c.Holds {
+			return nil, fmt.Errorf("acknowledged-extensions %q with contract version %q on %q holds: %t, not %t", list, c.ContractVersion, c.CoreVersion, listed, c.Holds)
+		}
+		tests = append(tests, test{
+			It: fmt.Sprintf("acknowledged-extensions: %q with contract version %q on %q %s",
+				list, c.ContractVersion, c.CoreVersion, passesOrFails(c.Holds)),
+			Template: "templates/check.yaml",
+			Set:      map[string]string{"stamp": newestStamp},
+			KubernetesProvider: &provider{Objects: []any{
+				crd(c.ContractVersion, c.CoreVersion, map[string]string{contract.AcknowledgedExtensionsAnnotation: list}),
+			}},
+			Asserts: []any{checkResult(c.Holds)},
+		})
+	}
+
+	return encode(suite{
+		Suite:     "acknowledge vectors",
+		Templates: []string{"templates/acknowledgement.yaml", "templates/check.yaml"},
+		KubernetesProvider: &provider{
+			Scheme: map[string]any{
+				"apiextensions.k8s.io/v1/CustomResourceDefinition": map[string]any{
+					"gvr":        map[string]string{"group": "apiextensions.k8s.io", "version": "v1", "resource": "customresourcedefinitions"},
+					"namespaced": false,
+				},
+			},
+			Objects: []any{},
+		},
+		Tests: tests,
+	})
+}
+
+// crd returns a providers CRD that publishes the window [contractVersion,
+// contractVersion] of a core whose version is coreVersion, with the extra
+// annotations.
+func crd(contractVersion, coreVersion string, annotations map[string]string) map[string]any {
+	all := map[string]string{
+		contract.MinVersionAnnotation: contractVersion,
+		contract.VersionAnnotation:    contractVersion,
+	}
+	for k, v := range annotations {
+		all[k] = v
+	}
+	return map[string]any{
+		"apiVersion": "apiextensions.k8s.io/v1",
+		"kind":       "CustomResourceDefinition",
+		"metadata": map[string]any{
+			"name":        providersCRD,
+			"labels":      map[string]string{contract.CoreVersionKey: coreVersion},
+			"annotations": all,
+		},
+	}
+}
+
+func passesOrFails(passes bool) string {
+	if passes {
+		return "passes"
+	}
+	return "fails"
+}
+
+// checkResult asserts templates/check.yaml passes or fails.
+func checkResult(passes bool) map[string]any {
+	if passes {
+		return map[string]any{"containsDocument": map[string]string{"kind": "ConfigMap", "apiVersion": "v1", "name": "passed"}}
+	}
+	return map[string]any{"failedTemplate": map[string]string{"errorPattern": "needs OpenEverest " + strings.ReplaceAll(newestStamp, ".", "[.]") + " or later"}}
+}
+
+func encode(s suite) ([]byte, error) {
 	var buf bytes.Buffer
 	buf.WriteString("# Code generated by hack/gen-compat-tests from contract.OrderVectors. DO NOT EDIT.\n")
 	enc := yaml.NewEncoder(&buf)
 	enc.SetIndent(2)
 	if err := enc.Encode(s); err != nil {
-		return nil, fmt.Errorf("encoding the vectors suite: %w", err)
+		return nil, fmt.Errorf("encoding the %s suite: %w", s.Suite, err)
 	}
 	if err := enc.Close(); err != nil {
-		return nil, fmt.Errorf("encoding the vectors suite: %w", err)
+		return nil, fmt.Errorf("encoding the %s suite: %w", s.Suite, err)
 	}
 	return []byte(strings.TrimRight(buf.String(), "\n") + "\n"), nil
 }

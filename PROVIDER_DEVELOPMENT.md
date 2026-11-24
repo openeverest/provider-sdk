@@ -2598,10 +2598,11 @@ No OpenEverest release is ever named either way. Core builds such as
 
 `make generate` also writes `templates/openeverest-compat-check.yaml`, which
 makes the install fail, before anything is applied, when the OpenEverest in the
-cluster does not serve the stamp. It reads the range of versions OpenEverest
-serves from the annotations of the CRDs of the objects the chart applies (the
-`Provider`, plus `BackupClass` and the others when the chart renders them),
-and compares like OpenEverest does. The message names the OpenEverest the
+cluster would refuse the chart's objects. It reads the range of versions
+OpenEverest serves from the annotations of the CRDs of the objects the chart
+applies (the `Provider`, plus `BackupClass` and the others when the chart
+renders them), and decides like OpenEverest's admission does, which checks
+each object against the CRD of its kind. The message names the OpenEverest the
 provider needs:
 
 ```
@@ -2614,14 +2615,32 @@ To install it anyway on this OpenEverest, set compatibility.acknowledge.coreVers
   release behind, so installing again after upgrading OpenEverest just works.
 - Without access to a cluster (`helm template`, a client-side dry run, Argo CD)
   the check finds no CRD and passes, as it does when OpenEverest is not
-  installed. It also passes when the stamp or the range is missing or
+  installed. It also passes when the chart has no stamp, when the range is
   malformed, and while the CRDs disagree on the range, as during an
-  OpenEverest upgrade.
+  OpenEverest upgrade. A stamp that is present but not a SemVer 2.0.0 version
+  fails once a CRD publishes a range, as OpenEverest refuses it.
 - Upgrading an installed release whose `Provider` carries the same stamp, e.g.
   to change values, is never blocked.
-- `compatibility.acknowledge.coreVersion` installs anyway on one OpenEverest
-  release, the one it is set to, so the next OpenEverest upgrade is checked
-  again. The scaffolded `values.yaml` documents it.
+- `compatibility.acknowledge.coreVersion` installs anyway. It names an
+  OpenEverest release `A`, and holds while the contract version the CRDs
+  publish (`openeverest.io/contract-version`) ≤ `A` ≤ the version of the
+  OpenEverest that is installed (their `openeverest.io/version` label). So it
+  survives the patch releases that keep the contract, expires with the first
+  OpenEverest release that changes it, when what the user accepted changes,
+  and set ahead of an upgrade, in Git for example, does nothing until that
+  release is installed. The chart writes it on its objects as
+  `openeverest.io/compatibility-acknowledged`, where OpenEverest reads it too:
+  `openeverest.contract.annotations` renders it, and the scaffolded
+  `templates/backupclasses.yaml` renders the generated BackupClasses with
+  `openeverest.contract.generatedObject`, which adds it. The scaffolded
+  `values.yaml` documents it.
+- An OpenEverest admin can acknowledge the provider on the OpenEverest side
+  instead: the OpenEverest chart publishes the list on its CRDs, as
+  `openeverest.io/acknowledged-extensions: <name>@<release>,…`, where `<name>`
+  is the name of the provider's `Provider`. Each entry follows the same rule,
+  and a list that does not parse acknowledges nothing.
+- OpenEverest's `openeverest.io/incompatible-plugins` policy only concerns
+  `Plugin`s, which a provider chart does not render, so it does not apply.
 
 The check reads the CRDs as the user installing the chart, so a user who may
 not `get` them cannot install it; the OpenEverest chart grants that to every
@@ -2631,8 +2650,10 @@ authenticated user.
 without a cluster, and checks that `Chart.yaml` and every `Provider`,
 `BackupClass`, `BackupStorageClass`, `MonitoringClass` and
 `ClusterInstancePreset` it renders carry the stamp. It also checks that the
-generated templates are those of this `provider-sdk`. `make verify` runs it in
-CI. The release workflow runs
+generated templates are those of this `provider-sdk`, and, rendering again
+with `compatibility.acknowledge.coreVersion` set, that the acknowledgement
+reaches every stamped object. `make verify` runs it in CI. The release
+workflow runs
 `go tool provider-sdk verify --release` before packaging the chart, which also
 fails on a development value and on a `go.mod` that replaces OpenEverest: a
 release tells users the oldest OpenEverest it works with, so that OpenEverest

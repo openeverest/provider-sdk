@@ -1,0 +1,10 @@
+{{- /*
+Test-only: the acknowledgements an acknowledged-extensions list of
+.Values.list makes, for tests/acknowledged_extensions_test.yaml.
+*/ -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: acknowledged
+data:
+  acks: {{ include "openeverest.contract.acknowledgedExtensions" .Values.list | quote }}

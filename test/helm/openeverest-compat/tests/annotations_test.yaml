@@ -1,0 +1,21 @@
+suite: annotations
+templates:
+  - templates/provider.yaml
+tests:
+  - it: stamps the object
+    asserts:
+      - equal:
+          path: metadata.annotations
+          value:
+            openeverest.io/contract-version: "2.1.0"
+
+  - it: writes the acknowledgement on the object, for OpenEverest's admission
+    set:
+      compatibility.acknowledge.coreVersion: "2.0.1"
+    asserts:
+      - equal:
+          path: metadata.annotations
+          value:
+            openeverest.io/contract-version: "2.1.0"
+            openeverest.io/compatibility-acknowledged: "2.0.1"
+

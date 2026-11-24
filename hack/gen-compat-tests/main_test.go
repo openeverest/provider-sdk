@@ -77,3 +77,64 @@ func TestVectorsSuite(t *testing.T) {
 		assert.Positive(t, counts[reason], "no case for %s", reason)
 	}
 }
+
+func TestAcknowledgeSuite(t *testing.T) {
+	t.Parallel()
+
+	data, err := acknowledgeSuite()
+	require.NoError(t, err)
+	var got suite
+	require.NoError(t, yaml.Unmarshal(data, &got))
+	var v vectors
+	require.NoError(t, json.Unmarshal(contract.OrderVectors, &v))
+	require.NotEmpty(t, v.Acknowledge)
+
+	helper := map[[3]string]string{}
+	inValues := map[[3]string]bool{}
+	listed := map[[3]string]bool{}
+	for _, tt := range got.Tests {
+		require.Len(t, tt.Asserts, 1, tt.It)
+		switch tt.Template {
+		case "templates/acknowledgement.yaml":
+			key := [3]string{tt.Set["ack"], tt.Set["contractVersion"], tt.Set["coreVersion"]}
+			helper[key] = tt.Asserts[0].(map[string]any)["equal"].(map[string]any)["value"].(string)
+		case "templates/check.yaml":
+			assert.Equal(t, newestStamp, tt.Set["stamp"], tt.It)
+			obj := tt.KubernetesProvider.Objects[0].(map[string]any)["metadata"].(map[string]any)
+			annotations, labels := obj["annotations"].(map[string]any), obj["labels"].(map[string]any)
+			contractVersion, coreVersion := annotations[contract.VersionAnnotation].(string), labels[contract.CoreVersionKey].(string)
+			_, passes := tt.Asserts[0].(map[string]any)["containsDocument"]
+			if list, ok := annotations[contract.AcknowledgedExtensionsAnnotation].(string); ok {
+				listed[[3]string{strings.TrimPrefix(list, fixtureProvider+"@"), contractVersion, coreVersion}] = passes
+			} else {
+				inValues[[3]string{tt.Set[contract.AcknowledgeValuePath], contractVersion, coreVersion}] = passes
+			}
+		default:
+			t.Fatalf("%s: unexpected template %q", tt.It, tt.Template)
+		}
+	}
+
+	var holding, notHolding int
+	for _, c := range v.Acknowledge {
+		key := [3]string{c.Ack, c.ContractVersion, c.CoreVersion}
+		holds := contract.AcknowledgementHolds(c.Ack, c.ContractVersion, c.CoreVersion)
+		want := ""
+		if holds {
+			want = "true"
+			holding++
+		} else {
+			notHolding++
+		}
+		assert.Equal(t, want, helper[key], "acknowledgementHolds%q", key)
+		if !contract.Valid(c.ContractVersion) {
+			continue
+		}
+		assert.Equal(t, holds, inValues[key], "check with the acknowledgement in values %q", key)
+		if strings.TrimSpace(c.Ack) == c.Ack {
+			assert.Equal(t, holds, listed[key], "check with the acknowledgement listed %q", key)
+		}
+	}
+	assert.Len(t, helper, len(v.Acknowledge), "a helper case per row")
+	assert.Positive(t, holding, "no case that holds")
+	assert.Positive(t, notHolding, "no case that does not hold")
+}

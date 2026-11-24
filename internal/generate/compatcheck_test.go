@@ -22,6 +22,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/openeverest/openeverest/v2/contract"
 	"github.com/openeverest/provider-sdk/internal/chartrender"
 )
 
@@ -49,6 +50,26 @@ of the objects OpenEverest interprets that the chart applies.
   "object" (dict "apiVersion" "core.openeverest.io/v1alpha1" "kind" "Provider" "crd" "providers.core.openeverest.io" "name" (.Values.provider | default dict).name)
 ) -}}
 `, got)
+}
+
+// TestContractHelperUsesTheContractKeys keeps the keys the helper template
+// reads and writes those of the core this provider-sdk builds with.
+func TestContractHelperUsesTheContractKeys(t *testing.T) {
+	t.Parallel()
+
+	for name, text := range map[string]string{
+		"stamp":                    `printf "` + contract.VersionAnnotation + `: %s" (quote .)`,
+		"acknowledgement written":  `printf "` + contract.AcknowledgedAnnotation + `: %s" (quote .)`,
+		"acknowledgement value":    `dig "acknowledge" "coreVersion" ""`,
+		"window minimum":           `"` + contract.MinVersionAnnotation + `"`,
+		"window current":           `"` + contract.VersionAnnotation + `"`,
+		"core version":             `"` + contract.CoreVersionKey + `"`,
+		"acknowledged extensions":  `"` + contract.AcknowledgedExtensionsAnnotation + `"`,
+		"acknowledgement messages": contract.AcknowledgeValuePath + "=%s",
+	} {
+		assert.Contains(t, ContractHelper, text, name)
+	}
+	assert.Equal(t, "compatibility.acknowledge.coreVersion", contract.AcknowledgeValuePath, "the helper digs this path")
 }
 
 // chartFiles returns a provider chart stamped stamp, with the generated

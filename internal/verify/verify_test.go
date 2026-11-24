@@ -65,11 +65,7 @@ metadata:
     {{- include "openeverest.contract.annotations" . | nindent 4 }}
 spec: {}
 `,
-		"templates/backupclasses.yaml": `{{- range $path, $_ := .Files.Glob "generated/backupclasses/*.yaml" }}
----
-{{ $.Files.Get $path }}
-{{- end }}
-`,
+		"templates/backupclasses.yaml": backupClassesTemplate,
 		"generated/backupclasses/pbm.yaml": `apiVersion: backup.openeverest.io/v1alpha1
 kind: BackupClass
 metadata:
@@ -80,6 +76,22 @@ spec: {}
 `,
 	}
 }
+
+// backupClassesTemplate renders the generated BackupClasses like the
+// scaffolded templates/backupclasses.yaml.
+const backupClassesTemplate = `{{- range $path, $_ := .Files.Glob "generated/backupclasses/*.yaml" }}
+---
+{{ include "openeverest.contract.generatedObject" (dict "root" $ "path" $path) }}
+{{- end }}
+`
+
+// rawBackupClassesTemplate renders the generated BackupClasses as they are
+// written, without the acknowledgement.
+const rawBackupClassesTemplate = `{{- range $path, $_ := .Files.Glob "generated/backupclasses/*.yaml" }}
+---
+{{ $.Files.Get $path }}
+{{- end }}
+`
 
 func with(files map[string]string, changes map[string]string) map[string]string {
 	out := maps.Clone(files)
@@ -293,6 +305,7 @@ metadata:
 				"templates/" + generate.CompatCheckFile:    "",
 				"templates/provider.yaml":                  "apiVersion: core.openeverest.io/v1alpha1\nkind: Provider\nmetadata:\n  name: x\n  annotations:\n    openeverest.io/contract-version: " + released + "\n",
 				"templates/" + generate.ContractHelperFile: "",
+				"templates/backupclasses.yaml":             rawBackupClassesTemplate,
 			}),
 			wantStamped: []string{
 				"Chart.yaml",
@@ -302,6 +315,19 @@ metadata:
 			wantProblems: []string{
 				"templates/_openeverest_contract.tpl is missing; run `make generate`",
 				"templates/openeverest-compat-check.yaml is missing; run `make generate`",
+				"BackupClass pbm (templates/backupclasses.yaml) has no openeverest.io/compatibility-acknowledged annotation when compatibility.acknowledge.coreVersion is set, so OpenEverest would refuse it even once the user acknowledged it; render the generated BackupClasses with {{ include \"openeverest.contract.generatedObject\" (dict \"root\" $ \"path\" $path) }}, as the scaffolded templates/backupclasses.yaml does",
+				"Provider x (templates/provider.yaml) has no openeverest.io/compatibility-acknowledged annotation when compatibility.acknowledge.coreVersion is set, so OpenEverest would refuse it even once the user acknowledged it; include \"openeverest.contract.annotations\", from templates/_openeverest_contract.tpl, in its metadata.annotations",
+			},
+		},
+		"BackupClasses rendered without the acknowledgement": {
+			files: with(stampedChart(), map[string]string{"templates/backupclasses.yaml": rawBackupClassesTemplate}),
+			wantStamped: []string{
+				"Chart.yaml",
+				"BackupClass pbm (templates/backupclasses.yaml)",
+				"Provider x (templates/provider.yaml)",
+			},
+			wantProblems: []string{
+				"BackupClass pbm (templates/backupclasses.yaml) has no openeverest.io/compatibility-acknowledged annotation when compatibility.acknowledge.coreVersion is set, so OpenEverest would refuse it even once the user acknowledged it; render the generated BackupClasses with {{ include \"openeverest.contract.generatedObject\" (dict \"root\" $ \"path\" $path) }}, as the scaffolded templates/backupclasses.yaml does",
 			},
 		},
 		"generated templates of another provider-sdk": {

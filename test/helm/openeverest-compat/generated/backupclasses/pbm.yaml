@@ -1,0 +1,15 @@
+# A BackupClass as provider-sdk generate writes it, for
+# tests/generated_object_test.yaml.
+apiVersion: backup.openeverest.io/v1alpha1
+kind: BackupClass
+metadata:
+  annotations:
+    openeverest.io/contract-version: "2.1.0"
+    openeverest.io/provider-version: 1.2.3
+  name: pbm
+spec:
+  executionMode: ProviderManaged
+  uiSchema:
+    backup:
+      annotations:
+        label: Not metadata

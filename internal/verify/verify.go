@@ -131,8 +131,42 @@ func Run(opts Options) (Result, error) {
 		}
 	}
 
+	// OpenEverest's admission reads an acknowledgement on the object it
+	// admits: a stamped object without it would be refused even after the
+	// user acknowledged the incompatibility and the chart's check let the
+	// install through.
+	acknowledged, err := chartrender.RenderValues(opts.ChartDir, map[string]any{
+		"compatibility": map[string]any{"acknowledge": map[string]any{"coreVersion": acknowledgeProbe}},
+	})
+	if err != nil {
+		return res, fmt.Errorf("rendering the chart with %s set: %w", contract.AcknowledgeValuePath, err)
+	}
+	for _, o := range acknowledged {
+		if !o.Own() || !o.CoreInterpreted() {
+			continue
+		}
+		// An object without the stamp is reported above.
+		if _, ok := o.Annotations[contract.VersionAnnotation]; !ok || o.Annotations[contract.AcknowledgedAnnotation] == acknowledgeProbe {
+			continue
+		}
+		hint := fmt.Sprintf("include %q, from templates/%s, in its metadata.annotations",
+			generate.ContractAnnotationsHelper, generate.ContractHelperFile)
+		if o.GroupKind.Kind == "BackupClass" {
+			hint = fmt.Sprintf("render the generated BackupClasses with {{ include %q (dict \"root\" $ \"path\" $path) }}, as the scaffolded templates/backupclasses.yaml does",
+				generate.GeneratedObjectHelper)
+		}
+		res.Problems = append(res.Problems, fmt.Sprintf(
+			"%s %s (%s) has no %s annotation when %s is set, so OpenEverest would refuse it even once the user acknowledged it; %s",
+			o.GroupKind.Kind, o.Name, o.Source, contract.AcknowledgedAnnotation, contract.AcknowledgeValuePath, hint))
+	}
+
 	if opts.Release {
 		res.Problems = append(res.Problems, compat.ReleaseProblems(opts.Core, opts.ContractVersion)...)
 	}
 	return res, nil
 }
+
+// acknowledgeProbe is the release verify acknowledges to check that the
+// acknowledgement reaches every stamped object. Any release does: only
+// whether it reaches them matters.
+const acknowledgeProbe = "1.0.0"

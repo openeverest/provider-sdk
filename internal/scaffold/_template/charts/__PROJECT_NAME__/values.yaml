@@ -184,8 +184,10 @@ compatibility:
     # -- Install even though the OpenEverest in the cluster does not serve the
     # OpenEverest this chart is built for, which the install otherwise refuses.
     # Set it to the version of OpenEverest the cluster runs, which the error
-    # names: it covers that release only, so the next OpenEverest upgrade is
-    # checked again.
+    # names. It holds on that release and the later ones that keep its
+    # contract, such as its patch releases, and expires with the first
+    # OpenEverest release that changes the contract, which is checked again.
+    # Set ahead of an upgrade, it does nothing until that release is installed.
     coreVersion: ""
 
 # -- Leader election configuration

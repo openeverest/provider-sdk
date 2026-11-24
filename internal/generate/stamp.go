@@ -39,6 +39,11 @@ const (
 	// annotation, and those set in the chart value openeverest.annotations,
 	// to include in metadata.annotations.
 	ContractAnnotationsHelper = "openeverest.contract.annotations"
+
+	// GeneratedObjectHelper is the helper that renders a manifest generate
+	// writes into the chart, such as a BackupClass, with what only the
+	// values know.
+	GeneratedObjectHelper = "openeverest.contract.generatedObject"
 )
 
 // ContractHelper is the content of ContractHelperFile: the helper that
