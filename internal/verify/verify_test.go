@@ -18,6 +18,7 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -66,9 +67,21 @@ metadata:
   name: pbm
   annotations:
     openeverest.io/contract-version: ` + released + `
+    argocd.argoproj.io/sync-wave: "-1"
+spec: {}
+`,
+		"templates/deployment.yaml": `apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: provider-x
 spec: {}
 `,
 	}
+}
+
+// deployment is a workload template with annotations.
+func deployment(annotations string) string {
+	return "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: provider-x\n  annotations:\n" + annotations + "spec: {}\n"
 }
 
 func with(files map[string]string, changes map[string]string) map[string]string {
@@ -183,6 +196,176 @@ metadata:
 			},
 			wantProblems: []string{
 				"BackupStorageClass swift (templates/classes.yaml) has no openeverest.io/contract-version annotation; include \"openeverest.contract.annotations\", from templates/_openeverest_contract.tpl, in its metadata.annotations",
+			},
+		},
+		"ClusterInstancePresets with the helper": {
+			files: with(stampedChart(), map[string]string{
+				"templates/presets.yaml": `{{- range list "small" "large" }}
+---
+apiVersion: core.openeverest.io/v1alpha1
+kind: ClusterInstancePreset
+metadata:
+  name: x-{{ . }}
+  annotations:
+    {{- include "openeverest.contract.annotations" $ | nindent 4 }}
+spec: {}
+{{- end }}
+`,
+			}),
+			wantStamped: []string{
+				"Chart.yaml",
+				"BackupClass pbm (templates/backupclasses.yaml)",
+				"ClusterInstancePreset x-small (templates/presets.yaml)",
+				"ClusterInstancePreset x-large (templates/presets.yaml)",
+				"Provider x (templates/provider.yaml)",
+			},
+		},
+		"ClusterInstancePreset without the helper": {
+			files: with(stampedChart(), map[string]string{
+				"templates/presets.yaml": "apiVersion: core.openeverest.io/v1alpha1\nkind: ClusterInstancePreset\nmetadata:\n  name: x-small\nspec: {}\n",
+			}),
+			wantStamped: []string{
+				"Chart.yaml",
+				"BackupClass pbm (templates/backupclasses.yaml)",
+				"Provider x (templates/provider.yaml)",
+			},
+			wantProblems: []string{
+				"ClusterInstancePreset x-small (templates/presets.yaml) has no openeverest.io/contract-version annotation; include \"openeverest.contract.annotations\", from templates/_openeverest_contract.tpl, in its metadata.annotations",
+			},
+		},
+		"BackupClass generated before the sync wave": {
+			files: with(stampedChart(), map[string]string{
+				"generated/backupclasses/pbm.yaml": "apiVersion: backup.openeverest.io/v1alpha1\nkind: BackupClass\nmetadata:\n  name: pbm\n  annotations:\n    openeverest.io/contract-version: " + released + "\n",
+			}),
+			wantStamped: []string{"Chart.yaml", "Provider x (templates/provider.yaml)"},
+			wantProblems: []string{
+				"BackupClass pbm (templates/backupclasses.yaml) is at Argo CD sync wave 0, not -1; run `make generate`, which stamps the BackupClasses it generates",
+			},
+		},
+		"stamped object at another sync wave": {
+			files: with(stampedChart(), map[string]string{
+				"templates/classes.yaml": `apiVersion: monitoring.openeverest.io/v1alpha1
+kind: MonitoringClass
+metadata:
+  name: pmm
+  annotations:
+    openeverest.io/contract-version: "` + released + `"
+    argocd.argoproj.io/sync-wave: "-3"
+`,
+			}),
+			wantStamped: []string{
+				"Chart.yaml",
+				"BackupClass pbm (templates/backupclasses.yaml)",
+				"Provider x (templates/provider.yaml)",
+			},
+			wantProblems: []string{
+				"MonitoringClass pmm (templates/classes.yaml) is at Argo CD sync wave -3, not -1; include \"openeverest.contract.annotations\", from templates/_openeverest_contract.tpl, in its metadata.annotations",
+			},
+		},
+		"stamped with another core and at another sync wave": {
+			files: with(stampedChart(), map[string]string{
+				"templates/classes.yaml": `apiVersion: monitoring.openeverest.io/v1alpha1
+kind: MonitoringClass
+metadata:
+  name: pmm
+  annotations:
+    openeverest.io/contract-version: "2.0.0-alpha.2"
+`,
+			}),
+			wantStamped: []string{
+				"Chart.yaml",
+				"BackupClass pbm (templates/backupclasses.yaml)",
+				"Provider x (templates/provider.yaml)",
+			},
+			wantProblems: []string{
+				"MonitoringClass pmm (templates/classes.yaml) is stamped 2.0.0-alpha.2, but this provider-sdk builds against 2.0.0-alpha.1; run `make generate`",
+				"MonitoringClass pmm (templates/classes.yaml) is at Argo CD sync wave 0, not -1; include \"openeverest.contract.annotations\", from templates/_openeverest_contract.tpl, in its metadata.annotations",
+			},
+		},
+		"workloads after the stamped objects": {
+			files: with(stampedChart(), map[string]string{
+				"templates/deployment.yaml": deployment("    argocd.argoproj.io/sync-wave: \"0\"\n") + "---\n" +
+					"apiVersion: apps/v1\nkind: StatefulSet\nmetadata:\n  name: s\n  annotations:\n    argocd.argoproj.io/sync-wave: \"5\"\n",
+				"templates/hooks.yaml": `apiVersion: batch/v1
+kind: Job
+metadata:
+  name: preflight
+  annotations:
+    helm.sh/hook: pre-upgrade
+    helm.sh/hook-weight: "-5"
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: argo-presync
+  annotations:
+    argocd.argoproj.io/hook: PreSync
+    argocd.argoproj.io/sync-wave: "-1"
+`,
+			}),
+			wantStamped: []string{
+				"Chart.yaml",
+				"BackupClass pbm (templates/backupclasses.yaml)",
+				"Provider x (templates/provider.yaml)",
+			},
+		},
+		"workloads at or before the stamped objects": {
+			files: with(stampedChart(), map[string]string{
+				"templates/deployment.yaml": deployment("    argocd.argoproj.io/sync-wave: \"-1\"\n"),
+				"templates/workloads.yaml": `apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: d
+  annotations:
+    argocd.argoproj.io/sync-wave: "-2"
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: c
+  annotations:
+    helm.sh/hook-weight: "-1"
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: p
+  annotations:
+    argocd.argoproj.io/hook: Sync,PostSync
+    argocd.argoproj.io/sync-wave: "-10"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: not-a-workload
+  annotations:
+    argocd.argoproj.io/sync-wave: "-5"
+`,
+				"charts/operator/Chart.yaml": "apiVersion: v2\nname: operator\nversion: 0.1.0\n",
+				"charts/operator/templates/deployment.yaml": `apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: operator
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+---
+apiVersion: core.openeverest.io/v1alpha1
+kind: Provider
+metadata:
+  name: of-the-subchart
+`,
+			}),
+			wantStamped: []string{
+				"Chart.yaml",
+				"BackupClass pbm (templates/backupclasses.yaml)",
+				"Provider x (templates/provider.yaml)",
+			},
+			wantProblems: []string{
+				"Deployment operator (charts/operator/templates/deployment.yaml) is at Argo CD sync wave -1; put it after wave -1, that of the objects OpenEverest checks, so that Argo CD stops the sync before it runs when OpenEverest refuses one of them",
+				"Deployment provider-x (templates/deployment.yaml) is at Argo CD sync wave -1; put it after wave -1, that of the objects OpenEverest checks, so that Argo CD stops the sync before it runs when OpenEverest refuses one of them",
+				"DaemonSet d (templates/workloads.yaml) is at Argo CD sync wave -2; put it after wave -1, that of the objects OpenEverest checks, so that Argo CD stops the sync before it runs when OpenEverest refuses one of them",
+				"CronJob c (templates/workloads.yaml) is at Argo CD sync wave -1; put it after wave -1, that of the objects OpenEverest checks, so that Argo CD stops the sync before it runs when OpenEverest refuses one of them",
+				"Pod p (templates/workloads.yaml) is at Argo CD sync wave -10; put it after wave -1, that of the objects OpenEverest checks, so that Argo CD stops the sync before it runs when OpenEverest refuses one of them",
 			},
 		},
 		"no Provider": {
@@ -306,4 +489,68 @@ func TestRunScaffoldedChart(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, res.Problems)
 	assert.Equal(t, []string{"Chart.yaml", "Provider test-db (templates/provider.yaml)"}, res.Stamped)
+
+	// The scaffolded presets template stamps the presets it renders.
+	valuesFile := filepath.Join(chartDir, "values.yaml")
+	values, err := os.ReadFile(valuesFile)
+	require.NoError(t, err)
+	require.Contains(t, string(values), "\npresets: []\n")
+	values = []byte(strings.Replace(string(values), "\npresets: []\n", "\npresets:\n  - name: small\n    enabled: true\n    spec: {}\n", 1))
+	require.NoError(t, os.WriteFile(valuesFile, values, 0o600))
+
+	res, err = Run(Options{ChartDir: chartDir, ContractVersion: released})
+	require.NoError(t, err)
+	assert.Empty(t, res.Problems)
+	assert.Equal(t, []string{
+		"Chart.yaml",
+		"ClusterInstancePreset test-db-small (templates/clusterinstancepresets.yaml)",
+		"Provider test-db (templates/provider.yaml)",
+	}, res.Stamped)
+}
+
+func TestSyncWave(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		annotations map[string]string
+		want        int
+	}{
+		"none":                            {want: 0},
+		"sync wave":                       {annotations: map[string]string{"argocd.argoproj.io/sync-wave": "-1"}, want: -1},
+		"Helm hook weight":                {annotations: map[string]string{"helm.sh/hook-weight": "-5"}, want: -5},
+		"sync wave over Helm hook weight": {annotations: map[string]string{"argocd.argoproj.io/sync-wave": "2", "helm.sh/hook-weight": "-5"}, want: 2},
+		"not an integer falls back":       {annotations: map[string]string{"argocd.argoproj.io/sync-wave": " -1", "helm.sh/hook-weight": "3"}, want: 3},
+		"nothing an integer":              {annotations: map[string]string{"argocd.argoproj.io/sync-wave": "first"}, want: 0},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			assert.Equal(t, tt.want, syncWave(tt.annotations))
+		})
+	}
+}
+
+func TestSyncPhase(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		annotations map[string]string
+		want        bool
+	}{
+		"not a hook":                        {want: true},
+		"Helm hook":                         {annotations: map[string]string{"helm.sh/hook": "pre-install,pre-upgrade"}, want: false},
+		"Argo CD PreSync hook":              {annotations: map[string]string{"argocd.argoproj.io/hook": "PreSync"}, want: false},
+		"Argo CD Sync hook":                 {annotations: map[string]string{"argocd.argoproj.io/hook": "PostSync, Sync"}, want: true},
+		"Argo CD hook over Helm hook":       {annotations: map[string]string{"argocd.argoproj.io/hook": "Sync", "helm.sh/hook": "pre-install"}, want: true},
+		"Argo CD Skip":                      {annotations: map[string]string{"argocd.argoproj.io/hook": "Skip"}, want: false},
+		"Helm hook weight without the hook": {annotations: map[string]string{"helm.sh/hook-weight": "-1"}, want: true},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			assert.Equal(t, tt.want, syncPhase(tt.annotations))
+		})
+	}
 }

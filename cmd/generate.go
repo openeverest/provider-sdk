@@ -69,9 +69,11 @@ static type analysis to generate OpenAPI schemas.
 It also stamps the chart with the contract version of the OpenEverest the
 provider is built against: the annotation openeverest.io/contract-version in
 Chart.yaml and on the generated BackupClasses, and the helper
-templates/_openeverest_contract.tpl that renders it on the Provider. The
-value is that of the core this binary links, so generate refuses to run when
-it is not the core the module requires: run it as ` + "`go tool provider-sdk`" + `.`,
+templates/_openeverest_contract.tpl that renders it on the Provider and the
+other objects OpenEverest interprets. Stamped objects are also put at Argo CD
+sync wave -1, before the chart's workloads. The value is that of the core
+this binary links, so generate refuses to run when it is not the core the
+module requires: run it as ` + "`go tool provider-sdk`" + `.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if _, err := checkLinkedCore(); err != nil {
 			return err

@@ -38,18 +38,33 @@ import (
 
 // CoreInterpreted lists the kinds of objects an extension applies that
 // OpenEverest core interprets, with the CRDs that serve them. Each must
-// carry the stamp of the core the extension was built against.
+// carry the stamp of the core the extension was built against. A provider's
+// ClusterInstancePresets are written for its parameter schemas, so they are
+// stamped too: those of a newer provider must not land next to an older
+// Provider.
 var CoreInterpreted = map[schema.GroupKind]string{
 	{Group: corev1alpha1.GroupVersion.Group, Kind: "Provider"}:              "providers." + corev1alpha1.GroupVersion.Group,
+	{Group: corev1alpha1.GroupVersion.Group, Kind: "ClusterInstancePreset"}: "clusterinstancepresets." + corev1alpha1.GroupVersion.Group,
 	{Group: backupv1alpha1.GroupVersion.Group, Kind: "BackupClass"}:         "backupclasses." + backupv1alpha1.GroupVersion.Group,
 	{Group: backupv1alpha1.GroupVersion.Group, Kind: "BackupStorageClass"}:  "backupstorageclasses." + backupv1alpha1.GroupVersion.Group,
 	{Group: monitoringv1alpha1.GroupVersion.Group, Kind: "MonitoringClass"}: "monitoringclasses." + monitoringv1alpha1.GroupVersion.Group,
 }
 
+// Workloads lists the kinds of objects that run code in the cluster.
+var Workloads = map[schema.GroupKind]bool{
+	{Group: "apps", Kind: "Deployment"}:  true,
+	{Group: "apps", Kind: "StatefulSet"}: true,
+	{Group: "apps", Kind: "DaemonSet"}:   true,
+	{Group: "batch", Kind: "Job"}:        true,
+	{Group: "batch", Kind: "CronJob"}:    true,
+	{Group: "", Kind: "Pod"}:             true,
+}
+
 // Object is an object a chart renders.
 type Object struct {
-	// Source is the template that rendered the object, e.g.
-	// templates/provider.yaml.
+	// Source is the template that rendered the object, relative to the
+	// chart, e.g. templates/provider.yaml, or
+	// charts/operator/templates/deployment.yaml for a subchart's.
 	Source      string
 	GroupKind   schema.GroupKind
 	Name        string
@@ -62,11 +77,22 @@ func (o Object) CoreInterpreted() bool {
 	return ok
 }
 
+// Workload reports whether o runs code in the cluster.
+func (o Object) Workload() bool {
+	return Workloads[o.GroupKind]
+}
+
+// Own reports whether one of the chart's own templates rendered o, rather
+// than one of its subcharts', such as a bundled operator's.
+func (o Object) Own() bool {
+	return strings.HasPrefix(o.Source, "templates/")
+}
+
 // Render renders the chart in dir with its default values, as a fresh
-// install would, and returns the objects its own templates apply, in
-// template order; those of its subcharts belong to other charts. Nothing is
-// read from a cluster: lookup returns nothing. Templates named in skip,
-// relative to the chart (e.g. templates/check.yaml), are not rendered.
+// install would, and returns the objects it applies, its subcharts'
+// included, in template order. Nothing is read from a cluster: lookup
+// returns nothing. Templates named in skip, relative to the chart (e.g.
+// templates/check.yaml), are not rendered.
 func Render(dir string, skip ...string) ([]Object, error) {
 	chrt, err := loader.Load(dir)
 	if err != nil {
@@ -118,9 +144,6 @@ func Render(dir string, skip ...string) ([]Object, error) {
 		// Engine keys are prefixed with the chart name, e.g.
 		// provider-x/templates/provider.yaml.
 		source := strings.TrimPrefix(name, chrt.Name()+"/")
-		if !strings.HasPrefix(source, "templates/") {
-			continue
-		}
 		for _, k := range keys {
 			o, ok, err := decode(docs[k])
 			if err != nil {

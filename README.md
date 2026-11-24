@@ -49,7 +49,7 @@ provider-sdk init
 | `provider-sdk add backup` | Add backup and restore implementation stubs |
 | `provider-sdk add backupclass` | Add a BackupClass definition |
 | `provider-sdk generate` | Build the Provider CR spec from `definition/` and stamp the chart with the OpenEverest it is built against |
-| `provider-sdk verify` | Check the chart is stamped; with `--release`, that it is built against a released OpenEverest |
+| `provider-sdk verify` | Check the chart is stamped, and that Argo CD applies the stamped objects before any workload; with `--release`, that it is built against a released OpenEverest |
 
 Each command prints its own flags with `--help`. `generate` and `verify` are normally invoked
 through `make generate` and `make verify`, which run them as `go tool provider-sdk`, built

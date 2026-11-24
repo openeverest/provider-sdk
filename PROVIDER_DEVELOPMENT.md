@@ -2538,15 +2538,29 @@ stamps it, so it cannot drift from the code the provider is built against.
 - The generated BackupClasses carry the same annotation.
 - `templates/_openeverest_contract.tpl` defines the helper
   `openeverest.contract.annotations`, which renders the annotation from
-  `Chart.yaml`. `templates/provider.yaml` includes it, and so must any other
+  `Chart.yaml`. `templates/provider.yaml` and
+  `templates/clusterinstancepresets.yaml` include it, and so must any other
   object OpenEverest interprets that you add to the chart by hand
-  (`BackupStorageClass`, `MonitoringClass`):
+  (`BackupStorageClass`, `MonitoringClass`, `ClusterInstancePreset`). Presets
+  are stamped because they are written for your parameter schemas: the
+  presets of a newer build must not land next to an older `Provider`. Inside a
+  `range`, pass the root context, `$`:
 
   ```yaml
   metadata:
     annotations:
       {{- include "openeverest.contract.annotations" . | nindent 4 }}
   ```
+
+Every stamped object is also put at Argo CD sync wave `-1`
+(`argocd.argoproj.io/sync-wave: "-1"`): the generated BackupClasses carry it,
+and the helper renders it. The OpenEverest chart applies its CRDs at wave
+`-2`, and OpenEverest refuses a stamped object it does not support when it is
+applied. Argo CD applies one wave at a time and stops at the first that fails,
+so the stamped objects must come after the CRDs, whose versions they are
+checked against, and before anything that runs: your Deployment, and any
+operator your chart bundles, stay at wave `0` or later and never start next
+to a refused `Provider`. Helm and Flux ignore the annotation.
 
 The stamp is the version of the core that `provider-sdk` links. Run as
 `go tool provider-sdk`, which `go generate` and the Makefile do, it builds
@@ -2563,8 +2577,12 @@ that OpenEverest is released.
 
 `go tool provider-sdk verify` renders the chart with its default values,
 without a cluster, and checks that `Chart.yaml` and every `Provider`,
-`BackupClass`, `BackupStorageClass` and `MonitoringClass` it renders carry the
-stamp. `make verify` runs it in CI. The release workflow runs
+`BackupClass`, `BackupStorageClass`, `MonitoringClass` and
+`ClusterInstancePreset` it renders carry the stamp and are at sync wave `-1`,
+and that no workload (`Deployment`, `StatefulSet`, `DaemonSet`, `Job`,
+`CronJob`, `Pod`), a subchart's included, is at wave `-1` or before. Hooks,
+which Argo CD runs in phases of their own, are not checked against the wave.
+`make verify` runs it in CI. The release workflow runs
 `go tool provider-sdk verify --release` before packaging the chart, which also
 fails on a development value and on a `go.mod` that requires a pseudo-version
 of OpenEverest or replaces it: a release tells users the oldest OpenEverest it
@@ -2593,6 +2611,9 @@ instead of filling in every field manually. Each preset is rendered from
 ClusterInstancePresets are defined in `charts/<provider-name>/values.yaml` under the `presets:` key
 and deployed as `ClusterInstancePreset` Kubernetes resources when the Helm chart is installed.
 The final resource name is `<shortName>-<preset.name>` (e.g., `psmdb-standalone`).
+The template stamps each preset with the OpenEverest the provider is built against, like the
+`Provider` (see [Compatibility with OpenEverest](#compatibility-with-openeverest)); keep the
+`openeverest.contract.annotations` include if you rewrite it.
 
 ```
 values.yaml presets:   →   clusterinstancepresets.yaml template   →   InstancePreset CR

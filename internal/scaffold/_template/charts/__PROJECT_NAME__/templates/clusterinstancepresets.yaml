@@ -8,6 +8,8 @@ metadata:
   labels:
     {{- include "[[ .ProjectName ]].labels" $ | nindent 4 }}
     app.kubernetes.io/component: preset
+  annotations:
+    {{- include "openeverest.contract.annotations" $ | nindent 4 }}
 spec:
   {{- toYaml $preset.spec | nindent 2 }}
 {{- end }}

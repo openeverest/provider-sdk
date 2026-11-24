@@ -66,6 +66,7 @@ metadata:
 {{- end }}
 `,
 		"templates/service.yaml": "apiVersion: v1\nkind: Service\nmetadata:\n  name: svc\n",
+		"templates/presets.yaml": "apiVersion: core.openeverest.io/v1alpha1\nkind: ClusterInstancePreset\nmetadata:\n  name: p\n",
 		"templates/skipped.yaml": "{{ fail \"rendered a skipped template\" }}\n",
 		"templates/NOTES.txt":    "kind: NotAnObject\n",
 		"charts/sub/Chart.yaml":  "apiVersion: v2\nname: sub\nversion: 0.1.0\n",
@@ -74,27 +75,31 @@ kind: Provider
 metadata:
   name: subchart
 `,
+		"charts/sub/templates/deployment.yaml": "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: operator\n",
 	})
 
 	objects, err := Render(dir, "templates/skipped.yaml")
 
 	require.NoError(t, err)
 	type summary struct {
-		Source, Kind, Name string
-		CoreInterpreted    bool
+		Source, Kind, Name             string
+		CoreInterpreted, Workload, Own bool
 	}
 	got := make([]summary, 0, len(objects))
 	for _, o := range objects {
-		got = append(got, summary{o.Source, o.GroupKind.Kind, o.Name, o.CoreInterpreted()})
+		got = append(got, summary{o.Source, o.GroupKind.Kind, o.Name, o.CoreInterpreted(), o.Workload(), o.Own()})
 	}
 	assert.Equal(t, []summary{
-		{"templates/classes.yaml", "BackupClass", "b", true},
-		{"templates/classes.yaml", "MonitoringClass", "m", true},
-		{"templates/provider.yaml", "Provider", "x", true},
-		{"templates/service.yaml", "Service", "svc", false},
-	}, got, "objects of the chart's own templates, in template order, without subcharts")
-	assert.Equal(t, map[string]string{"secret": "absent"}, objects[2].Annotations, "lookup finds nothing without a cluster")
-	assert.Equal(t, schema.GroupKind{Group: "core.openeverest.io", Kind: "Provider"}, objects[2].GroupKind)
+		{"charts/sub/templates/deployment.yaml", "Deployment", "operator", false, true, false},
+		{"charts/sub/templates/provider.yaml", "Provider", "subchart", true, false, false},
+		{"templates/classes.yaml", "BackupClass", "b", true, false, true},
+		{"templates/classes.yaml", "MonitoringClass", "m", true, false, true},
+		{"templates/presets.yaml", "ClusterInstancePreset", "p", true, false, true},
+		{"templates/provider.yaml", "Provider", "x", true, false, true},
+		{"templates/service.yaml", "Service", "svc", false, false, true},
+	}, got, "objects of the chart's templates and its subcharts', in template order")
+	assert.Equal(t, map[string]string{"secret": "absent"}, objects[5].Annotations, "lookup finds nothing without a cluster")
+	assert.Equal(t, schema.GroupKind{Group: "core.openeverest.io", Kind: "Provider"}, objects[5].GroupKind)
 }
 
 func TestRenderErrors(t *testing.T) {

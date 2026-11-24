@@ -47,13 +47,18 @@ var verifyCmd = &cobra.Command{
 	SilenceUsage: true,
 	Long: `Render the Helm chart with its default values, without a cluster, and
 check that Chart.yaml and every object OpenEverest interprets (Provider,
-BackupClass, BackupStorageClass, MonitoringClass) carry the annotation
-openeverest.io/contract-version with the contract version of the OpenEverest
-this provider is built against, the core its go.mod requires.
+BackupClass, BackupStorageClass, MonitoringClass, ClusterInstancePreset) carry
+the annotation openeverest.io/contract-version with the contract version of the
+OpenEverest this provider is built against, the core its go.mod requires.
 
-provider-sdk generate writes the stamp into Chart.yaml and the generated
-BackupClasses; chart templates render it on other objects with
-{{ include "openeverest.contract.annotations" . }}.
+Those objects must also be at Argo CD sync wave -1, and no workload
+(Deployment, StatefulSet, DaemonSet, Job, CronJob, Pod), a subchart's
+included, at -1 or before: Argo CD then applies the objects OpenEverest checks
+before anything runs, and stops the sync when OpenEverest refuses one.
+
+provider-sdk generate writes the stamp into Chart.yaml, and the stamp and the
+wave on the generated BackupClasses; chart templates render both on other
+objects with {{ include "openeverest.contract.annotations" . }}.
 
 With --release, also fail when the provider is built against an unreleased
 OpenEverest: a development contract version, or a go.mod that requires a
