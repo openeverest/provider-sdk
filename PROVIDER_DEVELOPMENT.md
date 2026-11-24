@@ -2584,9 +2584,12 @@ and that no workload (`Deployment`, `StatefulSet`, `DaemonSet`, `Job`,
 which Argo CD runs in phases of their own, are not checked against the wave.
 `make verify` runs it in CI. The release workflow runs
 `go tool provider-sdk verify --release` before packaging the chart, which also
-fails on a development value and on a `go.mod` that requires a pseudo-version
-of OpenEverest or replaces it: a release tells users the oldest OpenEverest it
-works with, so it must be built against an OpenEverest they can install.
+fails on a development value and on a `go.mod` that replaces OpenEverest: a
+release tells users the oldest OpenEverest it works with, so that OpenEverest
+must be one they can install. Requiring a commit of OpenEverest's `main` branch
+(a pseudo-version) is fine while `main`'s contract is still that of a release:
+the stamp then names that release, and the provider can take a fix from `main`
+without waiting for the next OpenEverest release.
 
 ### Images and Registry
 

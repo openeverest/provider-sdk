@@ -60,10 +60,11 @@ provider-sdk generate writes the stamp into Chart.yaml, and the stamp and the
 wave on the generated BackupClasses; chart templates render both on other
 objects with {{ include "openeverest.contract.annotations" . }}.
 
-With --release, also fail when the provider is built against an unreleased
-OpenEverest: a development contract version, or a go.mod that requires a
-pseudo-version of OpenEverest or replaces it. A release names the oldest
-OpenEverest it works with, which users must be able to install.
+With --release, also fail when the stamp is a development contract version
+(OpenEverest's contract changed since its last release) or when go.mod replaces
+OpenEverest. A release names the oldest OpenEverest it works with, which users
+must be able to install. Requiring a commit of OpenEverest's main branch is
+fine while main's contract is still that of a release.
 
 Run it as ` + "`go tool provider-sdk verify`" + ` from the provider's module.`,
 	RunE: func(cmd *cobra.Command, args []string) error {

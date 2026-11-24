@@ -33,7 +33,6 @@ import (
 	"strings"
 
 	"golang.org/x/mod/modfile"
-	"golang.org/x/mod/module"
 
 	"github.com/openeverest/openeverest/v2/contract"
 )
@@ -136,19 +135,23 @@ func CheckCore(linked, required Module) (warning string, err error) {
 
 // ReleaseProblems returns why a provider built against required, stamped
 // with version, must not be released. A release is installed by users, so
-// the OpenEverest it names must be one they can install: a released core.
+// the OpenEverest it names must be one they can install: its stamp must be a
+// released contract version. The core commit itself may be unreleased: a
+// provider can take a fix from OpenEverest's main branch while main's
+// contract is still that of a release, because the stamp then names that
+// release. A provider is a leaf module, so pinning a commit does not leak
+// into anyone else's build; libraries such as this SDK require released
+// tags instead.
 func ReleaseProblems(required Module, version string) []string {
 	var problems []string
 	if contract.IsDevelopment(version) {
-		problems = append(problems, fmt.Sprintf("built against an unreleased OpenEverest (%s); require a released OpenEverest in go.mod", version))
+		problems = append(problems, fmt.Sprintf("built against an unreleased OpenEverest (%s): its contract has changed since the last release; require an OpenEverest whose contract is a released one", version))
 	}
 	switch {
 	case required.Replace != nil:
-		problems = append(problems, fmt.Sprintf("go.mod replaces %s (%s); require a released OpenEverest instead", CoreModule, required))
+		problems = append(problems, fmt.Sprintf("go.mod replaces %s (%s); require it directly instead", CoreModule, required))
 	case required.local():
-		problems = append(problems, fmt.Sprintf("%s comes from a local directory; require a released OpenEverest in go.mod", CoreModule))
-	case module.IsPseudoVersion(required.Version):
-		problems = append(problems, fmt.Sprintf("go.mod requires %s at the pseudo-version %s, an unreleased commit; require a released OpenEverest", CoreModule, required.Version))
+		problems = append(problems, fmt.Sprintf("%s comes from a local directory; require it in go.mod instead", CoreModule))
 	}
 	return problems
 }

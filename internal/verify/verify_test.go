@@ -391,8 +391,7 @@ metadata:
 			core:        compat.Module{Path: compat.CoreModule, Version: "v2.0.0-dev.2.0.20261123230825-5a38fe56add1"},
 			wantStamped: []string{"Chart.yaml", "Provider x (templates/provider.yaml)"},
 			wantProblems: []string{
-				"built against an unreleased OpenEverest (2.0.0-alpha.1.dev); require a released OpenEverest in go.mod",
-				"go.mod requires github.com/openeverest/openeverest/v2 at the pseudo-version v2.0.0-dev.2.0.20261123230825-5a38fe56add1, an unreleased commit; require a released OpenEverest",
+				"built against an unreleased OpenEverest (2.0.0-alpha.1.dev): its contract has changed since the last release; require an OpenEverest whose contract is a released one",
 			},
 		},
 		"released value, pseudo-version core, release": {
@@ -403,9 +402,6 @@ metadata:
 				"Chart.yaml",
 				"BackupClass pbm (templates/backupclasses.yaml)",
 				"Provider x (templates/provider.yaml)",
-			},
-			wantProblems: []string{
-				"go.mod requires github.com/openeverest/openeverest/v2 at the pseudo-version v2.0.0-alpha.1.0.20261123230825-5a38fe56add1, an unreleased commit; require a released OpenEverest",
 			},
 		},
 	}

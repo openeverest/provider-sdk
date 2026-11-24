@@ -144,12 +144,12 @@ func TestReleaseProblems(t *testing.T) {
 			required: core("v2.0.0"), version: "2.0.1-dev",
 			want: []string{"built against an unreleased OpenEverest (2.0.1-dev)"},
 		},
-		"pseudo-version": {
+		"pseudo-version, contract changed since the last release": {
 			required: core(pseudo), version: "2.0.0-alpha.1.dev",
-			want: []string{
-				"built against an unreleased OpenEverest (2.0.0-alpha.1.dev)",
-				"go.mod requires " + CoreModule + " at the pseudo-version " + pseudo,
-			},
+			want: []string{"built against an unreleased OpenEverest (2.0.0-alpha.1.dev)"},
+		},
+		"pseudo-version, contract of a release": {
+			required: core(pseudo), version: "2.0.0-alpha.1",
 		},
 		"replaced by a fork release": {
 			required: replaced(alpha1, "github.com/fork/openeverest/v2", "v2.0.0-alpha.1"), version: "2.0.0-alpha.1",
