@@ -137,16 +137,19 @@ func TestReleaseProblems(t *testing.T) {
 			required: core(alpha1), version: "2.0.0-alpha.1",
 		},
 		"development contract version": {
-			required: core(alpha1), version: "2.0.0-alpha.1.dev",
-			want: []string{"built against an unreleased OpenEverest (2.0.0-alpha.1.dev)"},
+			required: core(alpha1), version: "2.0.0-alpha.1.next",
+			want: []string{"built against an unreleased OpenEverest (2.0.0-alpha.1.next)"},
 		},
 		"development contract version after a GA release": {
-			required: core("v2.0.0"), version: "2.0.1-dev",
-			want: []string{"built against an unreleased OpenEverest (2.0.1-dev)"},
+			required: core("v2.0.0"), version: "2.1.0-alpha.0",
+			want: []string{"built against an unreleased OpenEverest (2.1.0-alpha.0)"},
 		},
 		"pseudo-version, contract changed since the last release": {
-			required: core(pseudo), version: "2.0.0-alpha.1.dev",
-			want: []string{"built against an unreleased OpenEverest (2.0.0-alpha.1.dev)"},
+			required: core(pseudo), version: "2.0.0-alpha.1.next",
+			want: []string{"built against an unreleased OpenEverest (2.0.0-alpha.1.next)"},
+		},
+		"core dev build": {
+			required: core("v2.0.0-dev.4"), version: "2.0.0-dev.4",
 		},
 		"pseudo-version, contract of a release": {
 			required: core(pseudo), version: "2.0.0-alpha.1",
@@ -182,10 +185,11 @@ func TestFloor(t *testing.T) {
 	t.Parallel()
 
 	tests := map[string]string{
-		"2.0.0-alpha.1":     "This build works with OpenEverest 2.0.0-alpha.1 and later.",
-		"2.0.0":             "This build works with OpenEverest 2.0.0 and later.",
-		"2.0.0-alpha.1.dev": "Built against an unreleased OpenEverest (2.0.0-alpha.1.dev); it cannot be published until that OpenEverest is released.",
-		"2.0.1-dev":         "Built against an unreleased OpenEverest (2.0.1-dev); it cannot be published until that OpenEverest is released.",
+		"2.0.0-alpha.1":      "This build works with OpenEverest 2.0.0-alpha.1 and later.",
+		"2.0.0":              "This build works with OpenEverest 2.0.0 and later.",
+		"2.0.0-dev.4":        "This build works with OpenEverest 2.0.0-dev.4 and later.",
+		"2.0.0-alpha.1.next": "Built against an unreleased OpenEverest (2.0.0-alpha.1.next); it cannot be published until that OpenEverest is released.",
+		"2.1.0-alpha.0":      "Built against an unreleased OpenEverest (2.1.0-alpha.0); it cannot be published until that OpenEverest is released.",
 	}
 	for version, want := range tests {
 		t.Run(version, func(t *testing.T) {

@@ -31,7 +31,7 @@ import (
 
 const (
 	released    = "2.0.0-alpha.1"
-	development = "2.0.0-alpha.1.dev"
+	development = "2.0.0-alpha.1.next"
 )
 
 var releasedCore = compat.Module{Path: compat.CoreModule, Version: "v2.0.0-alpha.1"}
@@ -391,7 +391,7 @@ metadata:
 			core:        compat.Module{Path: compat.CoreModule, Version: "v2.0.0-dev.2.0.20261123230825-5a38fe56add1"},
 			wantStamped: []string{"Chart.yaml", "Provider x (templates/provider.yaml)"},
 			wantProblems: []string{
-				"built against an unreleased OpenEverest (2.0.0-alpha.1.dev): its contract has changed since the last release; require an OpenEverest whose contract is a released one",
+				"built against an unreleased OpenEverest (2.0.0-alpha.1.next): its contract has changed since the last release; require an OpenEverest whose contract is a released one",
 			},
 		},
 		"released value, pseudo-version core, release": {

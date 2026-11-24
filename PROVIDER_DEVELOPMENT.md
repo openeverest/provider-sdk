@@ -2571,9 +2571,19 @@ the core with a local directory, they warn and stamp the version of that tree.
 
 After generating, `provider-sdk` prints the oldest OpenEverest the build works
 with. Built against an unreleased OpenEverest (a `go.mod` that requires a
-commit of core rather than a release), the stamp is a development value such as
-`2.0.0-alpha.1.dev`, and it says that the provider cannot be published until
-that OpenEverest is released.
+commit of core rather than a release) whose contract has changed since the
+last release, the stamp is a development value, and it says that the provider
+cannot be published until that OpenEverest is released. OpenEverest's `main`
+branch carries one between releases, which sorts after the last release and
+before any release that can follow it:
+
+- `R.next` after a pre-release `R`, such as `2.0.0-alpha.1.next`: SemVer sorts
+  nothing between two pre-releases but `R` with more identifiers;
+- `X.(Y+1).0-alpha.0` after a release `X.Y.Z`, such as `2.1.0-alpha.0`:
+  patches come from release branches, so `main` builds the next minor release.
+
+No OpenEverest release is ever named either way. Core builds such as
+`2.0.0-dev.4` are releases, not development values.
 
 `go tool provider-sdk verify` renders the chart with its default values,
 without a cluster, and checks that `Chart.yaml` and every `Provider`,
