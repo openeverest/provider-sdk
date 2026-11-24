@@ -34,12 +34,14 @@ Commands:
   add topology  Add a new topology to an existing provider project
   generate      Generate Provider CR spec from definition/ files
   verify        Check the chart is stamped with the OpenEverest it is built against`,
+	// Execute prints the error once; cobra would print it a second time.
+	SilenceErrors: true,
 }
 
 // Execute executes the root command.
 func Execute() {
 	if err := rootCmd.Execute(); err != nil {
-		fmt.Fprintln(os.Stderr, err)
+		fmt.Fprintln(os.Stderr, "Error:", err)
 		os.Exit(1)
 	}
 }
