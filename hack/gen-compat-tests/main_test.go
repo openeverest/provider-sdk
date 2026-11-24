@@ -78,6 +78,65 @@ func TestVectorsSuite(t *testing.T) {
 	}
 }
 
+func TestDevelopmentSuite(t *testing.T) {
+	t.Parallel()
+
+	data, err := developmentSuite()
+	require.NoError(t, err)
+	var got suite
+	require.NoError(t, yaml.Unmarshal(data, &got))
+	var v vectors
+	require.NoError(t, json.Unmarshal(contract.OrderVectors, &v))
+	require.NotEmpty(t, v.Development)
+
+	helper := map[string]string{}
+	stamps := map[string]string{}
+	minimums := map[string]string{}
+	for _, tt := range got.Tests {
+		require.Len(t, tt.Asserts, 1, tt.It)
+		switch tt.Template {
+		case "templates/development.yaml":
+			helper[tt.Set["version"]] = tt.Asserts[0].(map[string]any)["equal"].(map[string]any)["value"].(string)
+		case "templates/check.yaml":
+			pattern := tt.Asserts[0].(map[string]any)["failedTemplate"].(map[string]any)["errorPattern"].(string)
+			annotations := tt.KubernetesProvider.Objects[0].(map[string]any)["metadata"].(map[string]any)["annotations"].(map[string]any)
+			if minimum := annotations[contract.MinVersionAnnotation].(string); minimum == oldestCore {
+				stamps[tt.Set["stamp"]] = pattern
+			} else {
+				assert.Equal(t, oldestCore, tt.Set["stamp"], tt.It)
+				minimums[minimum] = pattern
+			}
+		default:
+			t.Fatalf("%s: unexpected template %q", tt.It, tt.Template)
+		}
+	}
+
+	var development, release int
+	for _, c := range v.Development {
+		isDevelopment := contract.IsDevelopment(c.Version)
+		want := ""
+		if isDevelopment {
+			want = "true"
+			development++
+		} else {
+			release++
+		}
+		assert.Equal(t, want, helper[c.Version], "development %q", c.Version)
+		if !contract.Valid(c.Version) {
+			assert.NotContains(t, stamps, c.Version)
+			assert.NotContains(t, minimums, c.Version)
+			continue
+		}
+		require.Contains(t, stamps, c.Version)
+		require.Contains(t, minimums, c.Version)
+		assert.Equal(t, isDevelopment, strings.Contains(stamps[c.Version], "unreleased"), "message for the stamp %q: %q", c.Version, stamps[c.Version])
+		assert.Equal(t, isDevelopment, strings.Contains(minimums[c.Version], "unreleased"), "message for the minimum %q: %q", c.Version, minimums[c.Version])
+	}
+	assert.Len(t, helper, len(v.Development), "a helper case per row")
+	assert.Positive(t, development, "no development value")
+	assert.Positive(t, release, "no value that is not a development value")
+}
+
 func TestAcknowledgeSuite(t *testing.T) {
 	t.Parallel()
 

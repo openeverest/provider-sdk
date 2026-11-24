@@ -357,12 +357,19 @@ true
 
 {{/*
 openeverest.contract.development returns "true" when its argument is a
-development value, such as 2.0.0-alpha.1.dev or 2.0.1-dev: the version of an
-unreleased OpenEverest, which nobody can install.
+development value: the version OpenEverest's main branch carries between
+releases, which no release is ever named and nobody can install. It is a
+SemVer 2.0.0 version whose last pre-release identifier is next, such as
+2.0.0-alpha.1.next after the pre-release 2.0.0-alpha.1, or whose pre-release
+is exactly alpha.0, such as 2.1.0-alpha.0 after the release 2.0.0. Builds
+such as 2.0.0-dev.4 are releases.
 */}}
 {{- define "openeverest.contract.development" -}}
-{{- if and (include "openeverest.contract.valid" .) (has "dev" (splitList "." (semver .).Prerelease)) -}}
+{{- if include "openeverest.contract.valid" . -}}
+{{- $pre := (semver .).Prerelease -}}
+{{- if or (eq (splitList "." $pre | last) "next") (eq $pre "alpha.0") -}}
 true
+{{- end -}}
 {{- end -}}
 {{- end -}}
 

@@ -179,7 +179,7 @@ func TestAppliedCRDs(t *testing.T) {
 func TestCompatCheckPassesWithoutACluster(t *testing.T) {
 	t.Parallel()
 
-	for _, stamp := range []string{"2.1.0", "99.0.0", "2.0.0-alpha.1.dev", "", "v2"} {
+	for _, stamp := range []string{"2.1.0", "99.0.0", "2.0.0-alpha.1.next", "2.1.0-alpha.0", "", "v2"} {
 		t.Run(stamp, func(t *testing.T) {
 			t.Parallel()
 

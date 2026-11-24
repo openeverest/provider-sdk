@@ -2,10 +2,12 @@ provider:
   name: compat-test
 
 # Test-only inputs of templates/verdict.yaml, templates/check.yaml,
-# templates/acknowledgement.yaml and templates/acknowledged.yaml.
+# templates/acknowledgement.yaml, templates/acknowledged.yaml and
+# templates/development.yaml.
 ext: ""
 stamp: ""
 ack: ""
 contractVersion: ""
 coreVersion: ""
 list: ""
+version: ""

@@ -17,7 +17,8 @@ jobs:
   # The templates generate writes into provider charts check compatibility
   # with OpenEverest at render time. Their committed copies must match the
   # generator, and they must decide every case OpenEverest publishes, for its
-  # check and its acknowledgements, exactly as OpenEverest does.
+  # check, its development values and its acknowledgements, exactly as
+  # OpenEverest does.
   helm-unittest:
     name: Helm unit tests
     runs-on: ubuntu-latest
@@ -38,7 +39,7 @@ jobs:
           version: v3.22.1
 
       - name: Check the generated templates and suites are up to date
-        run: go test ./hack/gen-compat-tests/ ./internal/scaffold/ -run 'TestFilesAreFresh|TestVectorsSuite|TestAcknowledgeSuite|TestScaffoldContractTemplatesAreGenerated'
+        run: go test ./hack/gen-compat-tests/ ./internal/scaffold/ -run 'TestFilesAreFresh|TestVectorsSuite|TestDevelopmentSuite|TestAcknowledgeSuite|TestScaffoldContractTemplatesAreGenerated'
 
       - name: Run the helm-unittest suites
         run: make test-helm

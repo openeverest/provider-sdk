@@ -73,7 +73,7 @@ tests:
 
   - it: fails when OpenEverest is older than an unreleased stamp
     set:
-      stamp: "2.0.2-dev"
+      stamp: "2.1.0-alpha.0"
     kubernetesProvider:
       objects:
         - *providersOlder

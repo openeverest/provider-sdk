@@ -17,8 +17,8 @@
 // templates provider-sdk generate writes into a chart, in the scaffold and in
 // the helm-unittest fixture chart test/helm/openeverest-compat, and the
 // fixture's suites of the vectors OpenEverest publishes for its compatibility
-// check and its acknowledgements, so the Helm implementation decides every
-// case exactly as core does.
+// check, its development values and its acknowledgements, so the Helm
+// implementation decides every case exactly as core does.
 //
 // Run it from the module root: go run ./hack/gen-compat-tests
 package main
@@ -29,6 +29,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -50,6 +51,8 @@ const (
 	// check refuses it on any window of theirs, and only an acknowledgement
 	// lets it through.
 	newestStamp = "99.0.0"
+	// oldestCore is a version older than every version in the vectors.
+	oldestCore = "1.0.0"
 )
 
 func main() {
@@ -76,6 +79,10 @@ func Files() (map[string][]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+	development, err := developmentSuite()
+	if err != nil {
+		return nil, err
+	}
 	return map[string][]byte{
 		scaffoldChart + "/templates/" + generate.ContractHelperFile: []byte(generate.ContractHelper),
 		scaffoldChart + "/templates/" + generate.CompatCheckFile:    []byte(generate.CompatCheck([]string{providersCRD})),
@@ -83,13 +90,18 @@ func Files() (map[string][]byte, error) {
 		fixtureChart + "/templates/" + generate.CompatCheckFile:     []byte(generate.CompatCheck([]string{providersCRD, backupCRD})),
 		fixtureChart + "/tests/vectors_test.yaml":                   vectors,
 		fixtureChart + "/tests/acknowledge_vectors_test.yaml":       acknowledge,
+		fixtureChart + "/tests/development_vectors_test.yaml":       development,
 	}, nil
 }
 
 type vectors struct {
-	Order   []string `json:"order"`
-	Invalid []string `json:"invalid"`
-	Check   []struct {
+	Order       []string `json:"order"`
+	Invalid     []string `json:"invalid"`
+	Development []struct {
+		Version     string `json:"version"`
+		Development bool   `json:"development"`
+	} `json:"development"`
+	Check []struct {
 		Ext    string `json:"ext"`
 		Min    string `json:"min"`
 		Cur    string `json:"cur"`
@@ -206,20 +218,87 @@ func vectorsSuite() ([]byte, error) {
 	}
 
 	s := suite{
-		Suite:     "contract vectors",
-		Templates: []string{"templates/verdict.yaml"},
-		KubernetesProvider: &provider{
-			Scheme: map[string]any{
-				"apiextensions.k8s.io/v1/CustomResourceDefinition": map[string]any{
-					"gvr":        map[string]string{"group": "apiextensions.k8s.io", "version": "v1", "resource": "customresourcedefinitions"},
-					"namespaced": false,
-				},
-			},
-			Objects: []any{},
-		},
-		Tests: tests,
+		Suite:              "contract vectors",
+		Templates:          []string{"templates/verdict.yaml"},
+		KubernetesProvider: crdScheme(),
+		Tests:              tests,
 	}
 	return encode(s)
+}
+
+// developmentSuite returns the helm-unittest suite that runs every
+// "development" case of contract.OrderVectors:
+//   - on openeverest.contract.development itself, expecting the case's
+//     result;
+//   - when the case's version is valid, through the check, as the stamp on a
+//     core older than it and as the window of a core newer than a chart
+//     stamped oldestCore. The message calls a development value an
+//     unreleased OpenEverest build, and names any other version.
+//
+// Every expectation is also what contract.IsDevelopment and contract.Check
+// return, or generation fails.
+func developmentSuite() ([]byte, error) {
+	var v vectors
+	if err := json.Unmarshal(contract.OrderVectors, &v); err != nil {
+		return nil, fmt.Errorf("decoding contract.OrderVectors: %w", err)
+	}
+
+	var tests []test
+	for _, c := range v.Development {
+		if got := contract.IsDevelopment(c.Version); got != c.Development {
+			return nil, fmt.Errorf("contract.IsDevelopment(%q) is %t, not %t", c.Version, got, c.Development)
+		}
+		development := ""
+		if c.Development {
+			development = "true"
+		}
+		tests = append(tests, test{
+			It:       fmt.Sprintf("development: %q is a development value: %t", c.Version, c.Development),
+			Template: "templates/development.yaml",
+			Set:      map[string]string{"version": c.Version},
+			Asserts:  []any{equal("data.development", development)},
+		})
+
+		if !contract.Valid(c.Version) {
+			continue
+		}
+		if got := contract.Check(c.Version, oldestCore, oldestCore).Reason; got != contract.ReasonCoreTooOld {
+			return nil, fmt.Errorf("contract.Check(%q, %q, %q) is %s, not %s", c.Version, oldestCore, oldestCore, got, contract.ReasonCoreTooOld)
+		}
+		coreTooOld := "needs OpenEverest " + regexp.QuoteMeta(c.Version) + " or later;"
+		if c.Development {
+			coreTooOld = "needs a newer, unreleased OpenEverest build;"
+		}
+		tests = append(tests, test{
+			It:                 fmt.Sprintf("development stamp: a chart stamped %q on OpenEverest %s", c.Version, oldestCore),
+			Template:           "templates/check.yaml",
+			Set:                map[string]string{"stamp": c.Version},
+			KubernetesProvider: &provider{Objects: []any{crd(oldestCore, oldestCore, nil)}},
+			Asserts:            []any{failedTemplate(coreTooOld)},
+		})
+
+		if got := contract.Check(oldestCore, c.Version, c.Version).Reason; got != contract.ReasonExtensionTooOld {
+			return nil, fmt.Errorf("contract.Check(%q, %q, %q) is %s, not %s", oldestCore, c.Version, c.Version, got, contract.ReasonExtensionTooOld)
+		}
+		extensionTooOld := "built for OpenEverest " + regexp.QuoteMeta(c.Version) + " or later;"
+		if c.Development {
+			extensionTooOld = "built for this unreleased OpenEverest build;"
+		}
+		tests = append(tests, test{
+			It:                 fmt.Sprintf("development minimum: a chart stamped %q on OpenEverest %s serving %q and later", oldestCore, newestStamp, c.Version),
+			Template:           "templates/check.yaml",
+			Set:                map[string]string{"stamp": oldestCore},
+			KubernetesProvider: &provider{Objects: []any{crd(c.Version, newestStamp, nil)}},
+			Asserts:            []any{failedTemplate(extensionTooOld)},
+		})
+	}
+
+	return encode(suite{
+		Suite:              "development vectors",
+		Templates:          []string{"templates/development.yaml", "templates/check.yaml"},
+		KubernetesProvider: crdScheme(),
+		Tests:              tests,
+	})
 }
 
 // acknowledgeSuite returns the helm-unittest suite that runs every
@@ -297,19 +376,24 @@ func acknowledgeSuite() ([]byte, error) {
 	}
 
 	return encode(suite{
-		Suite:     "acknowledge vectors",
-		Templates: []string{"templates/acknowledgement.yaml", "templates/check.yaml"},
-		KubernetesProvider: &provider{
-			Scheme: map[string]any{
-				"apiextensions.k8s.io/v1/CustomResourceDefinition": map[string]any{
-					"gvr":        map[string]string{"group": "apiextensions.k8s.io", "version": "v1", "resource": "customresourcedefinitions"},
-					"namespaced": false,
-				},
-			},
-			Objects: []any{},
-		},
-		Tests: tests,
+		Suite:              "acknowledge vectors",
+		Templates:          []string{"templates/acknowledgement.yaml", "templates/check.yaml"},
+		KubernetesProvider: crdScheme(),
+		Tests:              tests,
 	})
+}
+
+// crdScheme returns the kubernetesProvider of a suite whose tests mock CRDs.
+func crdScheme() *provider {
+	return &provider{
+		Scheme: map[string]any{
+			"apiextensions.k8s.io/v1/CustomResourceDefinition": map[string]any{
+				"gvr":        map[string]string{"group": "apiextensions.k8s.io", "version": "v1", "resource": "customresourcedefinitions"},
+				"namespaced": false,
+			},
+		},
+		Objects: []any{},
+	}
 }
 
 // crd returns a providers CRD that publishes the window [contractVersion,
@@ -346,7 +430,12 @@ func checkResult(passes bool) map[string]any {
 	if passes {
 		return map[string]any{"containsDocument": map[string]string{"kind": "ConfigMap", "apiVersion": "v1", "name": "passed"}}
 	}
-	return map[string]any{"failedTemplate": map[string]string{"errorPattern": "needs OpenEverest " + strings.ReplaceAll(newestStamp, ".", "[.]") + " or later"}}
+	return failedTemplate("needs OpenEverest " + strings.ReplaceAll(newestStamp, ".", "[.]") + " or later")
+}
+
+// failedTemplate asserts the template fails with a message matching pattern.
+func failedTemplate(pattern string) map[string]any {
+	return map[string]any{"failedTemplate": map[string]string{"errorPattern": pattern}}
 }
 
 func encode(s suite) ([]byte, error) {
