@@ -58,18 +58,29 @@ openeverest.contract.generatedObject renders a manifest provider-sdk generate
 writes into the chart, such as a BackupClass under generated/backupclasses/,
 given a dict of root, the root context, and path, the file in the chart.
 generate stamps the manifest; this adds what only the values know, the
-acknowledgement openeverest.contract.annotations renders on the other objects:
+acknowledgement and the annotations of openeverest.annotations, which
+openeverest.contract.annotations renders on the other objects:
 
   {{- range $path, $_ := .Files.Glob "generated/backupclasses/*.yaml" }}
   ---
   {{ include "openeverest.contract.generatedObject" (dict "root" $ "path" $path) }}
   {{- end }}
+
+Those of openeverest.annotations cannot be under openeverest.io/, so they never
+repeat one generate writes.
 */}}
 {{- define "openeverest.contract.generatedObject" -}}
 {{- $manifest := .root.Files.Get .path -}}
+{{- $annotations := list -}}
 {{- with include "openeverest.contract.acknowledgement" .root -}}
-  {{- /* The first entry of metadata.annotations, which generate writes on every stamped manifest. */ -}}
-  {{- $manifest = regexReplaceAll "(?m)^(metadata:\n(?:  [^\n]*\n)*?  annotations:\n)" $manifest (printf "${1}    openeverest.io/compatibility-acknowledged: %s\n" (quote . | replace "$" "$$")) -}}
+{{- $annotations = append $annotations (printf "openeverest.io/compatibility-acknowledged: %s" (quote .)) -}}
+{{- end -}}
+{{- with include "openeverest.contract.extraAnnotations" .root -}}
+{{- $annotations = append $annotations . -}}
+{{- end -}}
+{{- with $annotations -}}
+  {{- /* The first entries of metadata.annotations, which generate writes on every stamped manifest. */ -}}
+  {{- $manifest = regexReplaceAll "(?m)^(metadata:\n(?:  [^\n]*\n)*?  annotations:\n)" $manifest (printf "${1}%s\n" (join "\n" . | indent 4 | replace "$" "$$")) -}}
 {{- end -}}
 {{- $manifest -}}
 {{- end -}}

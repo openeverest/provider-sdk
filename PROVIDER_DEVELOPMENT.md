@@ -2555,11 +2555,11 @@ stamps it, so it cannot drift from the code the provider is built against.
 
 The helper also renders the annotations set in the chart value
 `openeverest.annotations`, empty by default, so that whoever installs the
-chart can annotate these objects for the tool that applies it. Keys under
-`openeverest.io/` belong to the chart and to OpenEverest: the helper fails the
-render on one. The generated BackupClasses are files the chart includes as
-they are, not templates, so they do not get them. The chart sets no
-annotation for any tool itself. With Argo CD, for example, to apply these
+chart can annotate these objects for the tool that applies it. The scaffolded
+`templates/backupclasses.yaml` renders the generated BackupClasses with
+`openeverest.contract.generatedObject`, which adds them too. Keys under
+`openeverest.io/` belong to the chart and to OpenEverest: the helpers fail the
+render on one. The chart sets no annotation for any tool itself. With Argo CD, for example, to apply these
 objects before your `Deployment`, which is at sync wave `0`:
 
 ```yaml

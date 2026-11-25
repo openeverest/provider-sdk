@@ -19,3 +19,23 @@ tests:
             openeverest.io/contract-version: "2.1.0"
             openeverest.io/compatibility-acknowledged: "2.0.1"
 
+  - it: adds the annotations set in openeverest.annotations, quoted
+    set:
+      compatibility.acknowledge.coreVersion: "2.0.1"
+      openeverest.annotations:
+        argocd.argoproj.io/sync-wave: -1
+    asserts:
+      - equal:
+          path: metadata.annotations
+          value:
+            openeverest.io/contract-version: "2.1.0"
+            openeverest.io/compatibility-acknowledged: "2.0.1"
+            argocd.argoproj.io/sync-wave: "-1"
+
+  - it: refuses one under openeverest.io/
+    set:
+      openeverest.annotations:
+        openeverest.io/contract-version: "9.9.9"
+    asserts:
+      - failedTemplate:
+          errorPattern: openeverest[.]annotations cannot set openeverest[.]io/contract-version

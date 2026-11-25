@@ -39,3 +39,52 @@ tests:
       - equal:
           path: metadata.annotations["openeverest.io/compatibility-acknowledged"]
           value: "2.0.1 ${1} $$ \"quoted\""
+
+  - it: adds the annotations set in openeverest.annotations to its metadata, quoted
+    set:
+      openeverest.annotations:
+        argocd.argoproj.io/sync-wave: -1
+        example.com/team: databases
+    asserts:
+      - equal:
+          path: metadata.annotations
+          value:
+            argocd.argoproj.io/sync-wave: "-1"
+            example.com/team: databases
+            openeverest.io/contract-version: "2.1.0"
+            openeverest.io/provider-version: 1.2.3
+      - equal:
+          path: spec.uiSchema.backup.annotations
+          value:
+            label: Not metadata
+
+  - it: adds them with the acknowledgement
+    set:
+      compatibility.acknowledge.coreVersion: "2.0.1"
+      openeverest.annotations:
+        argocd.argoproj.io/sync-wave: "-1"
+    asserts:
+      - equal:
+          path: metadata.annotations
+          value:
+            openeverest.io/compatibility-acknowledged: "2.0.1"
+            argocd.argoproj.io/sync-wave: "-1"
+            openeverest.io/contract-version: "2.1.0"
+            openeverest.io/provider-version: 1.2.3
+
+  - it: writes them as they are set
+    set:
+      openeverest.annotations:
+        example.com/note: "a ${1} $$ \"quoted\""
+    asserts:
+      - equal:
+          path: metadata.annotations["example.com/note"]
+          value: "a ${1} $$ \"quoted\""
+
+  - it: refuses one under openeverest.io/, which would repeat one generate writes
+    set:
+      openeverest.annotations:
+        openeverest.io/provider-version: 9.9.9
+    asserts:
+      - failedTemplate:
+          errorPattern: openeverest[.]annotations cannot set openeverest[.]io/provider-version
