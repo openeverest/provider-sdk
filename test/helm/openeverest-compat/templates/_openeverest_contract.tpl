@@ -12,9 +12,9 @@ BackupStorageClass, MonitoringClass or ClusterInstancePreset the chart applies:
     {{- include "openeverest.contract.annotations" . | nindent 4 }}
 
 When compatibility.acknowledge.coreVersion is set, it renders it too, as
-openeverest.io/compatibility-acknowledged: OpenEverest then admits the object
-on the releases that acknowledgement covers, as the check below lets the
-install through.
+openeverest.io/compatibility-acknowledged. provider-runtime reads it on the
+Provider and lets a new build start on the releases that acknowledgement
+covers, as the check below lets the install through.
 */}}
 {{- define "openeverest.contract.annotations" -}}
 {{- $annotations := list -}}
@@ -98,10 +98,10 @@ chose to install the chart anyway, or nothing.
 
 {{/*
 openeverest.contract.check fails the render when the OpenEverest in the
-cluster would refuse the objects of this chart, as its admission does. It runs
-before anything is applied, so a refused install leaves no failed release
-behind and a retry just works. templates/openeverest-compat-check.yaml, which
-provider-sdk generate writes, calls it with a dict of:
+cluster does not serve the stamp of this chart. It runs before anything is
+applied, so a refused install leaves no failed release behind and a retry
+just works. templates/openeverest-compat-check.yaml, which provider-sdk
+generate writes, calls it with a dict of:
 
   root    the root context;
   stamp   the chart's stamp, its openeverest.io/contract-version annotation;
@@ -121,8 +121,7 @@ acknowledged. It passes when:
   - the chart has no stamp, the window is not a SemVer 2.0.0 version, or the
     CRDs disagree on the window, as during an OpenEverest upgrade;
   - the stamp is in the window;
-  - every CRD that refuses the stamp on its own window acknowledges it, the
-    way OpenEverest's admission reads the CRD of each object it admits. An
+  - every CRD that refuses the stamp on its own window acknowledges it. An
     acknowledgement names an OpenEverest release A, and holds on a CRD while
     its openeverest.io/contract-version annotation <= A <= its
     openeverest.io/version label (see openeverest.contract.acknowledgementHolds).

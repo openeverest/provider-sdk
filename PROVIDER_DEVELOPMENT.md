@@ -2602,9 +2602,9 @@ openeverest:
 
 Ordering is a convenience, not what keeps an incompatible build from running:
 `provider-runtime` does that. A build for an OpenEverest the cluster does not
-serve stays unready until OpenEverest admits it, whichever tool applies the
-chart; [Base RBAC](#base-rbac-pre-configured) lists the rules it needs for
-that and shows what a held build looks like.
+serve stays unready until the installed OpenEverest supports it, whichever
+tool applies the chart; [Base RBAC](#base-rbac-pre-configured) lists the rules
+it needs for that and shows what a held build looks like.
 
 The stamp is the version of the core that `provider-sdk` links. Run as
 `go tool provider-sdk`, which `go generate` and the Makefile do, it builds
@@ -2631,12 +2631,11 @@ No OpenEverest release is ever named either way. Core builds such as
 
 `make generate` also writes `templates/openeverest-compat-check.yaml`, which
 makes the install fail, before anything is applied, when the OpenEverest in the
-cluster would refuse the chart's objects. It reads the range of versions
+cluster does not serve the chart's stamp. It reads the range of versions
 OpenEverest serves from the annotations of the CRDs of the objects the chart
 applies (the `Provider`, plus `BackupClass` and the others when the chart
-renders them), and decides like OpenEverest's admission does, which checks
-each object against the CRD of its kind. The message names the OpenEverest the
-provider needs:
+renders them), and checks the stamp against the range all of them serve. The
+message names the OpenEverest the provider needs:
 
 ```
 Error: INSTALLATION FAILED: execution error at (provider-my-database/templates/openeverest-compat-check.yaml:8:4):
@@ -2651,7 +2650,7 @@ To install it anyway on this OpenEverest, set compatibility.acknowledge.coreVers
   installed. It also passes when the chart has no stamp, when the range is
   malformed, and while the CRDs disagree on the range, as during an
   OpenEverest upgrade. A stamp that is present but not a SemVer 2.0.0 version
-  fails once a CRD publishes a range, as OpenEverest refuses it.
+  fails once a CRD publishes a range.
 - Upgrading an installed release whose `Provider` carries the same stamp, e.g.
   to change values, is never blocked.
 - `compatibility.acknowledge.coreVersion` installs anyway. It names an
@@ -2662,7 +2661,8 @@ To install it anyway on this OpenEverest, set compatibility.acknowledge.coreVers
   OpenEverest release that changes it, when what the user accepted changes,
   and set ahead of an upgrade, in Git for example, does nothing until that
   release is installed. The chart writes it on its objects as
-  `openeverest.io/compatibility-acknowledged`, where OpenEverest reads it too:
+  `openeverest.io/compatibility-acknowledged`, and `provider-runtime` reads it
+  on the `Provider`, where it lets a build start that would otherwise wait:
   `openeverest.contract.annotations` renders it, and the scaffolded
   `templates/backupclasses.yaml` renders the generated BackupClasses with
   `openeverest.contract.generatedObject`, which adds it. The scaffolded
