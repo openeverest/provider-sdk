@@ -48,10 +48,12 @@ provider-sdk init
 | `provider-sdk add topology` | Add a deployment topology |
 | `provider-sdk add backup` | Add backup and restore implementation stubs |
 | `provider-sdk add backupclass` | Add a BackupClass definition |
-| `provider-sdk generate` | Build the Provider CR spec from `definition/` |
+| `provider-sdk generate` | Build the Provider CR spec from `definition/` and stamp the chart with the OpenEverest it is built against |
+| `provider-sdk verify` | Check the chart is stamped; with `--release`, that it is built against a released OpenEverest |
 
-Each command prints its own flags with `--help`. `generate` is normally invoked through
-`go generate ./...` or `make generate` rather than by hand.
+Each command prints its own flags with `--help`. `generate` and `verify` are normally invoked
+through `make generate` and `make verify`, which run them as `go tool provider-sdk`, built
+with the provider's module and thus the OpenEverest core it requires.
 
 ## Working on the SDK itself
 

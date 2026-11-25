@@ -15,8 +15,13 @@
 package cmd
 
 import (
+	"fmt"
+	"os"
+
 	"github.com/spf13/cobra"
 
+	"github.com/openeverest/openeverest/v2/contract"
+	"github.com/openeverest/provider-sdk/internal/compat"
 	"github.com/openeverest/provider-sdk/internal/generate"
 )
 
@@ -59,12 +64,28 @@ definition/topologies/*/topology.yaml to build the Provider CR spec.
 
 If any topology or component references a Go type via parametersSchema, the
 command loads the specified Go packages and performs
-static type analysis to generate OpenAPI schemas.`,
+static type analysis to generate OpenAPI schemas.
+
+It also stamps the chart with the contract version of the OpenEverest the
+provider is built against: the annotation openeverest.io/contract-version in
+Chart.yaml and on the generated BackupClasses, and the helper
+templates/_openeverest_contract.tpl that renders it on the Provider and the
+other objects OpenEverest interprets, with the annotations set in the chart
+value openeverest.annotations. The stamp is that of the core this binary
+links, so generate refuses to run when it is not the core the module
+requires: run it as ` + "`go tool provider-sdk`" + `.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return generate.Run(generate.Options{
+		if _, err := checkLinkedCore(); err != nil {
+			return err
+		}
+		if err := generate.Run(generate.Options{
 			DefinitionDir: generateOpts.definitionDir,
 			ChartDir:      generateOpts.chartDir,
 			TypesPackages: generateOpts.typesPackages,
-		})
+		}); err != nil {
+			return err
+		}
+		fmt.Fprintln(os.Stderr, compat.Floor(contract.Version))
+		return nil
 	},
 }

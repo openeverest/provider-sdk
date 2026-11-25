@@ -85,16 +85,19 @@ generate: manifests helm-sync-rbac ## Run all code generation (RBAC + Helm sync 
 	go generate ./...
 	@echo "All generation complete."
 
+GENERATED_PATHS = config/ definition/ $(CHART_DIR)/generated/ $(CHART_DIR)/Chart.yaml $(CHART_DIR)/templates/_openeverest_contract.tpl
+
 .PHONY: verify
-verify: ## Verify that generated files are up-to-date (for CI).
+verify: ## Verify that generated files are up-to-date and the chart is stamped with the OpenEverest it is built against (for CI).
 	@$(MAKE) generate
-	@if git diff --quiet -- config/ definition/ $(CHART_DIR)/generated/; then \
+	@if git diff --quiet -- $(GENERATED_PATHS); then \
 		echo "Generated files are up-to-date."; \
 	else \
 		echo "ERROR: Generated files are out of date. Run 'make generate' and commit the changes."; \
-		git diff -- config/ definition/ $(CHART_DIR)/generated/; \
+		git diff -- $(GENERATED_PATHS); \
 		exit 1; \
 	fi
+	go tool provider-sdk verify --chart-dir $(CHART_DIR)
 
 ##@ Build
 

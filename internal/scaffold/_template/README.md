@@ -207,7 +207,8 @@ make dev-down
 ```
 
 `make help` lists every target. `make verify` fails when generated files are stale — run
-`make generate` and commit the result.
+`make generate` and commit the result — or when the chart is not stamped with the OpenEverest
+the provider is built against, which `make generate` writes from the core `go.mod` requires.
 
 The provider contract (`Validate` / `Sync` / `Status` / `Cleanup`), RBAC markers, watches,
 code generation, and the backup/restore interfaces are documented once for all providers in

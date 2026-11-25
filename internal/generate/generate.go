@@ -22,8 +22,10 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/openeverest/openeverest/v2/provider-runtime/uischema"
 	"gopkg.in/yaml.v3"
+
+	"github.com/openeverest/openeverest/v2/contract"
+	"github.com/openeverest/openeverest/v2/provider-runtime/uischema"
 )
 
 // Options configures the generate command.
@@ -38,6 +40,10 @@ type Options struct {
 	// TypesPackages are Go package patterns for type definition loading.
 	// Default: ["./definition/..."]
 	TypesPackages []string
+
+	// ContractVersion is the contract version the chart is stamped with.
+	// Default: contract.Version of the OpenEverest core this build links.
+	ContractVersion string
 }
 
 // Run assembles definition/ files, resolves Go type schemas, and writes
@@ -53,6 +59,9 @@ func Run(opts Options) error {
 	}
 	if len(opts.TypesPackages) == 0 {
 		opts.TypesPackages = []string{"./definition/..."}
+	}
+	if opts.ContractVersion == "" {
+		opts.ContractVersion = contract.Version
 	}
 
 	// 1. Assemble definition/ files into internal config.
@@ -209,12 +218,15 @@ func Run(opts Options) error {
 	fmt.Fprintf(os.Stderr, "Generated: %s\n", outputFile)
 
 	// 6. Emit BackupClass manifests, one per definition/backupclasses/<name>/,
-	//    stamped with the release, and embed them in the provider binary,
-	//    which claims them.
+	//    stamped with the release and the contract version, and embed them in
+	//    the provider binary, which claims them.
 	var backupClassDocs [][]byte
 	if len(backupClasses) > 0 {
 		bcOutDir := filepath.Join(opts.ChartDir, "generated", "backupclasses")
-		backupClassDocs, err = writeBackupClassManifests(bcOutDir, backupClasses, schemas, cfg.Name, appVersion)
+		backupClassDocs, err = writeBackupClassManifests(bcOutDir, backupClasses, schemas, cfg.Name, stamps{
+			release:         appVersion,
+			contractVersion: opts.ContractVersion,
+		})
 		if err != nil {
 			return fmt.Errorf("writing backup class manifests: %w", err)
 		}
@@ -223,7 +235,19 @@ func Run(opts Options) error {
 		return fmt.Errorf("writing shipped backup classes: %w", err)
 	}
 
+	// 7. Stamp the chart with the contract version of the OpenEverest this
+	//    build links, for the templates to put on the Provider.
+	if err := stampChart(opts.ChartDir, opts.ContractVersion); err != nil {
+		return err
+	}
+
 	return nil
+}
+
+// DetectChartDir returns the provider's chart directory, charts/<name>, the
+// only directory under charts/ with a Chart.yaml.
+func DetectChartDir() (string, error) {
+	return detectChartDir()
 }
 
 // chartAppVersion returns the appVersion from the chart's Chart.yaml, or ""
