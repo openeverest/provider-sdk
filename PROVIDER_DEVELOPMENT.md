@@ -2552,15 +2552,25 @@ stamps it, so it cannot drift from the code the provider is built against.
       {{- include "openeverest.contract.annotations" . | nindent 4 }}
   ```
 
-Every stamped object is also put at Argo CD sync wave `-1`
-(`argocd.argoproj.io/sync-wave: "-1"`): the generated BackupClasses carry it,
-and the helper renders it. The OpenEverest chart applies its CRDs at wave
-`-2`, and OpenEverest refuses a stamped object it does not support when it is
-applied. Argo CD applies one wave at a time and stops at the first that fails,
-so the stamped objects must come after the CRDs, whose versions they are
-checked against, and before anything that runs: your Deployment, and any
-operator your chart bundles, stay at wave `0` or later and never start next
-to a refused `Provider`. Helm and Flux ignore the annotation.
+The helper also renders the annotations set in the chart value
+`openeverest.annotations`, empty by default, so that whoever installs the
+chart can annotate these objects for the tool that applies it. Keys under
+`openeverest.io/` belong to the chart and to OpenEverest: the helper fails the
+render on one. The generated BackupClasses are files the chart includes as
+they are, not templates, so they do not get them. The chart sets no
+annotation for any tool itself. With Argo CD, for example, to apply these
+objects before your `Deployment`, which is at sync wave `0`:
+
+```yaml
+openeverest:
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+```
+
+Ordering is a convenience, not what keeps an incompatible build from running:
+`provider-runtime` does that. A build for an OpenEverest the cluster does not
+serve stays unready until OpenEverest admits it, whichever tool applies the
+chart.
 
 The stamp is the version of the core that `provider-sdk` links. Run as
 `go tool provider-sdk`, which `go generate` and the Makefile do, it builds
@@ -2588,11 +2598,8 @@ No OpenEverest release is ever named either way. Core builds such as
 `go tool provider-sdk verify` renders the chart with its default values,
 without a cluster, and checks that `Chart.yaml` and every `Provider`,
 `BackupClass`, `BackupStorageClass`, `MonitoringClass` and
-`ClusterInstancePreset` it renders carry the stamp and are at sync wave `-1`,
-and that no workload (`Deployment`, `StatefulSet`, `DaemonSet`, `Job`,
-`CronJob`, `Pod`), a subchart's included, is at wave `-1` or before. Hooks,
-which Argo CD runs in phases of their own, are not checked against the wave.
-`make verify` runs it in CI. The release workflow runs
+`ClusterInstancePreset` it renders carry the stamp. `make verify` runs it in
+CI. The release workflow runs
 `go tool provider-sdk verify --release` before packaging the chart, which also
 fails on a development value and on a `go.mod` that replaces OpenEverest: a
 release tells users the oldest OpenEverest it works with, so that OpenEverest

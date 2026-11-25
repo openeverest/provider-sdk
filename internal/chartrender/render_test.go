@@ -82,21 +82,21 @@ metadata:
 
 	require.NoError(t, err)
 	type summary struct {
-		Source, Kind, Name             string
-		CoreInterpreted, Workload, Own bool
+		Source, Kind, Name   string
+		CoreInterpreted, Own bool
 	}
 	got := make([]summary, 0, len(objects))
 	for _, o := range objects {
-		got = append(got, summary{o.Source, o.GroupKind.Kind, o.Name, o.CoreInterpreted(), o.Workload(), o.Own()})
+		got = append(got, summary{o.Source, o.GroupKind.Kind, o.Name, o.CoreInterpreted(), o.Own()})
 	}
 	assert.Equal(t, []summary{
-		{"charts/sub/templates/deployment.yaml", "Deployment", "operator", false, true, false},
-		{"charts/sub/templates/provider.yaml", "Provider", "subchart", true, false, false},
-		{"templates/classes.yaml", "BackupClass", "b", true, false, true},
-		{"templates/classes.yaml", "MonitoringClass", "m", true, false, true},
-		{"templates/presets.yaml", "ClusterInstancePreset", "p", true, false, true},
-		{"templates/provider.yaml", "Provider", "x", true, false, true},
-		{"templates/service.yaml", "Service", "svc", false, false, true},
+		{"charts/sub/templates/deployment.yaml", "Deployment", "operator", false, false},
+		{"charts/sub/templates/provider.yaml", "Provider", "subchart", true, false},
+		{"templates/classes.yaml", "BackupClass", "b", true, true},
+		{"templates/classes.yaml", "MonitoringClass", "m", true, true},
+		{"templates/presets.yaml", "ClusterInstancePreset", "p", true, true},
+		{"templates/provider.yaml", "Provider", "x", true, true},
+		{"templates/service.yaml", "Service", "svc", false, true},
 	}, got, "objects of the chart's templates and its subcharts', in template order")
 	assert.Equal(t, map[string]string{"secret": "absent"}, objects[5].Annotations, "lookup finds nothing without a cluster")
 	assert.Equal(t, schema.GroupKind{Group: "core.openeverest.io", Kind: "Provider"}, objects[5].GroupKind)

@@ -22,6 +22,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v3"
+
+	"github.com/openeverest/provider-sdk/internal/chartrender"
 )
 
 const stampKey = "openeverest.io/contract-version"
@@ -190,6 +192,111 @@ func TestStampChart(t *testing.T) {
 	chart, err = os.ReadFile(chartFile)
 	require.NoError(t, err)
 	assert.Equal(t, "apiVersion: v2\nname: provider-x\nversion: 0.1.0\nannotations:\n  openeverest.io/contract-version: \"2.0.0-alpha.2\"\n", string(chart))
+}
+
+func TestContractHelper(t *testing.T) {
+	t.Parallel()
+
+	const stamped = "apiVersion: v2\nname: provider-x\nversion: 0.1.0\nannotations:\n  openeverest.io/contract-version: \"2.0.0-alpha.1\"\n"
+	tests := map[string]struct {
+		chart   string
+		values  string
+		want    string
+		wantErr string
+	}{
+		"no value": {
+			chart: stamped,
+			want:  `openeverest.io/contract-version: "2.0.0-alpha.1"`,
+		},
+		"the scaffolded default": {
+			chart:  stamped,
+			values: "openeverest:\n  annotations: {}\n",
+			want:   `openeverest.io/contract-version: "2.0.0-alpha.1"`,
+		},
+		"annotations after the stamp, in key order": {
+			chart:  stamped,
+			values: "openeverest:\n  annotations:\n    example.com/team: databases\n    argocd.argoproj.io/sync-wave: \"-1\"\n",
+			want:   "openeverest.io/contract-version: \"2.0.0-alpha.1\"\nargocd.argoproj.io/sync-wave: \"-1\"\nexample.com/team: \"databases\"",
+		},
+		"values that are not strings are quoted": {
+			chart:  stamped,
+			values: "openeverest:\n  annotations:\n    argocd.argoproj.io/sync-wave: -1\n    example.com/enabled: true\n",
+			want:   "openeverest.io/contract-version: \"2.0.0-alpha.1\"\nargocd.argoproj.io/sync-wave: \"-1\"\nexample.com/enabled: \"true\"",
+		},
+		"the stamp cannot be replaced": {
+			chart:   stamped,
+			values:  "openeverest:\n  annotations:\n    openeverest.io/contract-version: \"9.9.9\"\n",
+			wantErr: "openeverest.annotations cannot set openeverest.io/contract-version: annotations under openeverest.io/ belong to the chart and to OpenEverest",
+		},
+		"nor any annotation of OpenEverest": {
+			chart:   stamped,
+			values:  "openeverest:\n  annotations:\n    openeverest.io/anything: \"x\"\n",
+			wantErr: "openeverest.annotations cannot set openeverest.io/anything",
+		},
+		"openeverest without annotations": {
+			chart:  stamped,
+			values: "openeverest:\n  annotations:\n",
+			want:   `openeverest.io/contract-version: "2.0.0-alpha.1"`,
+		},
+		"openeverest not a map": {
+			chart:  stamped,
+			values: "openeverest: \"\"\n",
+			want:   `openeverest.io/contract-version: "2.0.0-alpha.1"`,
+		},
+		"a chart not stamped yet": {
+			chart:  "apiVersion: v2\nname: provider-x\nversion: 0.1.0\n",
+			values: "openeverest:\n  annotations:\n    argocd.argoproj.io/sync-wave: \"-1\"\n",
+			want:   `argocd.argoproj.io/sync-wave: "-1"`,
+		},
+		"nothing to render": {
+			chart: "apiVersion: v2\nname: provider-x\nversion: 0.1.0\n",
+		},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			chartDir := t.TempDir()
+			writeFiles(t, chartDir, map[string]string{
+				"Chart.yaml":                      tt.chart,
+				"values.yaml":                     tt.values,
+				"templates/" + ContractHelperFile: ContractHelper,
+				"templates/provider.yaml": `apiVersion: core.openeverest.io/v1alpha1
+kind: Provider
+metadata:
+  name: x
+  annotations:
+    {{- include "` + ContractAnnotationsHelper + `" . | nindent 4 }}
+`,
+				"templates/rendered.yaml": `apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: rendered
+  annotations:
+    helper: {{ include "` + ContractAnnotationsHelper + `" . | quote }}
+`,
+			})
+
+			objects, err := chartrender.Render(chartDir)
+			if tt.wantErr != "" {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tt.wantErr)
+				return
+			}
+			require.NoError(t, err)
+			require.Len(t, objects, 2)
+			provider, rendered := objects[0], objects[1]
+			require.Equal(t, "Provider", provider.GroupKind.Kind)
+			assert.Equal(t, tt.want, rendered.Annotations["helper"], "the helper's output")
+			var want map[string]string
+			require.NoError(t, yaml.Unmarshal([]byte(tt.want), &want))
+			if len(want) == 0 {
+				assert.Empty(t, provider.Annotations)
+				return
+			}
+			assert.Equal(t, want, provider.Annotations, "the annotations of the object that includes it")
+		})
+	}
 }
 
 func TestRunStampsTheChart(t *testing.T) {

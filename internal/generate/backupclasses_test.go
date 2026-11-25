@@ -249,21 +249,17 @@ func TestBuildBackupClassManifestStamps(t *testing.T) {
 				"annotations": map[string]any{
 					backupv1alpha1.ProviderVersionAnnotation: "1.2.0",
 					contract.VersionAnnotation:               "2.0.0",
-					SyncWaveAnnotation:                       StampSyncWave,
 				},
 			},
 		},
 		"a chart without appVersion stamps the contract version only": {
 			stamp: stamps{contractVersion: "2.0.0"},
 			want: map[string]any{
-				"name": "pbm",
-				"annotations": map[string]any{
-					contract.VersionAnnotation: "2.0.0",
-					SyncWaveAnnotation:         StampSyncWave,
-				},
+				"name":        "pbm",
+				"annotations": map[string]any{contract.VersionAnnotation: "2.0.0"},
 			},
 		},
-		"no contract version, no sync wave": {
+		"release only": {
 			stamp: stamps{release: "1.2.0"},
 			want: map[string]any{
 				"name":        "pbm",
@@ -285,30 +281,6 @@ func TestBuildBackupClassManifestStamps(t *testing.T) {
 			assert.Equal(t, tt.want, got["metadata"])
 		})
 	}
-}
-
-// TestWriteBackupClassManifestsSyncWaveIsAString checks the sync wave is
-// written quoted: an unquoted -1 is a number, which Kubernetes refuses as an
-// annotation value.
-func TestWriteBackupClassManifestsSyncWaveIsAString(t *testing.T) {
-	t.Parallel()
-
-	class := map[string]any{"backupStorageClasses": []any{map[string]any{"name": "s3", "authModes": []any{"AccessKey"}}}}
-	outDir := t.TempDir()
-	_, err := writeBackupClassManifests(outDir, []BackupClassAssembled{{Name: "pbm", Class: class}}, nil, "mongo",
-		stamps{release: "1.2.0", contractVersion: "2.0.0"})
-	require.NoError(t, err)
-
-	data, err := os.ReadFile(filepath.Join(outDir, "pbm.yaml"))
-	require.NoError(t, err)
-	assert.Contains(t, string(data), "\n    "+SyncWaveAnnotation+": \""+StampSyncWave+"\"\n")
-	var manifest struct {
-		Metadata struct {
-			Annotations map[string]any `yaml:"annotations"`
-		} `yaml:"metadata"`
-	}
-	require.NoError(t, yaml.Unmarshal(data, &manifest))
-	assert.Equal(t, StampSyncWave, manifest.Metadata.Annotations[SyncWaveAnnotation])
 }
 
 func TestNarrowSchemaRequiredAndType(t *testing.T) {

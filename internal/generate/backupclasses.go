@@ -180,8 +180,7 @@ func collectBackupClassTypeRefs(class map[string]any, typeRefs map[string]bool) 
 // class, so a class of another release is pending during an upgrade instead
 // of drifted. It is also stamped with stamp.contractVersion, the contract
 // version of the OpenEverest the provider is built against, which core
-// checks against the versions it serves, and put at Argo CD sync wave
-// StampSyncWave with the other stamped objects.
+// checks against the versions it serves.
 func buildBackupClassManifest(bc BackupClassAssembled, schemas map[string]any, provider string, stamp stamps) (map[string]any, error) {
 	spec := resolveBackupClassRefs(bc.Class, schemas)
 	spec["executionMode"] = "ProviderManaged"
@@ -206,7 +205,6 @@ func buildBackupClassManifest(bc BackupClassAssembled, schemas map[string]any, p
 	}
 	if stamp.contractVersion != "" {
 		annotations[contract.VersionAnnotation] = stamp.contractVersion
-		annotations[SyncWaveAnnotation] = StampSyncWave
 	}
 	if len(annotations) > 0 {
 		metadata["annotations"] = annotations

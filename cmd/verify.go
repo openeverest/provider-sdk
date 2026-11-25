@@ -51,14 +51,9 @@ BackupClass, BackupStorageClass, MonitoringClass, ClusterInstancePreset) carry
 the annotation openeverest.io/contract-version with the contract version of the
 OpenEverest this provider is built against, the core its go.mod requires.
 
-Those objects must also be at Argo CD sync wave -1, and no workload
-(Deployment, StatefulSet, DaemonSet, Job, CronJob, Pod), a subchart's
-included, at -1 or before: Argo CD then applies the objects OpenEverest checks
-before anything runs, and stops the sync when OpenEverest refuses one.
-
-provider-sdk generate writes the stamp into Chart.yaml, and the stamp and the
-wave on the generated BackupClasses; chart templates render both on other
-objects with {{ include "openeverest.contract.annotations" . }}.
+provider-sdk generate writes the stamp into Chart.yaml and the generated
+BackupClasses; chart templates render it on other objects with
+{{ include "openeverest.contract.annotations" . }}.
 
 With --release, also fail when the stamp is a development contract version
 (OpenEverest's contract changed since its last release) or when go.mod replaces

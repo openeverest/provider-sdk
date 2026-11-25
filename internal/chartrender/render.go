@@ -50,16 +50,6 @@ var CoreInterpreted = map[schema.GroupKind]string{
 	{Group: monitoringv1alpha1.GroupVersion.Group, Kind: "MonitoringClass"}: "monitoringclasses." + monitoringv1alpha1.GroupVersion.Group,
 }
 
-// Workloads lists the kinds of objects that run code in the cluster.
-var Workloads = map[schema.GroupKind]bool{
-	{Group: "apps", Kind: "Deployment"}:  true,
-	{Group: "apps", Kind: "StatefulSet"}: true,
-	{Group: "apps", Kind: "DaemonSet"}:   true,
-	{Group: "batch", Kind: "Job"}:        true,
-	{Group: "batch", Kind: "CronJob"}:    true,
-	{Group: "", Kind: "Pod"}:             true,
-}
-
 // Object is an object a chart renders.
 type Object struct {
 	// Source is the template that rendered the object, relative to the
@@ -75,11 +65,6 @@ type Object struct {
 func (o Object) CoreInterpreted() bool {
 	_, ok := CoreInterpreted[o.GroupKind]
 	return ok
-}
-
-// Workload reports whether o runs code in the cluster.
-func (o Object) Workload() bool {
-	return Workloads[o.GroupKind]
 }
 
 // Own reports whether one of the chart's own templates rendered o, rather

@@ -124,6 +124,16 @@ provider:
   # used in other contexts where a short concise provider identifier is needed.
   shortName: [[ .ProviderShortName ]]
 
+openeverest:
+  # -- Annotations to add to the objects of this chart that OpenEverest
+  # interprets: the Provider, the presets, and any BackupStorageClass or
+  # MonitoringClass the chart applies. Keys under openeverest.io/ belong to
+  # the chart and to OpenEverest, and are refused.
+  annotations: {}
+    # For example, to have Argo CD apply these objects before the provider's
+    # Deployment:
+    # argocd.argoproj.io/sync-wave: "-1"
+
 # -- Default cluster instance presets configuration
 # Each preset must have 'name', 'enabled', and 'spec' fields.
 # The 'spec' field contains the full ClusterInstancePresetSpec.
