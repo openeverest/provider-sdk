@@ -15,6 +15,7 @@
 package compat
 
 import (
+	"runtime/debug"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -123,6 +124,109 @@ func TestLinkedCoreIsRequiredCore(t *testing.T) {
 	warning, err := CheckCore(linked, required)
 	require.NoError(t, err)
 	assert.Empty(t, warning)
+}
+
+func TestCheckBinary(t *testing.T) {
+	t.Parallel()
+
+	const (
+		sum      = "h1:d8T7SfAPsaTD4Ul9TeNcLU+icxkmihNALY1n/V6vqWo="
+		otherSum = "h1:IJXaJ5bKCZBFtBDxUtmiJk2KC0mSPOzNtQZ/AUhoHWI="
+	)
+	dep := func(version, sum string) *debug.Module {
+		return &debug.Module{Path: CoreModule, Version: version, Sum: sum}
+	}
+	binary := func(deps ...*debug.Module) *debug.BuildInfo {
+		return &debug.BuildInfo{
+			Path: "command-line-arguments",
+			Deps: append([]*debug.Module{{Path: "k8s.io/api", Version: "v0.37.2"}}, deps...),
+		}
+	}
+	withSum := func(m Module, sum string) Module {
+		m.Sum = sum
+		return m
+	}
+	fork := &debug.Module{Path: "github.com/fork/openeverest/v2", Version: "v2.0.0-alpha.1.1"}
+	forked := dep(alpha1, "")
+	forked.Replace = fork
+
+	tests := map[string]struct {
+		info       *debug.BuildInfo
+		required   Module
+		wantLinked Module
+		wantErr    string
+	}{
+		"required release": {
+			info:       binary(dep(alpha1, sum)),
+			required:   withSum(core(alpha1), sum),
+			wantLinked: withSum(core(alpha1), sum),
+		},
+		"required pseudo-version": {
+			info:       binary(dep(pseudo, sum)),
+			required:   withSum(core(pseudo), sum),
+			wantLinked: withSum(core(pseudo), sum),
+		},
+		"checksum unknown": {
+			info:       binary(dep(alpha1, sum)),
+			required:   core(alpha1),
+			wantLinked: withSum(core(alpha1), sum),
+		},
+		"another release": {
+			info:       binary(dep("v2.0.0-alpha.2", sum)),
+			required:   withSum(core(alpha1), sum),
+			wantLinked: withSum(core("v2.0.0-alpha.2"), sum),
+			wantErr: "links " + CoreModule + "@v2.0.0-alpha.2, but go.mod requires " + CoreModule + "@" + alpha1 +
+				", whose contract version the chart is stamped with; build the image from the commit the chart is released from",
+		},
+		"another commit": {
+			info:       binary(dep("v2.0.0-dev.2.0.20261125204444-7a9046c7adff", otherSum)),
+			required:   withSum(core(pseudo), sum),
+			wantLinked: withSum(core("v2.0.0-dev.2.0.20261125204444-7a9046c7adff"), otherSum),
+			wantErr:    "links " + CoreModule + "@v2.0.0-dev.2.0.20261125204444-7a9046c7adff, but go.mod requires " + CoreModule + "@" + pseudo,
+		},
+		"same version, other code": {
+			info:       binary(dep(alpha1, otherSum)),
+			required:   withSum(core(alpha1), sum),
+			wantLinked: withSum(core(alpha1), otherSum),
+			wantErr:    "links " + CoreModule + "@" + alpha1 + " with the checksum " + otherSum + ", but go.sum records " + sum,
+		},
+		"same fork": {
+			info:       binary(forked),
+			required:   replaced(alpha1, fork.Path, fork.Version),
+			wantLinked: replaced(alpha1, fork.Path, fork.Version),
+		},
+		"built with a fork": {
+			info:       binary(forked),
+			required:   core(alpha1),
+			wantLinked: replaced(alpha1, fork.Path, fork.Version),
+			wantErr:    "links " + CoreModule + "@" + alpha1 + " => " + fork.Path + "@" + fork.Version + ", but go.mod requires",
+		},
+		"built from a local directory": {
+			info:       binary(&debug.Module{Path: CoreModule, Version: alpha1, Replace: &debug.Module{Path: "../openeverest", Version: "(devel)"}}),
+			required:   replaced(alpha1, "../openeverest", ""),
+			wantLinked: replaced(alpha1, "../openeverest", "(devel)"),
+			wantErr:    "links " + CoreModule + " from a local directory, ../openeverest, whose contract version nothing records",
+		},
+		"no core": {
+			info:     binary(),
+			required: core(alpha1),
+			wantErr:  "does not link " + CoreModule,
+		},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			linked, err := CheckBinary(tt.info, tt.required)
+
+			assert.Equal(t, tt.wantLinked, linked)
+			if tt.wantErr != "" {
+				require.ErrorContains(t, err, tt.wantErr)
+				return
+			}
+			require.NoError(t, err)
+		})
+	}
 }
 
 func TestReleaseProblems(t *testing.T) {

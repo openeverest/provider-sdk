@@ -25,18 +25,21 @@ import (
 	"github.com/openeverest/openeverest/v2/contract"
 	"github.com/openeverest/provider-sdk/internal/compat"
 	"github.com/openeverest/provider-sdk/internal/generate"
+	"github.com/openeverest/provider-sdk/internal/imagebin"
 	"github.com/openeverest/provider-sdk/internal/verify"
 )
 
 var verifyOpts struct {
 	chartDir string
 	release  bool
+	image    string
 }
 
 func init() {
 	f := verifyCmd.Flags()
 	f.StringVar(&verifyOpts.chartDir, "chart-dir", "", "Path to the Helm chart directory (default: auto-detect from charts/)")
 	f.BoolVar(&verifyOpts.release, "release", false, "Also fail when the provider is built against an unreleased OpenEverest")
+	f.StringVar(&verifyOpts.image, "image", "", "Also check that the chart deploys this image, such as ghcr.io/<owner>/<provider>:<version>, and that it is built against the OpenEverest core go.mod requires")
 
 	rootCmd.AddCommand(verifyCmd)
 }
@@ -73,6 +76,16 @@ OpenEverest. A release names the oldest OpenEverest it works with, which users
 must be able to install. Requiring a commit of OpenEverest's main branch is
 fine while main's contract is still that of a release.
 
+With --image, also check that the chart deploys that image, and that on every
+platform the binary the image runs links the OpenEverest core go.mod requires,
+the core whose contract version the chart is stamped with. provider-runtime's
+startup gate checks the contract version of the core the binary links, and
+OpenEverest and installers read the stamp: an image built from another commit,
+or from a stale build cache, could carry a contract other than the chart's. The
+image is read from its registry, which the reference must name, with the
+credentials docker login stores; a registry on localhost is reached over plain
+HTTP.
+
 Run it as ` + "`go tool provider-sdk verify`" + ` from the provider's module.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		required, err := checkLinkedCore()
@@ -86,18 +99,33 @@ Run it as ` + "`go tool provider-sdk verify`" + ` from the provider's module.`,
 			}
 		}
 
-		res, err := verify.Run(verify.Options{
+		opts := verify.Options{
 			ChartDir:        chartDir,
 			ContractVersion: contract.Version,
 			Release:         verifyOpts.release,
 			Core:            required,
-		})
+		}
+		if verifyOpts.image != "" {
+			binaries, err := imagebin.ReadRemote(cmd.Context(), verifyOpts.image)
+			if err != nil {
+				return fmt.Errorf("reading the binaries of the image %s: %w", verifyOpts.image, err)
+			}
+			opts.Image = &verify.Image{Reference: verifyOpts.image, Binaries: binaries}
+		}
+
+		res, err := verify.Run(opts)
 		if err != nil {
 			return err
 		}
 		if len(res.Stamped) > 0 {
 			fmt.Fprintf(os.Stderr, "Stamped with %s=%s:\n", contract.VersionAnnotation, contract.Version)
 			for _, s := range res.Stamped {
+				fmt.Fprintf(os.Stderr, "  %s\n", s)
+			}
+		}
+		if len(res.Linked) > 0 {
+			fmt.Fprintf(os.Stderr, "Built against the core the chart is stamped for, in %s:\n", verifyOpts.image)
+			for _, s := range res.Linked {
 				fmt.Fprintf(os.Stderr, "  %s\n", s)
 			}
 		}
