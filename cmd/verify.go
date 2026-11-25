@@ -59,6 +59,14 @@ openeverest-compat-check.yaml, are those of this provider-sdk and the chart,
 and that with compatibility.acknowledge.coreVersion set every stamped object
 carries the acknowledgement, which OpenEverest reads on the object.
 
+verify also checks that the chart's ClusterRoles allow what provider-runtime
+requests before it starts a new build: get on the CustomResourceDefinition
+providers.core.openeverest.io, where OpenEverest publishes the versions it
+supports, and patch on the status of the chart's Provider, where the build
+records its version. controller-gen does not read the RBAC markers of a
+dependency, so internal/provider/rbac.go declares them; without them a new
+build stays unready. A chart that renders no ClusterRole is not checked.
+
 With --release, also fail when the stamp is a development contract version
 (OpenEverest's contract changed since its last release) or when go.mod replaces
 OpenEverest. A release names the oldest OpenEverest it works with, which users

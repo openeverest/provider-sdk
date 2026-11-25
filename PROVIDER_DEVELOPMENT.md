@@ -2272,7 +2272,8 @@ The scaffold includes base RBAC for the provider runtime:
 
   It also records Events on the `Provider`, with the `events.k8s.io` rule
   above. Keep these rules if you rewrite `rbac.go`, and add them to a provider
-  scaffolded before they were.
+  scaffolded before they were: `go tool provider-sdk verify` fails on a chart
+  whose `ClusterRole` lacks them.
 
 A held build stays alive but unready: its pod runs, `/healthz` answers and
 `/readyz` does not, so under the chart's default `RollingUpdate` the pods of
@@ -2684,8 +2685,10 @@ without a cluster, and checks that `Chart.yaml` and every `Provider`,
 `ClusterInstancePreset` it renders carry the stamp. It also checks that the
 generated templates are those of this `provider-sdk`, and, rendering again
 with `compatibility.acknowledge.coreVersion` set, that the acknowledgement
-reaches every stamped object. `make verify` runs it in CI. The release
-workflow runs
+reaches every stamped object, and that the chart's `ClusterRole` allows what
+the startup gate needs (see [Base RBAC](#base-rbac-pre-configured)); a chart
+that renders no `ClusterRole` leaves that to whoever installs it and is not
+checked. `make verify` runs it in CI. The release workflow runs
 `go tool provider-sdk verify --release` before packaging the chart, which also
 fails on a development value and on a `go.mod` that replaces OpenEverest: a
 release tells users the oldest OpenEverest it works with, so that OpenEverest
@@ -3074,7 +3077,9 @@ than silently emitting a broken Provider CR. It validates
 ### `provider-sdk verify`
 
 Check that the chart is stamped with the OpenEverest the provider is built
-against (see [Compatibility with OpenEverest](#compatibility-with-openeverest)).
+against (see [Compatibility with OpenEverest](#compatibility-with-openeverest)),
+and that its `ClusterRole` allows what the provider needs to start (see
+[Base RBAC](#base-rbac-pre-configured)).
 
 ```bash
 go tool provider-sdk verify [--chart-dir charts/<provider-name>] [--release]

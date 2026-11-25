@@ -59,6 +59,9 @@ type Object struct {
 	GroupKind   schema.GroupKind
 	Name        string
 	Annotations map[string]string
+
+	// Manifest is the object as the chart renders it, in YAML.
+	Manifest string
 }
 
 // CoreInterpreted reports whether core interprets o.
@@ -176,5 +179,6 @@ func decode(doc string) (Object, bool, error) {
 		GroupKind:   schema.GroupKind{Group: gv.Group, Kind: head.Kind},
 		Name:        head.Metadata.Name,
 		Annotations: head.Metadata.Annotations,
+		Manifest:    doc,
 	}, true, nil
 }
