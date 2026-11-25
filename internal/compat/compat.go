@@ -33,6 +33,7 @@ import (
 	"strings"
 
 	"golang.org/x/mod/modfile"
+	"golang.org/x/mod/module"
 
 	"github.com/openeverest/openeverest/v2/contract"
 )
@@ -113,6 +114,32 @@ func RequiredCore(dir string) (Module, error) {
 	return m, nil
 }
 
+// RequiredCoreIn returns the core module the go.mod file data, named name,
+// requires, with the module its replace directives substitute, if any. It
+// reads the file alone, without the minimal version selection of
+// RequiredCore.
+func RequiredCoreIn(name string, data []byte) (Module, error) {
+	f, err := modfile.Parse(name, data, nil)
+	if err != nil {
+		return Module{}, fmt.Errorf("parsing %s: %w", name, err)
+	}
+	var core *Module
+	for _, r := range f.Require {
+		if r.Mod.Path == CoreModule {
+			core = &Module{Path: r.Mod.Path, Version: r.Mod.Version}
+		}
+	}
+	if core == nil {
+		return Module{}, fmt.Errorf("%s does not require %s", name, CoreModule)
+	}
+	for _, r := range f.Replace {
+		if r.Old.Path == CoreModule && (r.Old.Version == "" || r.Old.Version == core.Version) {
+			core.Replace = &Module{Path: r.New.Path, Version: r.New.Version}
+		}
+	}
+	return *core, nil
+}
+
 // CheckCore compares the core this binary links with the one the provider's
 // module requires. It returns an error when they differ, as the stamp would
 // then name a core the provider is not built against. When both come from a
@@ -152,6 +179,29 @@ func ReleaseProblems(required Module, version string) []string {
 		problems = append(problems, fmt.Sprintf("go.mod replaces %s (%s); require it directly instead", CoreModule, required))
 	case required.local():
 		problems = append(problems, fmt.Sprintf("%s comes from a local directory; require it in go.mod instead", CoreModule))
+	}
+	return problems
+}
+
+// LibraryReleaseProblems returns why a release of provider-sdk requiring
+// required must not be published. provider-sdk is a library: minimal version
+// selection gives every provider that requires a release of it at least the
+// core that release requires, and a pseudo-version of OpenEverest's main
+// branch, such as v2.0.0-dev.2.0.20261125185706-a1ddf4732eeb, sorts above
+// every alpha and beta of that version, so a provider asking for one would
+// silently build against that commit instead. Consumers also ignore its
+// replace directives, so a release built with one is not what they get. A
+// release must therefore require a tag of OpenEverest.
+func LibraryReleaseProblems(required Module) []string {
+	var problems []string
+	switch {
+	case required.Replace != nil:
+		problems = append(problems, fmt.Sprintf("replaces %s with %s", CoreModule, required.Replace))
+	case required.local():
+		problems = append(problems, fmt.Sprintf("builds %s from a local directory, such as a go.work workspace", CoreModule))
+	}
+	if module.IsPseudoVersion(required.Version) {
+		problems = append(problems, fmt.Sprintf("requires %s@%s, a pseudo-version, not a tag", CoreModule, required.Version))
 	}
 	return problems
 }

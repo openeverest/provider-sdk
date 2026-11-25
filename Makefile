@@ -25,6 +25,10 @@ gen: ## Regenerate the committed copies of the chart templates generate writes, 
 test: ## Run unit tests.
 	go test ./...
 
+.PHONY: check-release
+check-release: ## Check go.mod and the scaffold require a released OpenEverest, as a release must (run by the release workflow).
+	go run ./hack/check-release-core
+
 .PHONY: test-helm
 test-helm: helm-unittest ## Run the helm-unittest suites of the chart templates generate writes.
 	HELM_PLUGINS=$(HELM_PLUGINS_DIR) $(HELM) unittest test/helm/openeverest-compat

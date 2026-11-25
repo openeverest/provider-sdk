@@ -24,6 +24,11 @@ jobs:
           go-version-file: 'go.mod'
           cache: true
 
+      # provider-sdk is a library: every provider requiring this release
+      # inherits the OpenEverest it requires, so it must be a released one.
+      - name: Check the release requires a released OpenEverest
+        run: go run ./hack/check-release-core
+
       - name: Build binaries
         env:
           CGO_ENABLED: 0

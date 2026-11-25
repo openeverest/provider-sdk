@@ -62,7 +62,14 @@ make build      # build to ./bin/provider-sdk
 make test       # run unit tests
 make gen        # regenerate the committed copies of the chart templates generate writes
 make test-helm  # run their helm-unittest suites (installs the plugin into ./bin)
+make check-release  # before tagging: check go.mod and the scaffold require a released OpenEverest
 ```
+
+provider-sdk is a library, so every provider requiring a release of it inherits the OpenEverest
+core that release requires. Between releases `main` may require a commit of OpenEverest's `main`
+branch (a pseudo-version); before tagging, pin `go.mod` and `internal/scaffold/_template/go.mod.tmpl`
+to an OpenEverest tag. The release workflow refuses a tag that requires a pseudo-version or
+replaces OpenEverest.
 
 The scaffolding engine lives in `internal/scaffold/`, with the project template it emits under
 `internal/scaffold/_template/` (embedded into the binary; the leading underscore keeps the Go
