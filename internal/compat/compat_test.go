@@ -181,6 +181,122 @@ func TestReleaseProblems(t *testing.T) {
 	}
 }
 
+func TestLibraryReleaseProblems(t *testing.T) {
+	t.Parallel()
+
+	const pseudoVersion = "a pseudo-version, not a tag"
+	tests := map[string]struct {
+		required Module
+		want     []string
+	}{
+		"pre-release tag": {required: core(alpha1)},
+		"release tag":     {required: core("v2.0.0")},
+		"dev tag":         {required: core("v2.0.0-dev.2")},
+		"pseudo-version of main after a dev tag": {
+			required: core(pseudo),
+			want:     []string{"requires " + CoreModule + "@" + pseudo + ", " + pseudoVersion},
+		},
+		"pseudo-version after a pre-release tag": {
+			required: core("v2.0.0-alpha.1.0.20261125185706-a1ddf4732eeb"),
+			want:     []string{pseudoVersion},
+		},
+		"pseudo-version after a release tag": {
+			required: core("v2.0.1-0.20261125185706-a1ddf4732eeb"),
+			want:     []string{pseudoVersion},
+		},
+		"pseudo-version without a tag": {
+			required: core("v2.0.0-20261125185706-a1ddf4732eeb"),
+			want:     []string{pseudoVersion},
+		},
+		"replaced by a fork release": {
+			required: replaced(alpha1, "github.com/fork/openeverest/v2", alpha1),
+			want:     []string{"replaces " + CoreModule + " with github.com/fork/openeverest/v2@" + alpha1},
+		},
+		"replaced by a directory": {
+			required: replaced(alpha1, "../openeverest", ""),
+			want:     []string{"replaces " + CoreModule + " with ../openeverest"},
+		},
+		"pseudo-version replaced by a directory": {
+			required: replaced(pseudo, "../openeverest", ""),
+			want:     []string{"replaces " + CoreModule, pseudoVersion},
+		},
+		"workspace module": {
+			required: core(""),
+			want:     []string{"builds " + CoreModule + " from a local directory"},
+		},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			got := LibraryReleaseProblems(tt.required)
+
+			require.Len(t, got, len(tt.want))
+			for i, want := range tt.want {
+				assert.Contains(t, got[i], want)
+			}
+		})
+	}
+}
+
+func TestRequiredCoreIn(t *testing.T) {
+	t.Parallel()
+
+	const header = "module example.com/provider\n\ngo 1.27.1\n\nrequire " + CoreModule + " " + alpha1 + "\n"
+	tests := map[string]struct {
+		goMod   string
+		want    Module
+		wantErr string
+	}{
+		"tag": {
+			goMod: header,
+			want:  core(alpha1),
+		},
+		"pseudo-version": {
+			goMod: "module example.com/provider\n\nrequire " + CoreModule + " " + pseudo + "\n",
+			want:  core(pseudo),
+		},
+		"replaced by a directory": {
+			goMod: header + "\nreplace " + CoreModule + " => ../openeverest\n",
+			want:  replaced(alpha1, "../openeverest", ""),
+		},
+		"required version replaced by a fork": {
+			goMod: header + "\nreplace " + CoreModule + " " + alpha1 + " => github.com/fork/openeverest/v2 v2.0.0-alpha.1.1\n",
+			want:  replaced(alpha1, "github.com/fork/openeverest/v2", "v2.0.0-alpha.1.1"),
+		},
+		"another version replaced": {
+			goMod: header + "\nreplace " + CoreModule + " v2.0.0-alpha.2 => ../openeverest\n",
+			want:  core(alpha1),
+		},
+		"another module replaced": {
+			goMod: header + "\nreplace k8s.io/api => ../api\n",
+			want:  core(alpha1),
+		},
+		"core not required": {
+			goMod:   "module example.com/provider\n\nrequire k8s.io/api v0.37.2\n",
+			wantErr: "go.mod does not require " + CoreModule,
+		},
+		"invalid go.mod": {
+			goMod:   "module example.com/provider\n\nrequire " + CoreModule + "\n",
+			wantErr: "parsing go.mod",
+		},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			got, err := RequiredCoreIn("go.mod", []byte(tt.goMod))
+
+			if tt.wantErr != "" {
+				require.ErrorContains(t, err, tt.wantErr)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
 func TestFloor(t *testing.T) {
 	t.Parallel()
 

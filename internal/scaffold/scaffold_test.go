@@ -22,7 +22,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/mod/modfile"
 
 	"github.com/openeverest/provider-sdk/internal/compat"
 	"github.com/openeverest/provider-sdk/internal/generate"
@@ -285,25 +284,15 @@ func TestScaffoldContractTemplatesAreGenerated(t *testing.T) {
 func TestScaffoldRequiresTheCoreOfTheSDK(t *testing.T) {
 	t.Parallel()
 
-	sdk, err := os.ReadFile(filepath.Join("..", "..", "go.mod"))
+	data, err := os.ReadFile(filepath.Join("..", "..", "go.mod"))
 	require.NoError(t, err)
-	tmpl, err := templateFS.ReadFile(templateRoot + "/go.mod.tmpl")
+	sdk, err := compat.RequiredCoreIn("go.mod", data)
 	require.NoError(t, err)
-	rendered, err := renderTemplate("go.mod.tmpl", string(tmpl), &Config{ModulePath: "github.com/example/provider-test-db"})
+	scaffolded, err := RequiredCore()
 	require.NoError(t, err)
 
-	coreOf := func(name string, data []byte) string {
-		f, err := modfile.ParseLax(name, data, nil)
-		require.NoError(t, err)
-		for _, r := range f.Require {
-			if r.Mod.Path == compat.CoreModule {
-				return r.Mod.Version
-			}
-		}
-		t.Fatalf("%s does not require %s", name, compat.CoreModule)
-		return ""
-	}
-	assert.Equal(t, coreOf("go.mod", sdk), coreOf("go.mod.tmpl", []byte(rendered)))
+	assert.Equal(t, sdk.Version, scaffolded.Version)
+	assert.Nil(t, scaffolded.Replace, "a scaffolded project must not replace %s", compat.CoreModule)
 }
 
 func TestScaffoldOutputDirExists(t *testing.T) {
