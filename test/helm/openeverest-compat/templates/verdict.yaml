@@ -1,0 +1,16 @@
+{{- /*
+Test-only: the verdict of the check for an extension stamped .Values.ext on the
+window the CRDs in the cluster publish, for tests/vectors_test.yaml.
+*/ -}}
+{{- $w := include "openeverest.contract.window" (list "providers.core.openeverest.io" "backupclasses.backup.openeverest.io") | fromJson -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: verdict
+data:
+  found: {{ $w.found | quote }}
+  min: {{ $w.min | quote }}
+  cur: {{ $w.cur | quote }}
+  coreVersion: {{ $w.coreVersion | quote }}
+  reason: {{ include "openeverest.contract.verdict" (dict "ext" .Values.ext "min" $w.min "cur" $w.cur) | quote }}
+  development: {{ include "openeverest.contract.development" .Values.ext | quote }}

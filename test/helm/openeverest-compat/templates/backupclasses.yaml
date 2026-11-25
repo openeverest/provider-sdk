@@ -1,0 +1,4 @@
+{{- range $path, $_ := .Files.Glob "generated/backupclasses/*.yaml" }}
+---
+{{ include "openeverest.contract.generatedObject" (dict "root" $ "path" $path) }}
+{{- end }}

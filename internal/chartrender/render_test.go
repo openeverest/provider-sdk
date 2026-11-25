@@ -142,3 +142,43 @@ func TestRenderErrors(t *testing.T) {
 		})
 	}
 }
+
+func TestRenderValues(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	writeChart(t, dir, map[string]string{
+		"Chart.yaml":  "apiVersion: v2\nname: provider-x\nversion: 0.1.0\n",
+		"values.yaml": "provider:\n  name: x\nack: \"\"\n",
+		"templates/provider.yaml": `apiVersion: core.openeverest.io/v1alpha1
+kind: Provider
+metadata:
+  name: {{ .Values.provider.name }}
+  annotations:
+    ack: {{ .Values.ack | quote }}
+`,
+	})
+
+	tests := map[string]struct {
+		values map[string]any
+		want   map[string]string
+	}{
+		"default values": {want: map[string]string{"ack": ""}},
+		"values over the defaults": {
+			values: map[string]any{"ack": "2.1.0"},
+			want:   map[string]string{"ack": "2.1.0"},
+		},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			objects, err := RenderValues(dir, tt.values)
+
+			require.NoError(t, err)
+			require.Len(t, objects, 1)
+			assert.Equal(t, "x", objects[0].Name, "the other defaults stay")
+			assert.Equal(t, tt.want, objects[0].Annotations)
+		})
+	}
+}

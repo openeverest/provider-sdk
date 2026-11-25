@@ -1,0 +1,11 @@
+{{- /*
+Test-only: whether an acknowledgement of .Values.ack holds on a CRD that
+publishes .Values.contractVersion and .Values.coreVersion, for
+tests/acknowledge_vectors_test.yaml.
+*/ -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: acknowledgement
+data:
+  holds: {{ include "openeverest.contract.acknowledgementHolds" (dict "ack" .Values.ack "contractVersion" .Values.contractVersion "coreVersion" .Values.coreVersion) | quote }}

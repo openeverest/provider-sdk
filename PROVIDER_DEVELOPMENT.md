@@ -202,7 +202,8 @@ charts/<provider-name>/              # ← GENERATED (mostly)
     rbac-rules.yaml                  # Generated from rbac.go by `make manifests`
     backupclasses/                   # Generated BackupClass manifests (optional)
   templates/                         # Helm chart templates (edit if needed)
-    _openeverest_contract.tpl        # Generated helper rendering the OpenEverest stamp
+    _openeverest_contract.tpl        # Generated helpers: the OpenEverest stamp and its check
+    openeverest-compat-check.yaml    # Generated: refuses to install on an OpenEverest that does not serve the stamp
 
 .github/workflows/                   # ← CI/CD (standardized)
   ci.yaml                            # Lint, unit tests and integration tests on PRs
@@ -2554,11 +2555,11 @@ stamps it, so it cannot drift from the code the provider is built against.
 
 The helper also renders the annotations set in the chart value
 `openeverest.annotations`, empty by default, so that whoever installs the
-chart can annotate these objects for the tool that applies it. Keys under
-`openeverest.io/` belong to the chart and to OpenEverest: the helper fails the
-render on one. The generated BackupClasses are files the chart includes as
-they are, not templates, so they do not get them. The chart sets no
-annotation for any tool itself. With Argo CD, for example, to apply these
+chart can annotate these objects for the tool that applies it. The scaffolded
+`templates/backupclasses.yaml` renders the generated BackupClasses with
+`openeverest.contract.generatedObject`, which adds them too. Keys under
+`openeverest.io/` belong to the chart and to OpenEverest: the helpers fail the
+render on one. The chart sets no annotation for any tool itself. With Argo CD, for example, to apply these
 objects before your `Deployment`, which is at sync wave `0`:
 
 ```yaml
@@ -2595,11 +2596,64 @@ before any release that can follow it:
 No OpenEverest release is ever named either way. Core builds such as
 `2.0.0-dev.4` are releases, not development values.
 
+`make generate` also writes `templates/openeverest-compat-check.yaml`, which
+makes the install fail, before anything is applied, when the OpenEverest in the
+cluster would refuse the chart's objects. It reads the range of versions
+OpenEverest serves from the annotations of the CRDs of the objects the chart
+applies (the `Provider`, plus `BackupClass` and the others when the chart
+renders them), and decides like OpenEverest's admission does, which checks
+each object against the CRD of its kind. The message names the OpenEverest the
+provider needs:
+
+```
+Error: INSTALLATION FAILED: execution error at (provider-my-database/templates/openeverest-compat-check.yaml:8:4):
+provider-my-database 0.3.0 needs OpenEverest 2.1.0 or later; this cluster runs OpenEverest 2.0.1.
+To install it anyway on this OpenEverest, set compatibility.acknowledge.coreVersion=2.0.1.
+```
+
+- Failing the render rather than a pre-install hook leaves no failed Helm
+  release behind, so installing again after upgrading OpenEverest just works.
+- Without access to a cluster (`helm template`, a client-side dry run, Argo CD)
+  the check finds no CRD and passes, as it does when OpenEverest is not
+  installed. It also passes when the chart has no stamp, when the range is
+  malformed, and while the CRDs disagree on the range, as during an
+  OpenEverest upgrade. A stamp that is present but not a SemVer 2.0.0 version
+  fails once a CRD publishes a range, as OpenEverest refuses it.
+- Upgrading an installed release whose `Provider` carries the same stamp, e.g.
+  to change values, is never blocked.
+- `compatibility.acknowledge.coreVersion` installs anyway. It names an
+  OpenEverest release `A`, and holds while the contract version the CRDs
+  publish (`openeverest.io/contract-version`) ≤ `A` ≤ the version of the
+  OpenEverest that is installed (their `openeverest.io/version` label). So it
+  survives the patch releases that keep the contract, expires with the first
+  OpenEverest release that changes it, when what the user accepted changes,
+  and set ahead of an upgrade, in Git for example, does nothing until that
+  release is installed. The chart writes it on its objects as
+  `openeverest.io/compatibility-acknowledged`, where OpenEverest reads it too:
+  `openeverest.contract.annotations` renders it, and the scaffolded
+  `templates/backupclasses.yaml` renders the generated BackupClasses with
+  `openeverest.contract.generatedObject`, which adds it. The scaffolded
+  `values.yaml` documents it.
+- An OpenEverest admin can acknowledge the provider on the OpenEverest side
+  instead: the OpenEverest chart publishes the list on its CRDs, as
+  `openeverest.io/acknowledged-extensions: <name>@<release>,…`, where `<name>`
+  is the name of the provider's `Provider`. Each entry follows the same rule,
+  and a list that does not parse acknowledges nothing.
+- OpenEverest's `openeverest.io/incompatible-plugins` policy only concerns
+  `Plugin`s, which a provider chart does not render, so it does not apply.
+
+The check reads the CRDs as the user installing the chart, so a user who may
+not `get` them cannot install it; the OpenEverest chart grants that to every
+authenticated user.
+
 `go tool provider-sdk verify` renders the chart with its default values,
 without a cluster, and checks that `Chart.yaml` and every `Provider`,
 `BackupClass`, `BackupStorageClass`, `MonitoringClass` and
-`ClusterInstancePreset` it renders carry the stamp. `make verify` runs it in
-CI. The release workflow runs
+`ClusterInstancePreset` it renders carry the stamp. It also checks that the
+generated templates are those of this `provider-sdk`, and, rendering again
+with `compatibility.acknowledge.coreVersion` set, that the acknowledgement
+reaches every stamped object. `make verify` runs it in CI. The release
+workflow runs
 `go tool provider-sdk verify --release` before packaging the chart, which also
 fails on a development value and on a `go.mod` that replaces OpenEverest: a
 release tells users the oldest OpenEverest it works with, so that OpenEverest

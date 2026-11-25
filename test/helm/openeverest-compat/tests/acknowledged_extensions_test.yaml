@@ -1,0 +1,117 @@
+# The cases of contract.ParseAcknowledgedExtensions in OpenEverest core: a
+# list that does not parse acknowledges nothing.
+suite: acknowledged-extensions
+templates:
+  - templates/acknowledged.yaml
+tests:
+  - it: reads an empty list
+    set:
+      list: ""
+    asserts:
+      - equal:
+          path: data.acks
+          value: "{}"
+
+  - it: reads a list of spaces
+    set:
+      list: "  "
+    asserts:
+      - equal:
+          path: data.acks
+          value: "{}"
+
+  - it: reads one entry
+    set:
+      list: percona-server-mongodb@2.1.0
+    asserts:
+      - equal:
+          path: data.acks
+          value: '{"percona-server-mongodb":"2.1.0"}'
+
+  - it: reads several entries, ignoring spaces
+    set:
+      list: " percona-server-mongodb @ 2.1.0 , pmm@2.1.1-rc.1,audit@2.1.0+build.1 "
+    asserts:
+      - equal:
+          path: data.acks
+          value: '{"audit":"2.1.0+build.1","percona-server-mongodb":"2.1.0","pmm":"2.1.1-rc.1"}'
+
+  - it: acknowledges nothing for an entry without a release
+    set:
+      list: percona-server-mongodb
+    asserts:
+      - equal:
+          path: data.acks
+          value: "{}"
+
+  - it: acknowledges nothing for an empty entry
+    set:
+      list: percona-server-mongodb@2.1.0,,pmm@2.1.0
+    asserts:
+      - equal:
+          path: data.acks
+          value: "{}"
+
+  - it: acknowledges nothing for a trailing comma
+    set:
+      list: percona-server-mongodb@2.1.0,
+    asserts:
+      - equal:
+          path: data.acks
+          value: "{}"
+
+  - it: acknowledges nothing for an entry without a name
+    set:
+      list: " @2.1.0"
+    asserts:
+      - equal:
+          path: data.acks
+          value: "{}"
+
+  - it: acknowledges nothing for an empty release
+    set:
+      list: pmm@
+    asserts:
+      - equal:
+          path: data.acks
+          value: "{}"
+
+  - it: acknowledges nothing for an invalid release
+    set:
+      list: pmm@v2.1.0
+    asserts:
+      - equal:
+          path: data.acks
+          value: "{}"
+
+  - it: acknowledges nothing for a short release
+    set:
+      list: pmm@2.1
+    asserts:
+      - equal:
+          path: data.acks
+          value: "{}"
+
+  - it: acknowledges nothing for two separators
+    set:
+      list: pmm@2.1.0@2.2.0
+    asserts:
+      - equal:
+          path: data.acks
+          value: "{}"
+
+  - it: acknowledges nothing for a name listed twice with the same release
+    set:
+      list: pmm@2.1.0,pmm@2.1.0
+    asserts:
+      - equal:
+          path: data.acks
+          value: "{}"
+
+  - it: acknowledges nothing for a name listed twice with another release
+    set:
+      list: pmm@2.1.0, pmm @2.2.0
+    asserts:
+      - equal:
+          path: data.acks
+          value: "{}"

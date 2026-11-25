@@ -261,15 +261,21 @@ func TestScaffoldMonitoringExampleIsValid(t *testing.T) {
 	assert.Equal(t, map[string]any{"kind": "mydb"}, assembled.ComponentTypes["mydb"])
 }
 
-// TestScaffoldContractHelperIsGenerated keeps the helper a new project
-// starts with identical to the one generate writes, so a project renders
-// before its first make generate and generate leaves the file unchanged.
-func TestScaffoldContractHelperIsGenerated(t *testing.T) {
+// TestScaffoldContractTemplatesAreGenerated keeps the templates a new
+// project starts with identical to those generate writes for it, so a
+// project renders, and is checked, before its first make generate, which
+// then leaves them unchanged. Run `make gen` to update them.
+func TestScaffoldContractTemplatesAreGenerated(t *testing.T) {
 	t.Parallel()
 
-	scaffolded, err := templateFS.ReadFile(templateRoot + "/charts/__PROJECT_NAME__/templates/" + generate.ContractHelperFile)
-	require.NoError(t, err)
-	assert.Equal(t, generate.ContractHelper, string(scaffolded))
+	for file, want := range map[string]string{
+		generate.ContractHelperFile: generate.ContractHelper,
+		generate.CompatCheckFile:    generate.CompatCheck([]string{"providers.core.openeverest.io"}),
+	} {
+		scaffolded, err := templateFS.ReadFile(templateRoot + "/charts/__PROJECT_NAME__/templates/" + file)
+		require.NoError(t, err)
+		assert.Equal(t, want, string(scaffolded), file)
+	}
 }
 
 // TestScaffoldRequiresTheCoreOfTheSDK keeps the core a new project requires

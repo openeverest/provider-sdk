@@ -36,8 +36,16 @@ const (
 
 var releasedCore = compat.Module{Path: compat.CoreModule, Version: "v2.0.0-alpha.1"}
 
+const (
+	providersCRD         = "providers.core.openeverest.io"
+	backupClassesCRD     = "backupclasses.backup.openeverest.io"
+	monitoringClassesCRD = "monitoringclasses.monitoring.openeverest.io"
+	presetsCRD           = "clusterinstancepresets.core.openeverest.io"
+)
+
 // stampedChart is a chart whose Provider and BackupClass carry the stamp
-// released, the way generate and the scaffolded templates write them.
+// released, the way generate and the scaffolded templates write them, with
+// the check of the CRDs of both.
 func stampedChart() map[string]string {
 	return map[string]string{
 		"Chart.yaml": `apiVersion: v2
@@ -48,6 +56,7 @@ annotations:
 `,
 		"values.yaml": "provider:\n  name: x\n",
 		"templates/" + generate.ContractHelperFile: generate.ContractHelper,
+		"templates/" + generate.CompatCheckFile:    generate.CompatCheck([]string{providersCRD, backupClassesCRD}),
 		"templates/provider.yaml": `apiVersion: core.openeverest.io/v1alpha1
 kind: Provider
 metadata:
@@ -56,11 +65,7 @@ metadata:
     {{- include "openeverest.contract.annotations" . | nindent 4 }}
 spec: {}
 `,
-		"templates/backupclasses.yaml": `{{- range $path, $_ := .Files.Glob "generated/backupclasses/*.yaml" }}
----
-{{ $.Files.Get $path }}
-{{- end }}
-`,
+		"templates/backupclasses.yaml": backupClassesTemplate,
 		"generated/backupclasses/pbm.yaml": `apiVersion: backup.openeverest.io/v1alpha1
 kind: BackupClass
 metadata:
@@ -71,6 +76,22 @@ spec: {}
 `,
 	}
 }
+
+// backupClassesTemplate renders the generated BackupClasses like the
+// scaffolded templates/backupclasses.yaml.
+const backupClassesTemplate = `{{- range $path, $_ := .Files.Glob "generated/backupclasses/*.yaml" }}
+---
+{{ include "openeverest.contract.generatedObject" (dict "root" $ "path" $path) }}
+{{- end }}
+`
+
+// rawBackupClassesTemplate renders the generated BackupClasses as they are
+// written, without the acknowledgement.
+const rawBackupClassesTemplate = `{{- range $path, $_ := .Files.Glob "generated/backupclasses/*.yaml" }}
+---
+{{ $.Files.Get $path }}
+{{- end }}
+`
 
 func with(files map[string]string, changes map[string]string) map[string]string {
 	out := maps.Clone(files)
@@ -175,6 +196,9 @@ metadata:
   annotations:
     {{- include "openeverest.contract.annotations" . | nindent 4 }}
 `,
+				"templates/" + generate.CompatCheckFile: generate.CompatCheck([]string{
+					providersCRD, backupClassesCRD, "backupstorageclasses.backup.openeverest.io", "monitoringclasses.monitoring.openeverest.io",
+				}),
 			}),
 			wantStamped: []string{
 				"Chart.yaml",
@@ -188,6 +212,7 @@ metadata:
 		},
 		"ClusterInstancePresets with the helper": {
 			files: with(stampedChart(), map[string]string{
+				"templates/" + generate.CompatCheckFile: generate.CompatCheck([]string{providersCRD, backupClassesCRD, presetsCRD}),
 				"templates/presets.yaml": `{{- range list "small" "large" }}
 ---
 apiVersion: core.openeverest.io/v1alpha1
@@ -210,7 +235,8 @@ spec: {}
 		},
 		"ClusterInstancePreset without the helper": {
 			files: with(stampedChart(), map[string]string{
-				"templates/presets.yaml": "apiVersion: core.openeverest.io/v1alpha1\nkind: ClusterInstancePreset\nmetadata:\n  name: x-small\nspec: {}\n",
+				"templates/" + generate.CompatCheckFile: generate.CompatCheck([]string{providersCRD, backupClassesCRD, presetsCRD}),
+				"templates/presets.yaml":                "apiVersion: core.openeverest.io/v1alpha1\nkind: ClusterInstancePreset\nmetadata:\n  name: x-small\nspec: {}\n",
 			}),
 			wantStamped: []string{
 				"Chart.yaml",
@@ -253,16 +279,18 @@ metadata:
 		},
 		"development value, not a release": {
 			files: with(stampedChart(), map[string]string{
-				"Chart.yaml":                       "apiVersion: v2\nname: provider-x\nversion: 0.1.0\nannotations:\n  openeverest.io/contract-version: " + development + "\n",
-				"generated/backupclasses/pbm.yaml": "",
+				"Chart.yaml":                            "apiVersion: v2\nname: provider-x\nversion: 0.1.0\nannotations:\n  openeverest.io/contract-version: " + development + "\n",
+				"generated/backupclasses/pbm.yaml":      "",
+				"templates/" + generate.CompatCheckFile: generate.CompatCheck([]string{providersCRD}),
 			}),
 			version:     development,
 			wantStamped: []string{"Chart.yaml", "Provider x (templates/provider.yaml)"},
 		},
 		"development value, release": {
 			files: with(stampedChart(), map[string]string{
-				"Chart.yaml":                       "apiVersion: v2\nname: provider-x\nversion: 0.1.0\nannotations:\n  openeverest.io/contract-version: " + development + "\n",
-				"generated/backupclasses/pbm.yaml": "",
+				"Chart.yaml":                            "apiVersion: v2\nname: provider-x\nversion: 0.1.0\nannotations:\n  openeverest.io/contract-version: " + development + "\n",
+				"generated/backupclasses/pbm.yaml":      "",
+				"templates/" + generate.CompatCheckFile: generate.CompatCheck([]string{providersCRD}),
 			}),
 			version:     development,
 			release:     true,
@@ -271,6 +299,55 @@ metadata:
 			wantProblems: []string{
 				"built against an unreleased OpenEverest (2.0.0-alpha.1.next): its contract has changed since the last release; require an OpenEverest whose contract is a released one",
 			},
+		},
+		"generated templates missing": {
+			files: with(stampedChart(), map[string]string{
+				"templates/" + generate.CompatCheckFile:    "",
+				"templates/provider.yaml":                  "apiVersion: core.openeverest.io/v1alpha1\nkind: Provider\nmetadata:\n  name: x\n  annotations:\n    openeverest.io/contract-version: " + released + "\n",
+				"templates/" + generate.ContractHelperFile: "",
+				"templates/backupclasses.yaml":             rawBackupClassesTemplate,
+			}),
+			wantStamped: []string{
+				"Chart.yaml",
+				"BackupClass pbm (templates/backupclasses.yaml)",
+				"Provider x (templates/provider.yaml)",
+			},
+			wantProblems: []string{
+				"templates/_openeverest_contract.tpl is missing; run `make generate`",
+				"templates/openeverest-compat-check.yaml is missing; run `make generate`",
+				"BackupClass pbm (templates/backupclasses.yaml) has no openeverest.io/compatibility-acknowledged annotation when compatibility.acknowledge.coreVersion is set, so OpenEverest would refuse it even once the user acknowledged it; render the generated BackupClasses with {{ include \"openeverest.contract.generatedObject\" (dict \"root\" $ \"path\" $path) }}, as the scaffolded templates/backupclasses.yaml does",
+				"Provider x (templates/provider.yaml) has no openeverest.io/compatibility-acknowledged annotation when compatibility.acknowledge.coreVersion is set, so OpenEverest would refuse it even once the user acknowledged it; include \"openeverest.contract.annotations\", from templates/_openeverest_contract.tpl, in its metadata.annotations",
+			},
+		},
+		"BackupClasses rendered without the acknowledgement": {
+			files: with(stampedChart(), map[string]string{"templates/backupclasses.yaml": rawBackupClassesTemplate}),
+			wantStamped: []string{
+				"Chart.yaml",
+				"BackupClass pbm (templates/backupclasses.yaml)",
+				"Provider x (templates/provider.yaml)",
+			},
+			wantProblems: []string{
+				"BackupClass pbm (templates/backupclasses.yaml) has no openeverest.io/compatibility-acknowledged annotation when compatibility.acknowledge.coreVersion is set, so OpenEverest would refuse it even once the user acknowledged it; render the generated BackupClasses with {{ include \"openeverest.contract.generatedObject\" (dict \"root\" $ \"path\" $path) }}, as the scaffolded templates/backupclasses.yaml does",
+			},
+		},
+		"generated templates of another provider-sdk": {
+			files: with(stampedChart(), map[string]string{
+				"templates/" + generate.ContractHelperFile: generate.ContractHelper + "{{/* changed */}}\n",
+			}),
+			wantStamped: []string{
+				"Chart.yaml",
+				"BackupClass pbm (templates/backupclasses.yaml)",
+				"Provider x (templates/provider.yaml)",
+			},
+			wantProblems: []string{"templates/_openeverest_contract.tpl is out of date; run `make generate`"},
+		},
+		"check of CRDs the chart no longer applies": {
+			files: with(stampedChart(), map[string]string{"generated/backupclasses/pbm.yaml": ""}),
+			wantStamped: []string{
+				"Chart.yaml",
+				"Provider x (templates/provider.yaml)",
+			},
+			wantProblems: []string{"templates/openeverest-compat-check.yaml is out of date; run `make generate`"},
 		},
 		"released value, pseudo-version core, release": {
 			files:   stampedChart(),
@@ -371,6 +448,13 @@ func TestRunScaffoldedChart(t *testing.T) {
 	require.Contains(t, string(values), "\npresets: []\n")
 	values = []byte(strings.Replace(string(values), "\npresets: []\n", "\npresets:\n  - name: small\n    enabled: true\n    spec: {}\n", 1))
 	require.NoError(t, os.WriteFile(valuesFile, values, 0o600))
+
+	res, err = Run(Options{ChartDir: chartDir, ContractVersion: released})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"templates/openeverest-compat-check.yaml is out of date; run `make generate`"}, res.Problems,
+		"the check reads the CRD of the presets the chart now applies")
+	require.NoError(t, os.WriteFile(filepath.Join(chartDir, "templates", generate.CompatCheckFile),
+		[]byte(generate.CompatCheck([]string{providersCRD, presetsCRD})), 0o600))
 
 	res, err = Run(Options{ChartDir: chartDir, ContractVersion: released})
 	require.NoError(t, err)

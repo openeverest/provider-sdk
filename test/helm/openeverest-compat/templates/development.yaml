@@ -1,0 +1,10 @@
+{{- /*
+Test-only: whether .Values.version is a development value, for
+tests/development_vectors_test.yaml.
+*/ -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: development
+data:
+  development: {{ include "openeverest.contract.development" .Values.version | quote }}

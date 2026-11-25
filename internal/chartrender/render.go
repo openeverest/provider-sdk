@@ -79,6 +79,15 @@ func (o Object) Own() bool {
 // returns nothing. Templates named in skip, relative to the chart (e.g.
 // templates/check.yaml), are not rendered.
 func Render(dir string, skip ...string) ([]Object, error) {
+	return RenderValues(dir, nil, skip...)
+}
+
+// RenderValues renders the chart in dir like Render, with values over its
+// default values, as `helm install --values` would.
+func RenderValues(dir string, values map[string]any, skip ...string) ([]Object, error) {
+	if values == nil {
+		values = map[string]any{}
+	}
 	chrt, err := loader.Load(dir)
 	if err != nil {
 		return nil, fmt.Errorf("loading chart %s: %w", dir, err)
@@ -92,10 +101,10 @@ func Render(dir string, skip ...string) ([]Object, error) {
 		}
 		chrt.Templates = kept
 	}
-	if err := chartutil.ProcessDependenciesWithMerge(chrt, map[string]any{}); err != nil {
+	if err := chartutil.ProcessDependenciesWithMerge(chrt, values); err != nil {
 		return nil, fmt.Errorf("processing chart dependencies: %w", err)
 	}
-	vals, err := chartutil.ToRenderValues(chrt, map[string]any{}, chartutil.ReleaseOptions{
+	vals, err := chartutil.ToRenderValues(chrt, values, chartutil.ReleaseOptions{
 		Name:      chrt.Name(),
 		Namespace: "default",
 		Revision:  1,

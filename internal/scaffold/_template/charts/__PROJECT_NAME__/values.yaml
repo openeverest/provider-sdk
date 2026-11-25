@@ -126,9 +126,9 @@ provider:
 
 openeverest:
   # -- Annotations to add to the objects of this chart that OpenEverest
-  # interprets: the Provider, the presets, and any BackupStorageClass or
-  # MonitoringClass the chart applies. Keys under openeverest.io/ belong to
-  # the chart and to OpenEverest, and are refused.
+  # interprets: the Provider, the BackupClasses, the presets, and any
+  # BackupStorageClass or MonitoringClass the chart applies. Keys under
+  # openeverest.io/ belong to the chart and to OpenEverest, and are refused.
   annotations: {}
     # For example, to have Argo CD apply these objects before the provider's
     # Deployment:
@@ -178,6 +178,17 @@ admission:
   certManager:
     # -- Issue the serving certificate with cert-manager, which must be installed.
     enabled: false
+
+compatibility:
+  acknowledge:
+    # -- Install even though the OpenEverest in the cluster does not serve the
+    # OpenEverest this chart is built for, which the install otherwise refuses.
+    # Set it to the version of OpenEverest the cluster runs, which the error
+    # names. It holds on that release and the later ones that keep its
+    # contract, such as its patch releases, and expires with the first
+    # OpenEverest release that changes the contract, which is checked again.
+    # Set ahead of an upgrade, it does nothing until that release is installed.
+    coreVersion: ""
 
 # -- Leader election configuration
 leaderElection:
