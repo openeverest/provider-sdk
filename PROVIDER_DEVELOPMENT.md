@@ -2253,6 +2253,37 @@ The scaffold includes base RBAC for the provider runtime:
 - Secrets — the runtime writes the connection details returned by `Status()`
   into the Instance's connection Secret. Without it every reconcile that would
   report `Ready` fails, and the Instance freezes on its last reported phase.
+- The startup gate — before it starts its controllers, a new build of the
+  provider checks that the installed OpenEverest supports the version it is
+  built against (see
+  [Compatibility with OpenEverest](#compatibility-with-openeverest)). It reads
+  the versions OpenEverest supports on the `providers.core.openeverest.io`
+  CRD, and once it starts, records its version on its `Provider`'s
+  `status.contractVersion`, so that a restart of the same build starts without
+  the check. `provider-runtime` cannot declare these rules itself, as
+  controller-gen does not read the RBAC markers of a dependency, so the
+  scaffolded `rbac.go` declares them, with the name of your `Provider`
+  (`common.ProviderName`):
+
+  ```go
+  // +kubebuilder:rbac:groups=apiextensions.k8s.io,resources=customresourcedefinitions,resourceNames=providers.core.openeverest.io,verbs=get
+  // +kubebuilder:rbac:groups=core.openeverest.io,resources=providers/status,resourceNames=my-database,verbs=patch
+  ```
+
+  It also records Events on the `Provider`, with the `events.k8s.io` rule
+  above. Keep these rules if you rewrite `rbac.go`, and add them to a provider
+  scaffolded before they were.
+
+A held build stays alive but unready: its pod runs, `/healthz` answers and
+`/readyz` does not, so under the chart's default `RollingUpdate` the pods of
+the previous build keep serving. Keep the scaffolded readiness probe on
+`/readyz`: a pod without one counts as ready while it waits, and the rollout
+removes the previous build. The held build logs why, records a Warning Event
+on its `Provider` (`kubectl describe provider <name>`), and reads the CRD
+again every 15 seconds, so it starts by itself once OpenEverest is upgraded.
+The Event's reason says why it waits, e.g. `CoreTooOld`, whose message names
+the OpenEverest to install, or `ReadFailed`, whose message carries the error,
+such as `forbidden` when the rules above are missing.
 
 ### Adding Provider-Specific RBAC
 
@@ -2571,7 +2602,8 @@ openeverest:
 Ordering is a convenience, not what keeps an incompatible build from running:
 `provider-runtime` does that. A build for an OpenEverest the cluster does not
 serve stays unready until OpenEverest admits it, whichever tool applies the
-chart.
+chart; [Base RBAC](#base-rbac-pre-configured) lists the rules it needs for
+that and shows what a held build looks like.
 
 The stamp is the version of the core that `provider-sdk` links. Run as
 `go tool provider-sdk`, which `go generate` and the Makefile do, it builds

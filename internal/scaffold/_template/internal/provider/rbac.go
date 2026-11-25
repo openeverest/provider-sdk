@@ -15,6 +15,12 @@ package provider
 // +kubebuilder:rbac:groups=events.k8s.io,resources=events,verbs=create;patch
 // The runtime writes the connection details returned by Status() into a Secret.
 // +kubebuilder:rbac:groups="",resources=secrets,verbs=get;list;watch;create;update;patch;delete
+// A new build stays unready until the installed OpenEverest supports it: the
+// runtime reads the versions OpenEverest supports on the Provider CRD, then
+// records the version it was built for on its Provider's status. Keep
+// resourceNames in sync with common.ProviderName.
+// +kubebuilder:rbac:groups=apiextensions.k8s.io,resources=customresourcedefinitions,resourceNames=providers.core.openeverest.io,verbs=get
+// +kubebuilder:rbac:groups=core.openeverest.io,resources=providers/status,resourceNames=[[ .ProviderName ]],verbs=patch
 
 // =============================================================================
 // PROVIDER-SPECIFIC RBAC — Add markers for your operator's resources.
