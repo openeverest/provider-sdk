@@ -40,10 +40,12 @@ podAnnotations: {}
 podLabels: {}
 
 podSecurityContext:
-  # -- Run as non-root
+  # -- Run as non-root. The image sets USER 65532; no runAsUser or fsGroup here, so
+  # OpenShift's restricted-v2 SCC can assign IDs from the namespace range.
   runAsNonRoot: true
-  # -- Security context fsGroup
-  fsGroup: 65534
+  # -- Seccomp profile, required by the restricted Pod Security Standard
+  seccompProfile:
+    type: RuntimeDefault
 
 securityContext:
   # -- Disallow privilege escalation
@@ -56,8 +58,6 @@ securityContext:
   readOnlyRootFilesystem: true
   # -- Run as non-root user
   runAsNonRoot: true
-  # -- Run as user ID
-  runAsUser: 65534
 
 service:
   # -- Service type
