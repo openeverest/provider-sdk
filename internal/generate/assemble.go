@@ -18,9 +18,12 @@
 package generate
 
 import (
+	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 
 	"gopkg.in/yaml.v3"
 )
@@ -64,6 +67,11 @@ type AssembledConfig struct {
 	// definition/monitoring.yaml, or nil when the provider declares none.
 	Monitoring map[string]any
 
+	// Suspend is Provider.spec.suspend from the optional suspend key in
+	// definition/provider.yaml, or nil when the provider cannot suspend
+	// Instances.
+	Suspend map[string]any
+
 	// TypeRefs collects all Go type name references found during assembly
 	// (e.g., parametersSchema values on the provider, components, and topologies).
 	TypeRefs map[string]bool
@@ -72,8 +80,8 @@ type AssembledConfig struct {
 // Assemble reads the definition directory and builds an assembled provider configuration.
 //
 // It reads:
-//   - definition/provider.yaml    — provider name, component→type mapping and
-//     the kind of each component type
+//   - definition/provider.yaml    — provider name, component→type mapping, the
+//     kind of each component type and suspend support
 //   - definition/versions.yaml    — component type version catalogs
 //   - definition/monitoring.yaml  — monitoring contract (optional)
 //   - definition/topologies/*/topology.yaml — topology configs and UI schemas
@@ -153,6 +161,11 @@ func Assemble(defDir string) (*AssembledConfig, error) {
 	if ps, ok := provider["parametersSchema"].(string); ok && ps != "" {
 		cfg.ParametersSchema = ps
 		cfg.TypeRefs[ps] = true
+	}
+
+	cfg.Suspend, err = assembleSuspend(provider)
+	if err != nil {
+		return nil, err
 	}
 
 	cfg.Monitoring, err = assembleMonitoring(defDir, cfg.Components, kinds)
@@ -412,4 +425,22 @@ func validateDefaults(componentTypes map[string]any, bundles []any, defaultVersi
 		}
 	}
 	return nil
+}
+
+// assembleSuspend returns the suspend declaration from provider.yaml. The key
+// is optional; `suspend: {}` declares that the provider suspends Instances on
+// request.
+func assembleSuspend(provider map[string]any) (map[string]any, error) {
+	raw, ok := provider["suspend"]
+	if !ok {
+		return nil, nil
+	}
+	suspend, ok := raw.(map[string]any)
+	if !ok {
+		return nil, errors.New("invalid provider.yaml: suspend must be an object, e.g. suspend: {}")
+	}
+	if len(suspend) > 0 {
+		return nil, fmt.Errorf("invalid provider.yaml: suspend has unknown keys %v", slices.Sorted(maps.Keys(suspend)))
+	}
+	return suspend, nil
 }
