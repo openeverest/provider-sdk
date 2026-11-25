@@ -2227,14 +2227,16 @@ var _ controller.BackupMirror = (*Provider)(nil)  // Optional
 ```go
 // +kubebuilder:rbac:groups=backup.openeverest.io,resources=backups,verbs=get;list;watch;create;update;patch
 // +kubebuilder:rbac:groups=backup.openeverest.io,resources=backups/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=backup.openeverest.io,resources=backups/finalizers,verbs=update
 // +kubebuilder:rbac:groups=backup.openeverest.io,resources=backupclasses;backupstorageclasses,verbs=get;list;watch
 // +kubebuilder:rbac:groups=backup.openeverest.io,resources=backupclasses/status,verbs=patch
 // +kubebuilder:rbac:groups=backup.openeverest.io,resources=backupstorages,verbs=get;list;watch
 // +kubebuilder:rbac:groups=backup.openeverest.io,resources=restores,verbs=get;list;watch;update;patch
 // +kubebuilder:rbac:groups=backup.openeverest.io,resources=restores/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=backup.openeverest.io,resources=restores/finalizers,verbs=update
 ```
 
-`backupclasses/status` lets the runtime claim your classes, and `backupstorageclasses` lets it check that a storage's published verdict is current. Run `make generate` to update manifests.
+`backupclasses/status` lets the runtime claim your classes, and `backupstorageclasses` lets it check that a storage's published verdict is current. `backups/finalizers` and `restores/finalizers` let you make the Backup or Restore the controller owner of your operator's objects: `SetControllerReference` sets `blockOwnerDeletion`, which OpenShift rejects without them. Run `make generate` to update manifests.
 
 ---
 
