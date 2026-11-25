@@ -13,7 +13,8 @@
 // limitations under the License.
 
 // Package verify checks that a provider's chart carries the stamp of the
-// OpenEverest it is built against.
+// OpenEverest it is built against, and grants the provider what the
+// provider-runtime of that OpenEverest needs to start.
 package verify
 
 import (
@@ -61,8 +62,10 @@ type Result struct {
 
 // Run checks that the chart in opts.ChartDir carries the stamp
 // opts.ContractVersion in Chart.yaml and on every object OpenEverest
-// interprets that it renders with its default values. It returns an error
-// only when it cannot check, e.g. when the chart does not render.
+// interprets that it renders with its default values, and that its
+// ClusterRoles allow what provider-runtime's startup gate requests. It
+// returns an error only when it cannot check, e.g. when the chart does not
+// render.
 func Run(opts Options) (Result, error) {
 	var res Result
 
@@ -84,15 +87,15 @@ func Run(opts Options) (Result, error) {
 	if err != nil {
 		return res, err
 	}
-	providers := 0
+	var providers []string
 	for _, o := range objects {
 		// The objects of subcharts belong to other charts, with stamps of
 		// their own.
 		if !o.Own() || !o.CoreInterpreted() {
 			continue
 		}
-		if o.GroupKind.Kind == "Provider" {
-			providers++
+		if o.GroupKind == providerKind {
+			providers = append(providers, o.Name)
 		}
 		what := fmt.Sprintf("%s %s (%s)", o.GroupKind.Kind, o.Name, o.Source)
 		hint := fmt.Sprintf("include %q, from templates/%s, in its metadata.annotations",
@@ -109,9 +112,14 @@ func Run(opts Options) (Result, error) {
 			res.Stamped = append(res.Stamped, what)
 		}
 	}
-	if providers == 0 {
+	if len(providers) == 0 {
 		res.Problems = append(res.Problems, "the chart renders no Provider with its default values")
 	}
+	gateProblems, err := startupGateProblems(objects, providers)
+	if err != nil {
+		return res, err
+	}
+	res.Problems = append(res.Problems, gateProblems...)
 
 	// The templates generate writes must be those of this provider-sdk, and
 	// the check must read the CRDs of what the chart applies.

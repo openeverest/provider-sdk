@@ -8,13 +8,14 @@ require (
 	github.com/charmbracelet/bubbletea v1.3.10
 	github.com/charmbracelet/lipgloss v1.1.0
 	github.com/google/cel-go v0.31.0
-	github.com/openeverest/openeverest/v2 v2.0.0-dev.2.0.20261125163324-baa7302420dd
+	github.com/openeverest/openeverest/v2 v2.0.0-dev.2.0.20261125185706-a1ddf4732eeb
 	github.com/spf13/cobra v1.10.2
 	github.com/stretchr/testify v1.12.1
 	golang.org/x/mod v0.42.0
 	golang.org/x/tools v0.52.0
 	gopkg.in/yaml.v3 v3.0.1
 	helm.sh/helm/v3 v3.22.1
+	k8s.io/api v0.37.2
 	k8s.io/apiextensions-apiserver v0.37.2
 	k8s.io/apimachinery v0.37.2
 	sigs.k8s.io/controller-tools v0.23.0
@@ -126,7 +127,6 @@ require (
 	google.golang.org/protobuf v1.36.12 // indirect
 	gopkg.in/evanphx/json-patch.v4 v4.13.0 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
-	k8s.io/api v0.37.2 // indirect
 	k8s.io/client-go v0.37.2 // indirect
 	k8s.io/klog/v2 v2.140.0 // indirect
 	k8s.io/kube-openapi v0.0.0-20260721132016-d427ff9ee9ad // indirect

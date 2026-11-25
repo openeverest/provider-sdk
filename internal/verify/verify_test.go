@@ -93,6 +93,29 @@ const rawBackupClassesTemplate = `{{- range $path, $_ := .Files.Glob "generated/
 {{- end }}
 `
 
+// baseRules are rules of a provider's ClusterRole other than those of the
+// startup gate.
+const baseRules = `- apiGroups: [core.openeverest.io]
+  resources: [providers]
+  verbs: [get, list, watch]
+`
+
+// gateRules are the rules the startup gate of the Provider x needs.
+const gateRules = baseRules + `- apiGroups: [apiextensions.k8s.io]
+  resources: [customresourcedefinitions]
+  resourceNames: [providers.core.openeverest.io]
+  verbs: [get]
+- apiGroups: [core.openeverest.io]
+  resources: [providers/status]
+  resourceNames: [x]
+  verbs: [patch]
+`
+
+// clusterRole returns a ClusterRole with rules.
+func clusterRole(rules string) string {
+	return "apiVersion: rbac.authorization.k8s.io/v1\nkind: ClusterRole\nmetadata:\n  name: provider-x\nrules:\n" + rules
+}
+
 func with(files map[string]string, changes map[string]string) map[string]string {
 	out := maps.Clone(files)
 	for name, content := range changes {
@@ -359,6 +382,71 @@ metadata:
 				"Provider x (templates/provider.yaml)",
 			},
 		},
+		"ClusterRole allows the startup gate": {
+			files: with(stampedChart(), map[string]string{"templates/clusterrole.yaml": clusterRole(gateRules)}),
+			wantStamped: []string{
+				"Chart.yaml",
+				"BackupClass pbm (templates/backupclasses.yaml)",
+				"Provider x (templates/provider.yaml)",
+			},
+		},
+		"ClusterRoles allow the startup gate with wildcards": {
+			files: with(stampedChart(), map[string]string{
+				"templates/clusterrole.yaml": clusterRole(`- apiGroups: ["*"]
+  resources: [customresourcedefinitions]
+  verbs: ["*"]
+`) + "---\n" + clusterRole(`- apiGroups: [core.openeverest.io]
+  resources: ["*/status"]
+  verbs: [patch]
+`),
+			}),
+			wantStamped: []string{
+				"Chart.yaml",
+				"BackupClass pbm (templates/backupclasses.yaml)",
+				"Provider x (templates/provider.yaml)",
+			},
+		},
+		"ClusterRole without the startup gate's rules": {
+			files: with(stampedChart(), map[string]string{"templates/clusterrole.yaml": clusterRole(baseRules)}),
+			wantStamped: []string{
+				"Chart.yaml",
+				"BackupClass pbm (templates/backupclasses.yaml)",
+				"Provider x (templates/provider.yaml)",
+			},
+			wantProblems: []string{
+				"no ClusterRole of the chart allows get on customresourcedefinitions providers.core.openeverest.io (apiextensions.k8s.io), which provider-runtime needs to read the OpenEverest versions the cluster supports; without it, a new build of the provider never becomes ready; add `// +kubebuilder:rbac:groups=apiextensions.k8s.io,resources=customresourcedefinitions,resourceNames=providers.core.openeverest.io,verbs=get` to internal/provider/rbac.go and run `make generate`",
+				"no ClusterRole of the chart allows patch on providers/status x (core.openeverest.io), which provider-runtime needs to record on its Provider the version that started; without it, every restart waits for the check like a new build; add `// +kubebuilder:rbac:groups=core.openeverest.io,resources=providers/status,resourceNames=x,verbs=patch` to internal/provider/rbac.go and run `make generate`",
+			},
+		},
+		"ClusterRole for another Provider": {
+			files: with(stampedChart(), map[string]string{
+				"templates/clusterrole.yaml": clusterRole(strings.ReplaceAll(gateRules, "resourceNames: [x]", "resourceNames: [y]")),
+			}),
+			wantStamped: []string{
+				"Chart.yaml",
+				"BackupClass pbm (templates/backupclasses.yaml)",
+				"Provider x (templates/provider.yaml)",
+			},
+			wantProblems: []string{
+				"no ClusterRole of the chart allows patch on providers/status x (core.openeverest.io), which provider-runtime needs to record on its Provider the version that started; without it, every restart waits for the check like a new build; add `// +kubebuilder:rbac:groups=core.openeverest.io,resources=providers/status,resourceNames=x,verbs=patch` to internal/provider/rbac.go and run `make generate`",
+			},
+		},
+		"startup gate allowed only by a subchart's ClusterRole": {
+			files: with(stampedChart(), map[string]string{
+				"templates/clusterrole.yaml":                 clusterRole(baseRules),
+				"charts/operator/Chart.yaml":                 "apiVersion: v2\nname: operator\nversion: 0.1.0\n",
+				"charts/operator/templates/clusterrole.yaml": clusterRole(gateRules),
+			}),
+			wantStamped: []string{
+				"Chart.yaml",
+				"BackupClass pbm (templates/backupclasses.yaml)",
+				"Provider x (templates/provider.yaml)",
+			},
+			wantProblems: []string{
+				"no ClusterRole of the chart allows get on customresourcedefinitions providers.core.openeverest.io (apiextensions.k8s.io), which provider-runtime needs to read the OpenEverest versions the cluster supports; without it, a new build of the provider never becomes ready; add `// +kubebuilder:rbac:groups=apiextensions.k8s.io,resources=customresourcedefinitions,resourceNames=providers.core.openeverest.io,verbs=get` to internal/provider/rbac.go and run `make generate`",
+				"no ClusterRole of the chart allows patch on providers/status x (core.openeverest.io), which provider-runtime needs to record on its Provider the version that started; without it, every restart waits for the check like a new build; add `// +kubebuilder:rbac:groups=core.openeverest.io,resources=providers/status,resourceNames=x,verbs=patch` to internal/provider/rbac.go and run `make generate`",
+			},
+		},
 	}
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -464,4 +552,14 @@ func TestRunScaffoldedChart(t *testing.T) {
 		"ClusterInstancePreset test-db-small (templates/clusterinstancepresets.yaml)",
 		"Provider test-db (templates/provider.yaml)",
 	}, res.Stamped)
+
+	// The scaffolded ClusterRole allows the startup gate with the rules of
+	// the scaffolded rbac.go, which make generate writes to the chart.
+	require.NoError(t, os.WriteFile(filepath.Join(chartDir, "generated", "rbac-rules.yaml"), []byte(baseRules), 0o600))
+
+	res, err = Run(Options{ChartDir: chartDir, ContractVersion: released})
+	require.NoError(t, err)
+	require.Len(t, res.Problems, 2)
+	assert.Contains(t, res.Problems[0], "allows get on customresourcedefinitions providers.core.openeverest.io (apiextensions.k8s.io)")
+	assert.Contains(t, res.Problems[1], "allows patch on providers/status test-db (core.openeverest.io)")
 }
