@@ -46,6 +46,10 @@ type Module struct {
 	Path    string
 	Version string
 	Replace *Module
+
+	// Sum is the checksum of the module's code, as go.sum records it, when
+	// known.
+	Sum string
 }
 
 func (m Module) String() string {
@@ -77,23 +81,42 @@ func (m Module) effective() Module {
 	return m
 }
 
+// same reports whether m and o are the same code: the same module version,
+// replaced by the same module version, if at all.
+func (m Module) same(o Module) bool {
+	if m.Path != o.Path || m.Version != o.Version || (m.Replace == nil) != (o.Replace == nil) {
+		return false
+	}
+	return m.Replace == nil || (m.Replace.Path == o.Replace.Path && m.Replace.Version == o.Replace.Version)
+}
+
 // LinkedCore returns the core module this binary was built with.
 func LinkedCore() (Module, error) {
 	info, ok := debug.ReadBuildInfo()
 	if !ok {
 		return Module{}, errors.New("this provider-sdk binary carries no build information")
 	}
+	m, ok := coreIn(info)
+	if !ok {
+		return Module{}, fmt.Errorf("this provider-sdk binary does not link %s", CoreModule)
+	}
+	return m, nil
+}
+
+// coreIn returns the core module of the binary whose build information is
+// info, and whether it links one.
+func coreIn(info *debug.BuildInfo) (Module, bool) {
 	for _, dep := range info.Deps {
 		if dep.Path != CoreModule {
 			continue
 		}
-		m := Module{Path: dep.Path, Version: dep.Version}
+		m := Module{Path: dep.Path, Version: dep.Version, Sum: dep.Sum}
 		if dep.Replace != nil {
-			m.Replace = &Module{Path: dep.Replace.Path, Version: dep.Replace.Version}
+			m.Replace = &Module{Path: dep.Replace.Path, Version: dep.Replace.Version, Sum: dep.Replace.Sum}
 		}
-		return m, nil
+		return m, true
 	}
-	return Module{}, fmt.Errorf("this provider-sdk binary does not link %s", CoreModule)
+	return Module{}, false
 }
 
 // RequiredCore returns the core module the Go module in dir builds with, as
@@ -158,6 +181,37 @@ func CheckCore(linked, required Module) (warning string, err error) {
 	}
 	return "", fmt.Errorf("this provider-sdk links %s, but this module requires %s, so it would stamp the chart for another OpenEverest; "+
 		"run it as `go tool provider-sdk` from the module, which builds it against the core the module requires", linked, required)
+}
+
+// CheckBinary checks that a binary of the provider, whose build information
+// is info, links the core the provider's module requires, required, at the
+// same version and with the same checksum, and returns the core it links.
+//
+// The chart is stamped with the contract version of required, which is in
+// the core's tree, and go.sum and the checksum database tie each module
+// version, pseudo-versions included, to one tree. A binary that links
+// required therefore carries the contract the chart is stamped with, which
+// takes neither the core's tree nor anything from the binary but its build
+// information. A binary that links another version may carry the same
+// contract, but it is not built from the provider's module as released,
+// which a release must not ship either. A core from a local directory has no
+// version that says which tree it is.
+func CheckBinary(info *debug.BuildInfo, required Module) (Module, error) {
+	linked, ok := coreIn(info)
+	switch {
+	case !ok:
+		return linked, fmt.Errorf("does not link %s", CoreModule)
+	case linked.local():
+		return linked, fmt.Errorf("links %s from a local directory, %s, whose contract version nothing records",
+			CoreModule, linked.effective().Path)
+	case !linked.same(required):
+		return linked, fmt.Errorf("links %s, but go.mod requires %s, whose contract version the chart is stamped with; build the image from the commit the chart is released from",
+			linked, required)
+	}
+	if l, r := linked.effective().Sum, required.effective().Sum; l != "" && r != "" && l != r {
+		return linked, fmt.Errorf("links %s with the checksum %s, but go.sum records %s", linked, l, r)
+	}
+	return linked, nil
 }
 
 // ReleaseProblems returns why a provider built against required, stamped

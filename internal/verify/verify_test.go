@@ -18,6 +18,7 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"strings"
 	"testing"
 
@@ -26,6 +27,7 @@ import (
 
 	"github.com/openeverest/provider-sdk/internal/compat"
 	"github.com/openeverest/provider-sdk/internal/generate"
+	"github.com/openeverest/provider-sdk/internal/imagebin"
 	"github.com/openeverest/provider-sdk/internal/scaffold"
 )
 
@@ -111,6 +113,47 @@ const gateRules = baseRules + `- apiGroups: [apiextensions.k8s.io]
   verbs: [patch]
 `
 
+// providerImage is the image the deployment of the chart deploys.
+const providerImage = "ghcr.io/openeverest/provider-x:0.1.0"
+
+// deployment renders the Deployment of the provider x, as the scaffolded
+// chart does, with a webhook certificate job that runs another image.
+const deployment = `apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: provider-x
+spec:
+  template:
+    spec:
+      initContainers:
+        - name: wait
+          image: busybox:1.37
+      containers:
+        - name: provider
+          image: {{ .Values.image.repository }}:{{ .Values.image.tag }}
+`
+
+// withImage is stampedChart with the provider's Deployment.
+func withImage() map[string]string {
+	return with(stampedChart(), map[string]string{
+		"values.yaml":               "provider:\n  name: x\nimage:\n  repository: ghcr.io/openeverest/provider-x\n  tag: 0.1.0\n",
+		"templates/deployment.yaml": deployment,
+	})
+}
+
+// binary returns the binary of a platform of the provider's image, linking
+// the core module version.
+func binary(platform, version string) imagebin.Binary {
+	return imagebin.Binary{
+		Platform: platform,
+		Path:     "/provider",
+		BuildInfo: &debug.BuildInfo{
+			Path: "command-line-arguments",
+			Deps: []*debug.Module{{Path: compat.CoreModule, Version: version}},
+		},
+	}
+}
+
 // clusterRole returns a ClusterRole with rules.
 func clusterRole(rules string) string {
 	return "apiVersion: rbac.authorization.k8s.io/v1\nkind: ClusterRole\nmetadata:\n  name: provider-x\nrules:\n" + rules
@@ -147,7 +190,9 @@ func TestRun(t *testing.T) {
 		version      string
 		release      bool
 		core         compat.Module
+		image        *Image
 		wantStamped  []string
+		wantLinked   []string
 		wantProblems []string
 	}{
 		"stamped": {
@@ -167,6 +212,73 @@ func TestRun(t *testing.T) {
 				"BackupClass pbm (templates/backupclasses.yaml)",
 				"Provider x (templates/provider.yaml)",
 			},
+		},
+		"image built against the core of go.mod": {
+			files:   withImage(),
+			release: true,
+			core:    releasedCore,
+			image: &Image{Reference: providerImage, Binaries: []imagebin.Binary{
+				binary("linux/amd64", releasedCore.Version),
+				binary("linux/arm64", releasedCore.Version),
+			}},
+			wantStamped: []string{
+				"Chart.yaml",
+				"BackupClass pbm (templates/backupclasses.yaml)",
+				"Provider x (templates/provider.yaml)",
+			},
+			wantLinked: []string{
+				"linux/amd64 /provider, which links " + compat.CoreModule + "@v2.0.0-alpha.1",
+				"linux/arm64 /provider, which links " + compat.CoreModule + "@v2.0.0-alpha.1",
+			},
+		},
+		"image built against another core on one platform": {
+			files:   withImage(),
+			release: true,
+			core:    releasedCore,
+			image: &Image{Reference: providerImage, Binaries: []imagebin.Binary{
+				binary("linux/amd64", releasedCore.Version),
+				binary("linux/arm64", "v2.0.0-alpha.0"),
+			}},
+			wantStamped: []string{
+				"Chart.yaml",
+				"BackupClass pbm (templates/backupclasses.yaml)",
+				"Provider x (templates/provider.yaml)",
+			},
+			wantLinked: []string{"linux/amd64 /provider, which links " + compat.CoreModule + "@v2.0.0-alpha.1"},
+			wantProblems: []string{
+				providerImage + " (linux/arm64): /provider links " + compat.CoreModule + "@v2.0.0-alpha.0, but go.mod requires " + compat.CoreModule + "@v2.0.0-alpha.1, " +
+					"whose contract version the chart is stamped with; build the image from the commit the chart is released from",
+			},
+		},
+		"image the chart does not deploy": {
+			files: withImage(),
+			core:  releasedCore,
+			image: &Image{Reference: "ghcr.io/openeverest/provider-x:0.2.0", Binaries: []imagebin.Binary{
+				binary("linux/amd64", releasedCore.Version),
+			}},
+			wantStamped: []string{
+				"Chart.yaml",
+				"BackupClass pbm (templates/backupclasses.yaml)",
+				"Provider x (templates/provider.yaml)",
+			},
+			wantLinked: []string{"linux/amd64 /provider, which links " + compat.CoreModule + "@v2.0.0-alpha.1"},
+			wantProblems: []string{
+				"the chart deploys busybox:1.37, " + providerImage + ", not ghcr.io/openeverest/provider-x:0.2.0, with its default values",
+			},
+		},
+		"image of a chart that deploys none": {
+			files: stampedChart(),
+			core:  releasedCore,
+			image: &Image{Reference: providerImage, Binaries: []imagebin.Binary{
+				binary("linux/amd64", releasedCore.Version),
+			}},
+			wantStamped: []string{
+				"Chart.yaml",
+				"BackupClass pbm (templates/backupclasses.yaml)",
+				"Provider x (templates/provider.yaml)",
+			},
+			wantLinked:   []string{"linux/amd64 /provider, which links " + compat.CoreModule + "@v2.0.0-alpha.1"},
+			wantProblems: []string{"the chart deploys no image, not " + providerImage + ", with its default values"},
 		},
 		"Chart.yaml not stamped": {
 			files: with(stampedChart(), map[string]string{
@@ -462,10 +574,12 @@ metadata:
 				ContractVersion: version,
 				Release:         tt.release,
 				Core:            tt.core,
+				Image:           tt.image,
 			})
 
 			require.NoError(t, err)
 			assert.Equal(t, tt.wantStamped, res.Stamped)
+			assert.Equal(t, tt.wantLinked, res.Linked)
 			assert.Equal(t, tt.wantProblems, res.Problems)
 		})
 	}

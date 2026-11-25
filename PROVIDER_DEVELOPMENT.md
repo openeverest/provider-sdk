@@ -2542,7 +2542,9 @@ manual workflow dispatch required.
    ```
 2. The tag triggers `build.yaml`, which builds and pushes the multi-arch image
    (with attestations). Once that succeeds, `release.yaml` runs: it verifies the
-   README compatibility table covers the release's minor series, packages the chart,
+   README compatibility table covers the release's minor series, that the chart
+   and the image are built against the same released OpenEverest (see
+   [Compatibility with OpenEverest](#compatibility-with-openeverest)), packages the chart,
    pushes it to GHCR as an OCI artifact, and creates the GitHub release.
 3. Users then install the chart with:
 
@@ -2696,6 +2698,31 @@ must be one they can install. Requiring a commit of OpenEverest's `main` branch
 (a pseudo-version) is fine while `main`'s contract is still that of a release:
 the stamp then names that release, and the provider can take a fix from `main`
 without waiting for the next OpenEverest release.
+
+The release workflow also passes `--image` with the image the tag built, so
+`verify` fails unless the chart deploys that image and, on every platform of
+the image, its binary links the very core version `go.mod` requires (and with
+the checksum `go.sum` records). `provider-runtime`'s startup gate checks the
+contract version of the core the binary links, while OpenEverest and the
+chart's own check read the stamp: an image built from another commit, or from
+a stale build cache, could carry another contract than the chart says, and the
+two would decide differently. The stamp is the contract version of the core
+`go.mod` requires, and a core version, a pseudo-version too, is a single tree
+with a single contract version, so an image that links that version carries the
+contract the chart is stamped with; comparing versions needs neither that tree
+nor anything the binary would have to report. `verify` reads the binary's Go
+build information, what `go version -m` prints, straight from the registry,
+without a container runtime, with the credentials `docker login` stores. To try
+it locally, push the image to a registry on `localhost`, which it reaches over
+plain HTTP, and point the chart at it:
+
+```bash
+docker run -d -p 5000:5000 registry:2
+docker build -t localhost:5000/<provider-name>:0.1.0 . && docker push localhost:5000/<provider-name>:0.1.0
+make -C charts/<provider-name> release VERSION=0.1.0 IMAGE_PREFIX=localhost:5000
+go tool provider-sdk verify --image localhost:5000/<provider-name>:0.1.0
+git checkout charts/<provider-name>   # undo what make release stamped
+```
 
 ### Images and Registry
 

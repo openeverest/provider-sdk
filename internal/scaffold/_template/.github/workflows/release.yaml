@@ -73,9 +73,10 @@ jobs:
       # A release tells users the oldest OpenEverest it works with, so it must
       # be built against an OpenEverest they can install: this fails on a chart
       # stamped for an unreleased OpenEverest, or a go.mod that replaces
-      # OpenEverest or takes it from a local directory.
+      # OpenEverest or takes it from a local directory; with --image, on an
+      # image that links another OpenEverest core than the chart is stamped for.
       - name: Verify the chart is stamped for a released OpenEverest
-        run: go tool provider-sdk verify --release --chart-dir "$CHART_DIR"
+        run: go tool provider-sdk verify --release --chart-dir "$CHART_DIR" --image "$REGISTRY/${{ github.repository_owner }}/[[ .ProjectName ]]:$VERSION"
 
       - name: Build chart dependencies
         run: helm dependency build "$CHART_DIR"
