@@ -2558,6 +2558,21 @@ manual workflow dispatch required.
 > Kubernetes versions you've actually validated — in the PR that bumps the dependency,
 > not at release time.
 
+### Keep `main` releasable
+
+Keep your provider's `main` building, testing and releasing against the latest
+released OpenEverest, so you can tag it at any time: `go.mod` requires the
+OpenEverest and provider-sdk **tags** of that release, and CI and the dev
+environment install it. The OpenEverest providers follow this rule.
+
+When a change needs an OpenEverest that isn't released yet, require a commit of
+OpenEverest's `main` (a pseudo-version) in a draft pull request, and hold it
+until that OpenEverest is released. Then rebase it, require the released tags,
+run `make generate`, and merge it. Requiring OpenEverest's `main` on your own
+`main` makes sense only in the last days before an OpenEverest release that your
+own release follows straight after; while that release is weeks away, a build
+from `main` targets an OpenEverest your users can't install yet.
+
 ### Compatibility with OpenEverest
 
 A provider is built against one OpenEverest: the core version its `go.mod`
@@ -2692,10 +2707,10 @@ checked. `make verify` runs it in CI. The release workflow runs
 `go tool provider-sdk verify --release` before packaging the chart, which also
 fails on a development value and on a `go.mod` that replaces OpenEverest: a
 release tells users the oldest OpenEverest it works with, so that OpenEverest
-must be one they can install. Requiring a commit of OpenEverest's `main` branch
-(a pseudo-version) is fine while `main`'s contract is still that of a release:
-the stamp then names that release, and the provider can take a fix from `main`
-without waiting for the next OpenEverest release.
+must be one they can install. It accepts a commit of OpenEverest's `main` (a
+pseudo-version) while `main`'s contract is still that of a release, since the
+stamp then names that release; keep such a requirement to the days just before
+an OpenEverest release (see [Keep `main` releasable](#keep-main-releasable)).
 
 ### Images and Registry
 
