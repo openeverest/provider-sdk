@@ -90,10 +90,16 @@ func TestAppliedCRDs(t *testing.T) {
 	t.Parallel()
 
 	backupClass := "apiVersion: backup.openeverest.io/v1alpha1\nkind: BackupClass\nmetadata:\n  name: pbm\n"
+	operator := map[string]string{
+		"charts/operator/Chart.yaml": "apiVersion: v2\nname: operator\nversion: 0.1.0\n",
+		"charts/operator/templates/preflight.yaml": "{{- if not (.Capabilities.APIVersions.Has \"cert-manager.io/v1/Certificate\") -}}\n" +
+			"{{- fail \"cert-manager is required but was not found in the cluster\" -}}\n{{- end -}}\n",
+	}
 	tests := map[string]struct {
-		changes map[string]string
-		want    []string
-		wantErr string
+		changes     map[string]string
+		apiVersions []string
+		want        []string
+		wantErr     string
 	}{
 		"Provider only": {
 			want: []string{testProvidersCRD},
@@ -140,6 +146,23 @@ func TestAppliedCRDs(t *testing.T) {
 			changes: map[string]string{"templates/" + CompatCheckFile: "{{ include \"openeverest.contract.removed\" . }}\n"},
 			want:    []string{testProvidersCRD},
 		},
+		"a subchart requiring an API nothing declares": {
+			changes: operator,
+			wantErr: "cert-manager is required but was not found in the cluster",
+		},
+		"a subchart requiring an API Chart.yaml declares": {
+			changes: map[string]string{
+				"Chart.yaml":                               chartFiles("2.1.0")["Chart.yaml"] + "  openeverest.io/api-versions: cert-manager.io/v1/Certificate\n",
+				"charts/operator/Chart.yaml":               operator["charts/operator/Chart.yaml"],
+				"charts/operator/templates/preflight.yaml": operator["charts/operator/templates/preflight.yaml"],
+			},
+			want: []string{testProvidersCRD},
+		},
+		"a subchart requiring an API passed with --api-versions": {
+			changes:     operator,
+			apiVersions: []string{"cert-manager.io/v1/Certificate"},
+			want:        []string{testProvidersCRD},
+		},
 		"a chart that does not render": {
 			changes: map[string]string{"templates/bad.yaml": "{{ fail \"broken\" }}\n"},
 			wantErr: "rendering the chart to find the objects OpenEverest interprets",
@@ -160,7 +183,7 @@ func TestAppliedCRDs(t *testing.T) {
 			dir := t.TempDir()
 			writeFiles(t, dir, files)
 
-			got, err := appliedCRDs(dir)
+			got, err := appliedCRDs(dir, tt.apiVersions)
 
 			if tt.wantErr != "" {
 				require.Error(t, err)
@@ -186,7 +209,7 @@ func TestCompatCheckPassesWithoutACluster(t *testing.T) {
 			dir := t.TempDir()
 			writeFiles(t, dir, chartFiles(stamp))
 
-			objects, err := chartrender.Render(dir)
+			objects, err := chartrender.Render(dir, chartrender.Options{})
 
 			require.NoError(t, err)
 			require.Len(t, objects, 1)

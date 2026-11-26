@@ -23,7 +23,9 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"unicode"
 
+	"helm.sh/helm/v3/pkg/chart"
 	"helm.sh/helm/v3/pkg/chart/loader"
 	"helm.sh/helm/v3/pkg/chartutil"
 	"helm.sh/helm/v3/pkg/engine"
@@ -76,18 +78,40 @@ func (o Object) Own() bool {
 	return strings.HasPrefix(o.Source, "templates/")
 }
 
+// APIVersionsAnnotation is the Chart.yaml annotation that lists the API
+// versions the chart needs the cluster to serve before it is installed,
+// beyond Kubernetes' built-in APIs and the CRDs it ships in crds/: those of
+// prerequisites, such as cert-manager's for a bundled operator chart that
+// checks for it. Entries are separated by commas or whitespace, each in a
+// form .Capabilities.APIVersions.Has checks, group/version or
+// group/version/Kind, as `helm template --api-versions` takes them.
+const APIVersionsAnnotation = "openeverest.io/api-versions"
+
+// Options configures Render.
+type Options struct {
+	// Values are set over the chart's default values, as
+	// `helm install --values` sets them.
+	Values map[string]any
+
+	// Skip lists templates, relative to the chart (e.g.
+	// templates/check.yaml), that are not rendered.
+	Skip []string
+
+	// APIVersions are API versions the cluster serves on top of those
+	// Render already renders with, as `helm template --api-versions` adds
+	// them.
+	APIVersions []string
+}
+
 // Render renders the chart in dir with its default values, as a fresh
 // install would, and returns the objects it applies, its subcharts'
 // included, in template order. Nothing is read from a cluster: lookup
-// returns nothing. Templates named in skip, relative to the chart (e.g.
-// templates/check.yaml), are not rendered.
-func Render(dir string, skip ...string) ([]Object, error) {
-	return RenderValues(dir, nil, skip...)
-}
-
-// RenderValues renders the chart in dir like Render, with values over its
-// default values, as `helm install --values` would.
-func RenderValues(dir string, values map[string]any, skip ...string) ([]Object, error) {
+// returns nothing, and the cluster serves the APIs of Kubernetes, those of
+// the CRDs in the crds/ directories of the chart and of the subcharts it
+// enables, which Helm installs before it renders, and those the chart lists
+// in its APIVersionsAnnotation.
+func Render(dir string, opts Options) ([]Object, error) {
+	values := opts.Values
 	if values == nil {
 		values = map[string]any{}
 	}
@@ -95,10 +119,10 @@ func RenderValues(dir string, values map[string]any, skip ...string) ([]Object, 
 	if err != nil {
 		return nil, fmt.Errorf("loading chart %s: %w", dir, err)
 	}
-	if len(skip) > 0 {
+	if len(opts.Skip) > 0 {
 		kept := chrt.Templates[:0]
 		for _, t := range chrt.Templates {
-			if !slices.Contains(skip, t.Name) {
+			if !slices.Contains(opts.Skip, t.Name) {
 				kept = append(kept, t)
 			}
 		}
@@ -107,18 +131,26 @@ func RenderValues(dir string, values map[string]any, skip ...string) ([]Object, 
 	if err := chartutil.ProcessDependenciesWithMerge(chrt, values); err != nil {
 		return nil, fmt.Errorf("processing chart dependencies: %w", err)
 	}
+	crdAPIs, err := crdAPIVersions(chrt)
+	if err != nil {
+		return nil, err
+	}
+	caps := chartutil.DefaultCapabilities.Copy()
+	caps.APIVersions = slices.Concat(caps.APIVersions, crdAPIs,
+		splitAPIVersions(chrt.Metadata.Annotations[APIVersionsAnnotation]), opts.APIVersions)
 	vals, err := chartutil.ToRenderValues(chrt, values, chartutil.ReleaseOptions{
 		Name:      chrt.Name(),
 		Namespace: "default",
 		Revision:  1,
 		IsInstall: true,
-	}, chartutil.DefaultCapabilities)
+	}, caps)
 	if err != nil {
 		return nil, fmt.Errorf("computing chart values: %w", err)
 	}
 	files, err := engine.Render(chrt, vals)
 	if err != nil {
-		return nil, fmt.Errorf("rendering chart %s: %w", dir, err)
+		return nil, fmt.Errorf("rendering chart %s, for a cluster serving the APIs of Kubernetes, of its CRDs in crds/ and those listed in Chart.yaml's %s annotation: %w",
+			dir, APIVersionsAnnotation, err)
 	}
 
 	names := make([]string, 0, len(files))
@@ -154,6 +186,57 @@ func RenderValues(dir string, values map[string]any, skip ...string) ([]Object, 
 		}
 	}
 	return objects, nil
+}
+
+// crdAPIVersions returns the API versions the CRDs in the crds/ directories
+// of chrt and of the subcharts it enables serve, in the forms Helm's
+// discovery lists them: group/version and group/version/Kind. Helm installs
+// these CRDs before it renders, so a fresh install renders with them; the
+// CRDs templates render are applied with the rest of the release, after it.
+func crdAPIVersions(chrt *chart.Chart) ([]string, error) {
+	var apis []string
+	for _, f := range chrt.CRDObjects() {
+		docs := releaseutil.SplitManifests(string(f.File.Data))
+		keys := make([]string, 0, len(docs))
+		for k := range docs {
+			keys = append(keys, k)
+		}
+		sort.Sort(releaseutil.BySplitManifestsOrder(keys))
+		for _, k := range keys {
+			var crd struct {
+				Kind string `json:"kind"`
+				Spec struct {
+					Group string `json:"group"`
+					Names struct {
+						Kind string `json:"kind"`
+					} `json:"names"`
+					Versions []struct {
+						Name   string `json:"name"`
+						Served bool   `json:"served"`
+					} `json:"versions"`
+				} `json:"spec"`
+			}
+			if err := yaml.Unmarshal([]byte(docs[k]), &crd); err != nil {
+				return nil, fmt.Errorf("%s: decoding CRD: %w", f.Filename, err)
+			}
+			if crd.Kind != "CustomResourceDefinition" {
+				continue
+			}
+			for _, v := range crd.Spec.Versions {
+				if v.Served {
+					gv := crd.Spec.Group + "/" + v.Name
+					apis = append(apis, gv, gv+"/"+crd.Spec.Names.Kind)
+				}
+			}
+		}
+	}
+	return apis, nil
+}
+
+// splitAPIVersions splits the value of APIVersionsAnnotation into its
+// entries.
+func splitAPIVersions(s string) []string {
+	return strings.FieldsFunc(s, func(r rune) bool { return r == ',' || unicode.IsSpace(r) })
 }
 
 func decode(doc string) (Object, bool, error) {

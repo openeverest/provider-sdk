@@ -13,7 +13,9 @@ sources:
   - https://github.com/openeverest/[[ .ProjectName ]]
 maintainers:
   - name: OpenEverest Contributors
-# TODO: If your provider depends on an operator Helm chart, add it here.
+# TODO: If your provider depends on an operator Helm chart, add it here. If the
+# chart requires an API of the cluster, such as cert-manager's, also list it in
+# the annotation openeverest.io/api-versions (e.g. cert-manager.io/v1/Certificate).
 # dependencies:
 #   - name: my-operator
 #     version: "1.0.0"

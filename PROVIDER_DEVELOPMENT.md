@@ -2349,6 +2349,40 @@ This runs:
    the OpenEverest stamp in `Chart.yaml` (see
    [Compatibility with OpenEverest](#compatibility-with-openeverest))
 
+### Rendering the chart without a cluster
+
+`generate` and `verify` render the chart, with its subcharts, as a fresh
+install with its default values would, but without a cluster: `lookup` finds
+nothing, and the cluster serves
+
+- the APIs of Kubernetes;
+- the APIs of the CRDs in the `crds/` directories of your chart and of the
+  subcharts it enables, which Helm installs before it renders. The CRDs a
+  template renders are applied with the rest of the release, after the render,
+  so they are not served;
+- the API versions your `Chart.yaml` lists in the annotation
+  `openeverest.io/api-versions`.
+
+Operator charts often refuse to render without the API of a prerequisite,
+which they look up in `.Capabilities.APIVersions`. Once `make helm-deps` has
+built such a dependency, `make generate` and `make verify` fail on it the way
+`helm template` does without `--api-versions`. List the API versions of the
+chart's prerequisites in the annotation, separated by commas, each in the form
+the templates check, `group/version` or `group/version/Kind`, as
+`helm template --api-versions` takes them:
+
+```yaml
+# charts/<provider-name>/Chart.yaml
+annotations:
+  # The bundled operator chart requires cert-manager.
+  openeverest.io/api-versions: cert-manager.io/v1/Certificate
+```
+
+The annotation ships with the chart, so it also tells whoever renders the chart
+without a cluster what to pass, to `helm template --api-versions` or to Argo
+CD's `spec.source.helm.apiVersions`. `generate` and `verify` also take
+`--api-versions`, which adds API versions for one run, as Helm's flag does.
+
 ### Rapid Iteration with Tilt (recommended)
 
 The scaffolded project ships with a [Tilt](https://tilt.dev/) setup under
@@ -2516,7 +2550,9 @@ Pass the version via `VERSION`, e.g. `make release VERSION=1.2.3`.
 > `charts/<provider-name>/Chart.yaml` and add the matching
 > `helm repo add` + `helm dependency update .` lines to the `deps` target so the
 > subchart can be resolved during release. Providers without a subchart need no
-> changes — `deps` is a no-op beyond `helm version`.
+> changes — `deps` is a no-op beyond `helm version`. If the subchart requires
+> an API of the cluster, such as cert-manager's, list it in `Chart.yaml` (see
+> [Rendering the chart without a cluster](#rendering-the-chart-without-a-cluster)).
 
 ### Workflows
 
@@ -2680,7 +2716,9 @@ not `get` them cannot install it; the OpenEverest chart grants that to every
 authenticated user.
 
 `go tool provider-sdk verify` renders the chart with its default values,
-without a cluster, and checks that `Chart.yaml` and every `Provider`,
+without a cluster (see
+[Rendering the chart without a cluster](#rendering-the-chart-without-a-cluster)),
+and checks that `Chart.yaml` and every `Provider`,
 `BackupClass`, `BackupStorageClass`, `MonitoringClass` and
 `ClusterInstancePreset` it renders carry the stamp. It also checks that the
 generated templates are those of this `provider-sdk`, and, rendering again
@@ -3065,7 +3103,9 @@ provider-sdk generate
 
 Usually invoked via `go generate ./...` (see `gen.go`) or `make generate`.
 It also stamps the chart with the OpenEverest the provider is built against
-(see [Compatibility with OpenEverest](#compatibility-with-openeverest)).
+(see [Compatibility with OpenEverest](#compatibility-with-openeverest)), which
+renders the chart; `--api-versions` adds API versions the cluster serves then
+(see [Rendering the chart without a cluster](#rendering-the-chart-without-a-cluster)).
 
 The generator also validates version bundles at build time — it ensures every
 component name and version referenced in a bundle exists in `provider.yaml` and
@@ -3082,11 +3122,14 @@ and that its `ClusterRole` allows what the provider needs to start (see
 [Base RBAC](#base-rbac-pre-configured)).
 
 ```bash
-go tool provider-sdk verify [--chart-dir charts/<provider-name>] [--release]
+go tool provider-sdk verify [--chart-dir charts/<provider-name>] [--release] [--api-versions <api-version>,...]
 ```
 
 `make verify` runs it; the release workflow runs it with `--release`, which
 also fails when the provider is built against an unreleased OpenEverest.
+`--api-versions` adds API versions the cluster serves when the chart is
+rendered, as `generate`'s does (see
+[Rendering the chart without a cluster](#rendering-the-chart-without-a-cluster)).
 
 ---
 

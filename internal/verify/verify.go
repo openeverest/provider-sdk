@@ -48,6 +48,12 @@ type Options struct {
 	// Core is the OpenEverest core module the provider's go.mod requires,
 	// checked with Release.
 	Core compat.Module
+
+	// APIVersions are API versions the cluster serves when the chart is
+	// rendered, on top of Kubernetes' built-in APIs, those of the chart's
+	// CRDs in crds/ and those Chart.yaml lists in
+	// chartrender.APIVersionsAnnotation.
+	APIVersions []string
 }
 
 // Result is the outcome of Run.
@@ -83,7 +89,7 @@ func Run(opts Options) (Result, error) {
 		res.Stamped = append(res.Stamped, "Chart.yaml")
 	}
 
-	objects, err := chartrender.Render(opts.ChartDir)
+	objects, err := chartrender.Render(opts.ChartDir, chartrender.Options{APIVersions: opts.APIVersions})
 	if err != nil {
 		return res, err
 	}
@@ -143,8 +149,11 @@ func Run(opts Options) (Result, error) {
 	// admits: a stamped object without it would be refused even after the
 	// user acknowledged the incompatibility and the chart's check let the
 	// install through.
-	acknowledged, err := chartrender.RenderValues(opts.ChartDir, map[string]any{
-		"compatibility": map[string]any{"acknowledge": map[string]any{"coreVersion": acknowledgeProbe}},
+	acknowledged, err := chartrender.Render(opts.ChartDir, chartrender.Options{
+		Values: map[string]any{
+			"compatibility": map[string]any{"acknowledge": map[string]any{"coreVersion": acknowledgeProbe}},
+		},
+		APIVersions: opts.APIVersions,
 	})
 	if err != nil {
 		return res, fmt.Errorf("rendering the chart with %s set: %w", contract.AcknowledgeValuePath, err)

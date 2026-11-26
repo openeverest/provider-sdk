@@ -44,6 +44,12 @@ type Options struct {
 	// ContractVersion is the contract version the chart is stamped with.
 	// Default: contract.Version of the OpenEverest core this build links.
 	ContractVersion string
+
+	// APIVersions are API versions the cluster serves when the chart is
+	// rendered, on top of Kubernetes' built-in APIs, those of the chart's
+	// CRDs in crds/ and those Chart.yaml lists in
+	// chartrender.APIVersionsAnnotation.
+	APIVersions []string
 }
 
 // Run assembles definition/ files, resolves Go type schemas, and writes
@@ -243,7 +249,7 @@ func Run(opts Options) error {
 
 	// 8. Fail the chart's render on an OpenEverest that does not serve the
 	//    stamp, reading the CRDs of the objects the chart applies.
-	if err := writeCompatCheck(opts.ChartDir); err != nil {
+	if err := writeCompatCheck(opts.ChartDir, opts.APIVersions); err != nil {
 		return err
 	}
 

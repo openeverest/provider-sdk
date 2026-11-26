@@ -277,7 +277,7 @@ metadata:
 `,
 			})
 
-			objects, err := chartrender.Render(chartDir)
+			objects, err := chartrender.Render(chartDir, chartrender.Options{})
 			if tt.wantErr != "" {
 				require.Error(t, err)
 				assert.Contains(t, err.Error(), tt.wantErr)

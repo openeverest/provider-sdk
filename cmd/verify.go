@@ -29,14 +29,16 @@ import (
 )
 
 var verifyOpts struct {
-	chartDir string
-	release  bool
+	chartDir    string
+	release     bool
+	apiVersions []string
 }
 
 func init() {
 	f := verifyCmd.Flags()
 	f.StringVar(&verifyOpts.chartDir, "chart-dir", "", "Path to the Helm chart directory (default: auto-detect from charts/)")
 	f.BoolVar(&verifyOpts.release, "release", false, "Also fail when the provider is built against an unreleased OpenEverest")
+	f.StringSliceVar(&verifyOpts.apiVersions, "api-versions", nil, apiVersionsUsage)
 
 	rootCmd.AddCommand(verifyCmd)
 }
@@ -73,6 +75,8 @@ OpenEverest. A release names the oldest OpenEverest it works with, which users
 must be able to install. Requiring a commit of OpenEverest's main branch is
 fine while main's contract is still that of a release.
 
+` + renderHelp + `
+
 Run it as ` + "`go tool provider-sdk verify`" + ` from the provider's module.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		required, err := checkLinkedCore()
@@ -91,6 +95,7 @@ Run it as ` + "`go tool provider-sdk verify`" + ` from the provider's module.`,
 			ContractVersion: contract.Version,
 			Release:         verifyOpts.release,
 			Core:            required,
+			APIVersions:     verifyOpts.apiVersions,
 		})
 		if err != nil {
 			return err
