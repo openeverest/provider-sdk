@@ -78,7 +78,7 @@ metadata:
 		"charts/sub/templates/deployment.yaml": "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: operator\n",
 	})
 
-	objects, err := Render(dir, "templates/skipped.yaml")
+	objects, err := Render(dir, Options{Skip: []string{"templates/skipped.yaml"}})
 
 	require.NoError(t, err)
 	type summary struct {
@@ -120,6 +120,14 @@ func TestRenderErrors(t *testing.T) {
 			},
 			wantErr: "rendering chart",
 		},
+		"a CRD in crds/ that does not decode": {
+			files: map[string]string{
+				"Chart.yaml":       "apiVersion: v2\nname: provider-x\nversion: 0.1.0\n",
+				"crds/bad.yaml":    "kind: [\n",
+				"templates/x.yaml": "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: x\n",
+			},
+			wantErr: "provider-x/crds/bad.yaml: decoding CRD",
+		},
 		"invalid apiVersion": {
 			files: map[string]string{
 				"Chart.yaml":       "apiVersion: v2\nname: provider-x\nversion: 0.1.0\n",
@@ -135,7 +143,7 @@ func TestRenderErrors(t *testing.T) {
 			dir := t.TempDir()
 			writeChart(t, dir, tt.files)
 
-			_, err := Render(dir)
+			_, err := Render(dir, Options{})
 
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), tt.wantErr)
@@ -173,12 +181,165 @@ metadata:
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			objects, err := RenderValues(dir, tt.values)
+			objects, err := Render(dir, Options{Values: tt.values})
 
 			require.NoError(t, err)
 			require.Len(t, objects, 1)
 			assert.Equal(t, "x", objects[0].Name, "the other defaults stay")
 			assert.Equal(t, tt.want, objects[0].Annotations)
+		})
+	}
+}
+
+// operatorChart is a provider chart bundling an operator chart that, like
+// many, refuses to render without the API of a prerequisite, cert-manager,
+// and ships CRDs in crds/. templates/apis.yaml reports the API versions the
+// chart renders with.
+func operatorChart(annotations string) map[string]string {
+	return map[string]string{
+		"Chart.yaml": `apiVersion: v2
+name: provider-x
+version: 0.1.0
+dependencies:
+  - name: operator
+    version: 0.1.0
+    condition: operator.enabled
+` + annotations,
+		"values.yaml": "operator:\n  enabled: true\n",
+		"templates/apis.yaml": `apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: apis
+  annotations:
+    builtin: {{ .Capabilities.APIVersions.Has "apps/v1" | quote }}
+    widget: {{ .Capabilities.APIVersions.Has "example.com/v1/Widget" | quote }}
+    widget-group-version: {{ .Capabilities.APIVersions.Has "example.com/v1" | quote }}
+    widget-not-served: {{ .Capabilities.APIVersions.Has "example.com/v1alpha1/Widget" | quote }}
+    gadget: {{ .Capabilities.APIVersions.Has "example.com/v1beta1/Gadget" | quote }}
+    cert-manager: {{ .Capabilities.APIVersions.Has "cert-manager.io/v1/Certificate" | quote }}
+    prometheus: {{ .Capabilities.APIVersions.Has "monitoring.coreos.com/v1" | quote }}
+`,
+		"charts/operator/Chart.yaml": "apiVersion: v2\nname: operator\nversion: 0.1.0\n",
+		"charts/operator/crds/crds.yaml": `apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: widgets.example.com
+spec:
+  group: example.com
+  names:
+    kind: Widget
+    plural: widgets
+  scope: Namespaced
+  versions:
+    - name: v1
+      served: true
+      storage: true
+    - name: v1alpha1
+      served: false
+      storage: false
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: gadgets.example.com
+spec:
+  group: example.com
+  names:
+    kind: Gadget
+    plural: gadgets
+  scope: Namespaced
+  versions:
+    - name: v1beta1
+      served: true
+      storage: true
+`,
+		"charts/operator/templates/preflight.yaml": `{{- if not (.Capabilities.APIVersions.Has "cert-manager.io/v1/Certificate") -}}
+{{- fail "cert-manager is required but was not found in the cluster" -}}
+{{- end -}}
+`,
+		"charts/operator/templates/deployment.yaml": "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: operator\n",
+	}
+}
+
+func TestRenderAPIVersions(t *testing.T) {
+	t.Parallel()
+
+	served := func(changes map[string]string) map[string]string {
+		apis := map[string]string{
+			"builtin":              "true",
+			"widget":               "true",
+			"widget-group-version": "true",
+			"widget-not-served":    "false",
+			"gadget":               "true",
+			"cert-manager":         "true",
+			"prometheus":           "false",
+		}
+		for k, v := range changes {
+			apis[k] = v
+		}
+		return apis
+	}
+	tests := map[string]struct {
+		annotations string
+		opts        Options
+		wantErr     string
+		wantAPIs    map[string]string
+	}{
+		"a subchart requiring an API nothing declares": {
+			wantErr: `cert-manager is required but was not found in the cluster`,
+		},
+		"the API declared in Chart.yaml": {
+			annotations: "annotations:\n  openeverest.io/api-versions: cert-manager.io/v1/Certificate\n",
+			wantAPIs:    served(nil),
+		},
+		"several APIs declared, separated by commas and whitespace": {
+			annotations: "annotations:\n  openeverest.io/api-versions: |\n    cert-manager.io/v1/Certificate,\n    monitoring.coreos.com/v1\n",
+			wantAPIs:    served(map[string]string{"prometheus": "true"}),
+		},
+		"the API passed as with helm template --api-versions": {
+			opts:     Options{APIVersions: []string{"cert-manager.io/v1/Certificate"}},
+			wantAPIs: served(nil),
+		},
+		"both": {
+			annotations: "annotations:\n  openeverest.io/api-versions: cert-manager.io/v1/Certificate\n",
+			opts:        Options{APIVersions: []string{"monitoring.coreos.com/v1"}},
+			wantAPIs:    served(map[string]string{"prometheus": "true"}),
+		},
+		"a disabled subchart, whose CRDs are not installed": {
+			opts: Options{Values: map[string]any{"operator": map[string]any{"enabled": false}}},
+			wantAPIs: served(map[string]string{
+				"widget": "false", "widget-group-version": "false", "gadget": "false", "cert-manager": "false",
+			}),
+		},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			dir := t.TempDir()
+			writeChart(t, dir, operatorChart(tt.annotations))
+
+			objects, err := Render(dir, tt.opts)
+
+			if tt.wantErr != "" {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tt.wantErr, "the subchart's error is reported")
+				assert.Contains(t, err.Error(), APIVersionsAnnotation, "with where to declare the API")
+				return
+			}
+			require.NoError(t, err)
+			var apis map[string]string
+			var operator bool
+			for _, o := range objects {
+				switch o.Source {
+				case "templates/apis.yaml":
+					apis = o.Annotations
+				case "charts/operator/templates/deployment.yaml":
+					operator = true
+				}
+			}
+			assert.Equal(t, tt.wantAPIs, apis)
+			assert.Equal(t, tt.opts.Values == nil, operator, "the objects of the subchart, when enabled")
 		})
 	}
 }

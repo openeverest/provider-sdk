@@ -29,6 +29,7 @@ var generateOpts struct {
 	definitionDir string
 	chartDir      string
 	typesPackages []string
+	apiVersions   []string
 }
 
 func init() {
@@ -36,6 +37,7 @@ func init() {
 	f.StringVar(&generateOpts.definitionDir, "definition-dir", "definition", "Path to the definition directory")
 	f.StringVar(&generateOpts.chartDir, "chart-dir", "", "Path to the Helm chart directory (default: auto-detect from provider name)")
 	f.StringSliceVar(&generateOpts.typesPackages, "types-package", nil, "Go package patterns containing type definitions (default: ./definition/...)")
+	f.StringSliceVar(&generateOpts.apiVersions, "api-versions", nil, apiVersionsUsage)
 
 	rootCmd.AddCommand(generateCmd)
 }
@@ -77,7 +79,9 @@ requires: run it as ` + "`go tool provider-sdk`" + `.
 
 Last, it writes templates/openeverest-compat-check.yaml, which fails the
 chart's render on an OpenEverest that does not serve the stamp, reading the
-CRDs of the objects the chart applies with its default values.`,
+CRDs of the objects the chart applies with its default values.
+
+` + renderHelp,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if _, err := checkLinkedCore(); err != nil {
 			return err
@@ -86,6 +90,7 @@ CRDs of the objects the chart applies with its default values.`,
 			DefinitionDir: generateOpts.definitionDir,
 			ChartDir:      generateOpts.chartDir,
 			TypesPackages: generateOpts.typesPackages,
+			APIVersions:   generateOpts.apiVersions,
 		}); err != nil {
 			return err
 		}

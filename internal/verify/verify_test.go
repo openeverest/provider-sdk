@@ -471,6 +471,61 @@ metadata:
 	}
 }
 
+// TestRunBundledOperator checks that verify renders a bundled operator chart
+// that refuses to render without the API of a prerequisite, as users install
+// it, rather than skipping it.
+func TestRunBundledOperator(t *testing.T) {
+	t.Parallel()
+
+	operator := with(stampedChart(), map[string]string{
+		"charts/operator/Chart.yaml": "apiVersion: v2\nname: operator\nversion: 0.1.0\n",
+		"charts/operator/templates/preflight.yaml": `{{- if not (.Capabilities.APIVersions.Has "cert-manager.io/v1/Certificate") -}}
+{{- fail "cert-manager is required but was not found in the cluster" -}}
+{{- end -}}
+`,
+	})
+	declared := with(operator, map[string]string{
+		"Chart.yaml": operator["Chart.yaml"] + "  openeverest.io/api-versions: cert-manager.io/v1/Certificate\n",
+	})
+	tests := map[string]struct {
+		files       map[string]string
+		apiVersions []string
+		wantErr     string
+	}{
+		"the API it requires not declared": {
+			files:   operator,
+			wantErr: "cert-manager is required but was not found in the cluster",
+		},
+		"the API declared in Chart.yaml": {
+			files: declared,
+		},
+		"the API passed with --api-versions": {
+			files:       operator,
+			apiVersions: []string{"cert-manager.io/v1/Certificate"},
+		},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			res, err := Run(Options{ChartDir: writeChart(t, tt.files), ContractVersion: released, APIVersions: tt.apiVersions})
+
+			if tt.wantErr != "" {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tt.wantErr)
+				return
+			}
+			require.NoError(t, err)
+			assert.Empty(t, res.Problems)
+			assert.Equal(t, []string{
+				"Chart.yaml",
+				"BackupClass pbm (templates/backupclasses.yaml)",
+				"Provider x (templates/provider.yaml)",
+			}, res.Stamped)
+		})
+	}
+}
+
 func TestRunErrors(t *testing.T) {
 	t.Parallel()
 

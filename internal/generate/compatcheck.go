@@ -60,9 +60,10 @@ of the objects OpenEverest interprets that the chart applies.
 
 // writeCompatCheck writes CompatCheckFile into the chart in chartDir, for
 // the core CRDs of the objects the chart applies with its default values,
-// and of the Provider, which it always applies.
-func writeCompatCheck(chartDir string) error {
-	crds, err := appliedCRDs(chartDir)
+// and of the Provider, which it always applies. apiVersions are API versions
+// the cluster serves on top of those chartrender.Render renders with.
+func writeCompatCheck(chartDir string, apiVersions []string) error {
+	crds, err := appliedCRDs(chartDir, apiVersions)
 	if err != nil {
 		return err
 	}
@@ -78,8 +79,11 @@ func writeCompatCheck(chartDir string) error {
 // applies with its default values, as CheckedCRDs lists them. The check
 // itself is not rendered: it would find no cluster anyway, and the copy in
 // the chart may be from another provider-sdk.
-func appliedCRDs(chartDir string) ([]string, error) {
-	objects, err := chartrender.Render(chartDir, "templates/"+CompatCheckFile)
+func appliedCRDs(chartDir string, apiVersions []string) ([]string, error) {
+	objects, err := chartrender.Render(chartDir, chartrender.Options{
+		Skip:        []string{"templates/" + CompatCheckFile},
+		APIVersions: apiVersions,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("rendering the chart to find the objects OpenEverest interprets: %w", err)
 	}
